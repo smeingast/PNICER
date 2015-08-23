@@ -1,0 +1,7 @@
+# IntelliJ stuff
+*.iml
+.idea/
+
+*pyc
+
+pnicer_test.py
