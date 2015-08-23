@@ -350,10 +350,10 @@ class DataBase:
         if path is None:
             plt.show()
         else:
-            plt.savefig(path, bbox_inches='tight')
+            plt.savefig(path, bbox_inches="tight")
         plt.close()
 
-    # Plot source densities
+    # Plot source densities for features
     def plot_spatial_kde(self, frame, pixsize=10/60, path=None, kernel="epanechnikov"):
 
         # Get a WCS grid
@@ -379,11 +379,9 @@ class DataBase:
             # Add axes
             ax = plt.subplot(grid[idx], projection=WCS(header=header))
 
-            skip = 5
-
             # Get density
             dens = mp_kde(xgrid=lon_grid, ygrid=lat_grid,
-                          xdata=self.lon[self.features_masks[idx]][::skip], ydata=self.lat[self.features_masks[idx]][::skip],
+                          xdata=self.lon[self.features_masks[idx]], ydata=self.lat[self.features_masks[idx]],
                           bandwidth=pixsize * 2, kernel=kernel)
 
             # Norm and save scale
@@ -392,13 +390,74 @@ class DataBase:
 
             dens /= scale
 
+            # Plot density
             ax.imshow(dens, origin="lower", interpolation="nearest", cmap="gist_heat_r", vmin=0, vmax=1)
 
         # Save or show figure
         if path is None:
             plt.show()
         else:
-            plt.savefig(path, bbox_inches='tight')
+            plt.savefig(path, bbox_inches="tight")
+        plt.close()
+
+        # Plot source densities for features
+    def plot_spatial_kde_gain(self, frame, pixsize=10/60, path=None, kernel="epanechnikov", skip=1):
+
+        # Get a WCS grid
+        header, lon_grid, lat_grid = self.build_wcs_grid(frame=frame, pixsize=pixsize)
+
+        # Get aspect ratio
+        ar = lon_grid.shape[0] / lon_grid.shape[1]
+
+        # Determine number of columns and rows
+        ncols = np.floor(np.sqrt(self.n_features - 1)).astype(int)
+        nrows = np.ceil(np.sqrt(self.n_features - 1)).astype(int)
+
+        # Create grid
+        plt.figure(figsize=[10 * ncols, 10 * nrows * ar])
+        grid = GridSpec(ncols=ncols, nrows=nrows, bottom=0.1, top=0.95, left=0.1, right=0.95, hspace=0.2, wspace=0.2)
+
+        # To avoid editor warnings
+        dens, dens_norm = 0, 0
+
+        # Loop over features and plot
+        for idx in range(self.n_features):
+
+            # Save previous density
+            if idx > 0:
+                dens_norm = dens.copy()
+
+            # Get density
+            dens = mp_kde(xgrid=lon_grid, ygrid=lat_grid, xdata=self.lon[self.features_masks[idx]][::skip],
+                          ydata=self.lat[self.features_masks[idx]][::skip], bandwidth=pixsize * 2, kernel=kernel)
+
+            # Norm and save scale
+            if idx > 0:
+                # Add axes
+                ax = plt.subplot(grid[idx - 1], projection=WCS(header=header))
+
+                # Plot density
+                with warnings.catch_warnings():
+                    # Ignore NaN and 0 division warnings
+                    warnings.simplefilter("ignore")
+                    ax.imshow(dens / dens_norm, origin="lower", interpolation="nearest",
+                              cmap="coolwarm_r", vmin=0, vmax=2)
+
+                # Grab axes
+                lon = ax.coords[0]
+                lat = ax.coords[1]
+
+                # Set labels
+                if idx % ncols == 1:
+                    lat.set_axislabel("Latitude")
+                if idx / ncols > 1:
+                    lon.set_axislabel("Longitude")
+
+        # Save or show figure
+        if path is None:
+            plt.show()
+        else:
+            plt.savefig(path, bbox_inches="tight")
         plt.close()
 
 
