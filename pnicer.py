@@ -148,7 +148,7 @@ class DataBase:
 
     # ----------------------------------------------------------------------
     # Main PNICER routine to get extinction
-    def pnicer(self, control, bin_grid=0.1, bin_ext=0.05):
+    def pnicer(self, control, bin_grid=0.1, bin_ext=0.05, kernel="epanechnikov"):
 
         # Check instances
         if self.__class__ != control.__class__:
@@ -170,25 +170,8 @@ class DataBase:
 
         # With our grid, we evaluate the density on it for the control field (!)
         # TODO: Maybe implement different kernels based on errors...humm
-        """ This is the slow part in PNICER...!! """
         # TODO: implement correct bandwidth
-        kde = KernelDensity(kernel="epanechnikov", bandwidth=0.1)
-
-        xgrid_split = np.array_split(xgrid, multiprocessing.cpu_count(), axis=0)
-
-        # Create process pool
-        p = multiprocessing.Pool()
-        # Submit tasks
-        mp = p.map(_mp_kde_star, zip(repeat(kde), repeat(np.vstack(control_rot.features).T),
-                                     xgrid_split))
-        # Close pool (!)
-        p.close()
-        # Unpack results
-        dens = np.concatenate(mp)
-
-        # Old serial approach
-        # log_dens = kde.fit(control_rot.feature_goodmatrix.T).score_samples(xgrid)
-        # dens = np.exp(log_dens)
+        dens = mp_kde(grid=xgrid, data=np.vstack(control_rot.features).T, bandwidth=0.1, kernel=kernel)
 
         # Get all unique vectors
         # TODO: Require at least, say, 3 sources in a vector, otherwise discard the PDF.
@@ -313,7 +296,7 @@ class DataBase:
         plt.close()
 
     # KDE for all 2D combinations of features
-    def plot_combinations_kde(self, path=None, ax_size=None, grid_bw=0.1):
+    def plot_combinations_kde(self, path=None, ax_size=None, grid_bw=0.1, kernel="epanechnikov"):
 
         if ax_size is None:
             ax_size = [3, 3]
@@ -326,16 +309,16 @@ class DataBase:
 
             # Get clean data from the current combination
             mask = np.prod(np.vstack([self.features_masks[idx[0]], self.features_masks[idx[1]]]), axis=0, dtype=bool)
-            # data = np.vstack([, ])
 
             # We need a square grid!
             l, h = np.min([x[0] for x in self.plotrange]), np.max([x[1] for x in self.plotrange])
 
-            xgrid, ygrid = np.meshgrid(np.arange(start=l, stop=h, step=grid_bw),
-                                       np.arange(start=l, stop=h, step=grid_bw))
+            x, y = np.meshgrid(np.arange(start=l, stop=h, step=grid_bw), np.arange(start=l, stop=h, step=grid_bw))
 
-            dens = mp_kde(xgrid=xgrid, ygrid=ygrid,
-                          xdata=self.features[idx[0]][mask], ydata=self.features[idx[1]][mask], bandwidth=grid_bw * 2)
+            # Get density
+            data = np.vstack([self.features[idx[0]][mask], self.features[idx[1]][mask]]).T
+            xgrid = np.vstack([x.ravel(), y.ravel()]).T
+            dens = mp_kde(grid=xgrid, data=data, bandwidth=grid_bw*2, shape=x.shape, kernel=kernel)
 
             # Show result
             ax.imshow(np.sqrt(dens.T), origin="lower", interpolation="nearest", extent=[l, h, l, h], cmap="gist_heat_r")
@@ -354,7 +337,7 @@ class DataBase:
         plt.close()
 
     # Plot source densities for features
-    def plot_spatial_kde(self, frame, pixsize=10/60, path=None, kernel="epanechnikov"):
+    def plot_spatial_kde(self, frame, pixsize=10/60, path=None, kernel="epanechnikov", skip=1):
 
         # Get a WCS grid
         header, lon_grid, lat_grid = self.build_wcs_grid(frame=frame, pixsize=pixsize)
@@ -362,13 +345,15 @@ class DataBase:
         # Get aspect ratio
         ar = lon_grid.shape[0] / lon_grid.shape[1]
 
-        # Determine number of columns and rows
-        ncols = np.floor(np.sqrt(self.n_features)).astype(int)
-        nrows = np.ceil(np.sqrt(self.n_features)).astype(int)
+        # Determine number of panels
+        n_panels = [np.floor(np.sqrt(self.n_features)).astype(int), np.ceil(np.sqrt(self.n_features)).astype(int)]
+        if n_panels[0] * n_panels[1] < self.n_features:
+            n_panels[n_panels.index(min(n_panels))] += 1
 
         # Create grid
-        plt.figure(figsize=[10 * ncols, 10 * nrows * ar])
-        grid = GridSpec(ncols=ncols, nrows=nrows, bottom=0.05, top=0.95, left=0.05, right=0.95, hspace=0.2, wspace=0.2)
+        plt.figure(figsize=[10 * n_panels[0], 10 * n_panels[1] * ar])
+        grid = GridSpec(ncols=n_panels[0], nrows=n_panels[1], bottom=0.05, top=0.95, left=0.05, right=0.95,
+                        hspace=0.2, wspace=0.2)
 
         # To avoid editor warning
         scale = 1
@@ -380,9 +365,9 @@ class DataBase:
             ax = plt.subplot(grid[idx], projection=WCS(header=header))
 
             # Get density
-            dens = mp_kde(xgrid=lon_grid, ygrid=lat_grid,
-                          xdata=self.lon[self.features_masks[idx]], ydata=self.lat[self.features_masks[idx]],
-                          bandwidth=pixsize * 2, kernel=kernel)
+            xgrid = np.vstack([lon_grid.ravel(), lat_grid.ravel()]).T
+            data = np.vstack([self.lon[self.features_masks[idx]][::skip], self.lat[self.features_masks[idx]][::skip]]).T
+            dens = mp_kde(grid=xgrid, data=data, bandwidth=pixsize*2, shape=lon_grid.shape, kernel=kernel)
 
             # Norm and save scale
             if idx == 0:
@@ -409,13 +394,16 @@ class DataBase:
         # Get aspect ratio
         ar = lon_grid.shape[0] / lon_grid.shape[1]
 
-        # Determine number of columns and rows
-        ncols = np.floor(np.sqrt(self.n_features - 1)).astype(int)
-        nrows = np.ceil(np.sqrt(self.n_features - 1)).astype(int)
+        # Determine number of panels
+        n_panels = [np.floor(np.sqrt(self.n_features - 1)).astype(int),
+                    np.ceil(np.sqrt(self.n_features - 1)).astype(int)]
+        if n_panels[0] * n_panels[1] < self.n_features - 1:
+            n_panels[n_panels.index(min(n_panels))] += 1
 
         # Create grid
-        plt.figure(figsize=[10 * ncols, 10 * nrows * ar])
-        grid = GridSpec(ncols=ncols, nrows=nrows, bottom=0.1, top=0.95, left=0.1, right=0.95, hspace=0.2, wspace=0.2)
+        plt.figure(figsize=[10 * n_panels[0], 10 * n_panels[1] * ar])
+        grid = GridSpec(ncols=n_panels[0], nrows=n_panels[1], bottom=0.05, top=0.95, left=0.05, right=0.95,
+                        hspace=0.2, wspace=0.2)
 
         # To avoid editor warnings
         dens, dens_norm = 0, 0
@@ -428,8 +416,9 @@ class DataBase:
                 dens_norm = dens.copy()
 
             # Get density
-            dens = mp_kde(xgrid=lon_grid, ygrid=lat_grid, xdata=self.lon[self.features_masks[idx]][::skip],
-                          ydata=self.lat[self.features_masks[idx]][::skip], bandwidth=pixsize * 2, kernel=kernel)
+            xgrid = np.vstack([lon_grid.ravel(), lat_grid.ravel()]).T
+            data = np.vstack([self.lon[self.features_masks[idx]][::skip], self.lat[self.features_masks[idx]][::skip]]).T
+            dens = mp_kde(grid=xgrid, data=data, bandwidth=pixsize*2, shape=lon_grid.shape, kernel=kernel)
 
             # Norm and save scale
             if idx > 0:
@@ -448,9 +437,9 @@ class DataBase:
                 lat = ax.coords[1]
 
                 # Set labels
-                if idx % ncols == 1:
+                if idx % n_panels[1] == 1:
                     lat.set_axislabel("Latitude")
-                if idx / ncols > 1:
+                if idx / n_panels[1] > 1:
                     lon.set_axislabel("Longitude")
 
         # Save or show figure
@@ -608,11 +597,17 @@ class Magnitudes(DataBase):
             all_ext_err.append(ext_err)
 
             names.append("_".join(sc.features_names))
-            print(sc.features_names)
-            print(sc.extvec.extvec)
+            # print(sc.features_names)
+            # print(sc.extvec.extvec)
+            # print(np.nanmean(ext))
 
+        # Convert to arrays
         all_ext = np.array(all_ext)
         all_ext_err = np.array(all_ext_err)
+
+        self._ext_combinations = all_ext
+        self._exterr_combinations = all_ext_err
+
 
         # nf = all_ext.shape[0]
         # from matplotlib.pyplot import GridSpec
@@ -803,9 +798,33 @@ def _mp_kde_star(args):
     return _mp_kde(*args)
 
 
-def mp_kde(xgrid, ygrid, xdata, ydata, bandwidth, kernel="epanechnikov"):
+# def mp_kde(xgrid, ygrid, xdata, ydata, bandwidth, kernel="epanechnikov"):
+#
+#     grid = np.vstack([xgrid.ravel(), ygrid.ravel()]).T
+#
+#     # Split for parallel processing
+#     grid_split = np.array_split(grid, multiprocessing.cpu_count(), axis=0)
+#
+#     # Define kernel according to Nyquist sampling
+#     kde = KernelDensity(kernel=kernel, bandwidth=bandwidth)
+#
+#     # Create process pool
+#     p = multiprocessing.Pool()
+#
+#     # Prepare data grid
+#     data = np.vstack([xdata, ydata])
+#
+#     # Submit tasks
+#     mp = p.map(_mp_kde_star, zip(repeat(kde), repeat(data.T), grid_split))
+#
+#     # Close pool (!)
+#     p.close()
+#
+#     # Unpack results and return
+#     return np.concatenate(mp).reshape(xgrid.shape)
 
-    grid = np.vstack([xgrid.ravel(), ygrid.ravel()]).T
+
+def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov"):
 
     # Split for parallel processing
     grid_split = np.array_split(grid, multiprocessing.cpu_count(), axis=0)
@@ -816,17 +835,17 @@ def mp_kde(xgrid, ygrid, xdata, ydata, bandwidth, kernel="epanechnikov"):
     # Create process pool
     p = multiprocessing.Pool()
 
-    # Prepare data grid
-    data = np.vstack([xdata, ydata])
-
     # Submit tasks
-    mp = p.map(_mp_kde_star, zip(repeat(kde), repeat(data.T), grid_split))
+    mp = p.map(_mp_kde_star, zip(repeat(kde), repeat(data), grid_split))
 
     # Close pool (!)
     p.close()
 
     # Unpack results and return
-    return np.concatenate(mp).reshape(xgrid.shape)
+    if shape is None:
+        return np.concatenate(mp)
+    else:
+        return np.concatenate(mp).reshape(shape)
 
 
 # ----------------------------------------------------------------------
