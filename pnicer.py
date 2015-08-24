@@ -822,7 +822,7 @@ class Extinction:
     def __init__(self, db, extinction, error=None):
 
         # Check if db is really a DataBase instance
-        assert isinstance(db, DataBase)
+        assert isinstance(db, DataBase), "passed instance is not DataBase class"
 
         self.db = db
         self.extinction = extinction
@@ -900,6 +900,7 @@ class ExtinctionMap:
     # Save extinciton map as FITS file
     def save(self, path):
         # TODO: Also save number map
+        # TODO: Add some header information
         # Create and save
         hdulist = fits.HDUList([fits.PrimaryHDU(),
                                 fits.ImageHDU(data=self.map, header=self.fits_header),
@@ -987,6 +988,7 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, ext_err, bandwidth, me
     npixel = np.sum(index)
 
     # If there are no stars, or less than two extinction measurements skip
+    # TODO: If there is no star, maybe I should not return NaN...
     if (npixel == 0) or (np.sum(np.isfinite(ext)) < 2):
         return np.nan, np.nan, npixel
 
