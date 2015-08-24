@@ -168,10 +168,12 @@ class DataBase:
         xgrid = np.column_stack([np.tile(grid_ext, grid_data.shape[1]),
                                  np.repeat(grid_data, len(grid_ext), axis=1).T])
 
-        # With our grid, we evaluate the density on it for the control field (!)
+        # Get bandwidth of kernel
         # TODO: Maybe implement different kernels based on errors...humm
-        # TODO: implement correct bandwidth
-        dens = mp_kde(grid=xgrid, data=np.vstack(control_rot.features).T, bandwidth=0.1, kernel=kernel)
+        bandwidth = np.mean(np.nanmean(self.features_err, axis=1))
+
+        # With our grid, we evaluate the density on it for the control field (!)
+        dens = mp_kde(grid=xgrid, data=np.vstack(control_rot.features).T, bandwidth=bandwidth, kernel=kernel)
 
         # Get all unique vectors
         # TODO: Require at least, say, 3 sources in a vector, otherwise discard the PDF.
