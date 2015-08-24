@@ -9,7 +9,6 @@ import multiprocessing
 import matplotlib.pyplot as plt
 
 from itertools import combinations, repeat
-from time import time
 from astropy import wcs
 from astropy.io import fits
 from wcsaxes import WCS
@@ -488,6 +487,7 @@ class Magnitudes(DataBase):
         # ...and all combinations of colors
         colors_combinations = colors._all_combinations()
 
+        # TODO: Decide what to add here!
         # # Add color-magnitude combinations
         # for n in reversed(range(colors.n_features)):
         #     colors_combinations[:0] = \
@@ -508,8 +508,6 @@ class Magnitudes(DataBase):
     # ----------------------------------------------------------------------
     # NICER implementation
     def nicer(self, control):
-
-        # TODO: Something is weird. I get 747291 good measurements which is the same as good H band measurements
 
         if isinstance(control, DataBase) is False:
             raise TypeError("control is not Data class instance")
