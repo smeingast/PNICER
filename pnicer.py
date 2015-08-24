@@ -260,7 +260,7 @@ class DataBase:
         ext = all_ext[np.argmin(all_exterr, axis=0), np.arange(self.n_data)]
         exterr = all_exterr[np.argmin(all_exterr, axis=0), np.arange(self.n_data)]
 
-        return Extinction(lon=self.lon, lat=self.lat, extinction=ext, error=exterr)
+        return Extinction(db=self, extinction=ext, error=exterr)
 
     # ----------------------------------------------------------------------
     # Method to build a WCS grid with a valid projection
@@ -696,6 +696,7 @@ class Magnitudes(DataBase):
         # ext[mask] = ext_err[mask] = np.nan
 
         # ...and return :)
+        # TODO: Also return extinction class here!
         return ext.data, ext_err
 
 
@@ -818,13 +819,14 @@ class ExtinctionVector:
 # Class for extinction measurements
 class Extinction:
 
-    def __init__(self, lon, lat, extinction, error=None):
+    def __init__(self, db, extinction, error=None):
 
-        self.lon = lon
-        self.lat = lat
+        # Check if db is really a DataBase instance
+        assert isinstance(db, DataBase)
+
+        self.db = db
         self.extinction = extinction
         self.error = error
-
         if self.error is None:
             self.error = np.zeros_like(extinction)
 
@@ -832,12 +834,85 @@ class Extinction:
         if len(extinction) != len(error):
             raise ValueError("Extinction and error arrays must have equal length")
 
+    # ----------------------------------------------------------------------
+    # Method to build an extinction map
+    def build_map(self, bandwidth, method="median", nicest=False):
+
+        # First let's get a grid
+        grid_header, grid_lon, grid_lat = self.db.build_wcs_grid(frame="galactic", pixsize=bandwidth / 2.)
+
+        # Create process pool
+        p = multiprocessing.Pool()
+        # Submit tasks
+        mp = p.map(get_extinction_pixel_star, zip(grid_lon.ravel(), grid_lat.ravel(), repeat(self.db.lon),
+                                                  repeat(self.db.lat), repeat(self.extinction), repeat(self.error),
+                                                  repeat(bandwidth), repeat(method), repeat(nicest)))
+        # Close pool (!)
+        p.close()
+
+        # Unpack results
+        extmap, extmap_err, nummap = list(zip(*mp))
+
+        # reshape
+        extmap = np.array(extmap).reshape(grid_lon.shape)
+        extmap_err = np.array(extmap_err).reshape(grid_lon.shape)
+        # TODO: Maybe number map should be KDE with bandwidth
+        nummap = np.array(nummap).reshape(grid_lon.shape)
+
+        # Return extinction map instance
+        return ExtinctionMap(ext=extmap, ext_err=extmap_err, num=nummap, header=grid_header)
+
+
+# ----------------------------------------------------------------------
+# ----------------------------------------------------------------------
+# Extinction map class
+class ExtinctionMap:
+
+    def __init__(self, ext, ext_err, num, header):
+        self.map = ext
+        self.err = ext_err
+        self.num = num
+        self.shape = self.map.shape
+        self.fits_header = header
+
+        # Input must be 2D
+        if (len(self.map.shape) != 2) | (len(self.err.shape) != 2) | (len(self.num.shape) != 2):
+            raise TypeError("Input must be 2D arrays")
+
+    # Simple method to plot extinction map
+    def plot_map(self, path=None, size=10):
+
+        # TODO: Make this a bit more fancy
+        from mpl_toolkits.axes_grid1 import make_axes_locatable
+        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=[size, size * (self.shape[0] / self.shape[1])])
+
+        im = ax.imshow(self.map, origin="lower", interpolation="nearest", vmin=0, vmax=2)
+        cax = make_axes_locatable(ax).append_axes("right", size="5%", pad=0.05)
+        plt.colorbar(im, cax=cax)
+
+        # Save or show figure
+        if path is None:
+            plt.show()
+        else:
+            plt.savefig(path, bbox_inches="tight")
+        plt.close()
+
+    # Save extinciton map as FITS file
+    def save(self, path):
+        # TODO: Also save number map
+        # Create and save
+        hdulist = fits.HDUList([fits.PrimaryHDU(),
+                                fits.ImageHDU(data=self.map, header=self.fits_header),
+                                fits.ImageHDU(data=self.err, header=self.fits_header)])
+        hdulist.writeto(path, clobber=True)
+
 
 # ----------------------------------------------------------------------
 # ----------------------------------------------------------------------
 # Helper top level methods for parallel processing
 
-# KDE top level functions for parallelisation
+# ----------------------------------------------------------------------
+# KDE functions for parallelisation
 def _mp_kde(kde, data, grid):
     return np.exp(kde.fit(data).score_samples(grid)) * data.shape[0]
 
@@ -868,6 +943,92 @@ def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov"):
         return np.concatenate(mp)
     else:
         return np.concatenate(mp).reshape(shape)
+
+
+# ----------------------------------------------------------------------
+# Extinction mapping functions
+def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, ext_err, bandwidth, method, nicest=False):
+
+    # In case the average or median is to be calculated, I set bandwidth == truncation scale
+    if (method == "average") | (method == "median"):
+        trunc = 1
+    else:
+        trunc = 3
+
+    # Restrict the input array to some manageable size
+    index = (xdata > xgrid - trunc * bandwidth) & (xdata < xgrid + trunc * bandwidth) & \
+            (ydata > ygrid - trunc * bandwidth) & (ydata < ygrid + trunc * bandwidth)
+
+    # If we have nothing here, immediately return
+    if np.sum(index) == 0:
+        return np.nan, np.nan, 0
+
+    # pre-filter
+    ext, xdata, ydata = ext[index], xdata[index], ydata[index]
+
+    # Calculate the distance to the grid point in a spherical metric
+    dis = np.degrees(np.arccos(np.sin(np.radians(ydata)) * np.sin(np.radians(ygrid)) +
+                               np.cos(np.radians(ydata)) * np.cos(np.radians(ygrid)) *
+                               np.cos(np.radians(xdata - xgrid))))
+
+    # Get sources within the truncation radius
+    index = dis < trunc * bandwidth
+
+    # Current data in bin within truncation radius
+    ext = ext[index]
+    # TODO: Check what to do with negative extinction for weighting
+    # This raises a lot of warnings!
+    # ext[ext < 0] = 0
+    ext_err = ext_err[index]
+    dis = dis[index]
+
+    # Calulate number of sources in bin
+    # TODO: Should be the number of stars within pixel!
+    npixel = np.sum(index)
+
+    # If there are no stars, or less than two extinction measurements skip
+    if (npixel == 0) or (np.sum(np.isfinite(ext)) < 2):
+        return np.nan, np.nan, npixel
+
+    # Based on chosen method calculate extinction or weights
+    # TODO: Implement correct errors for mean and median
+    if method == "average":
+        return np.nanmean(ext), np.nan, npixel
+    elif method == "median":
+        return np.nanmedian(ext), np.nan, npixel
+    elif method == "uniform":
+        weights = np.ones_like(ext)
+    elif method == "triangular":
+        weights = 1 - np.abs((dis / bandwidth))
+    elif method == "gauss":
+        weights = 1 / (2 * np.pi) * np.exp(-0.5 * (dis / bandwidth)**2)
+    elif method == "epanechnikov":
+        weights = 1 - (dis / bandwidth)**2
+    else:
+        raise TypeError("method not implemented")
+
+    # Set negative weights to 0
+    weights[weights < 0] = 0
+
+    # Modify weights for NICEST
+    if nicest:
+        weights *= 10**(0.33 * ext)
+
+    # Mask weights with no extinction
+    weights[~np.isfinite(ext)] = np.nan
+
+    # Get extinction based on weights
+    epixel = np.nansum(weights * np.array(ext)) / np.nansum(weights)
+    epixel_err = np.sqrt(np.nansum((weights * np.array(ext_err)) ** 2) / np.nansum(weights) ** 2)
+
+    # Return
+    return epixel, epixel_err, npixel
+
+
+# ----------------------------------------------------------------------
+# For pool.starmap() method to accept multiple arguments
+def get_extinction_pixel_star(args):
+    return get_extinction_pixel(*args)
 
 
 # ----------------------------------------------------------------------
