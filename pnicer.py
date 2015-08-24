@@ -32,9 +32,11 @@ class DataBase:
         self.n_features = len(mag)
         self.extvec = ExtinctionVector(extvec=extvec)
 
-        # Define extinction properties
+        # Define combination properties determined while running PNICER
         self._ext_combinations = None
         self._exterr_combinations = None
+        self._combination_names = None
+        self._n_combinations = 0
 
         # Generate simple names for the magnitudes if not set
         if self.features_names is None:
@@ -229,29 +231,29 @@ class DataBase:
             raise TypeError("input and control instance do not match")
 
         # We loop over all combinations
-        all_ext, all_exterr = [], []
-
-        names = []
+        all_ext, all_exterr, names = [], [], []
 
         # Here we loop over color combinations since this is faster
-        # for sc, cc in zip(self.color_combinations(), control.color_combinations()):
+        i = 0
         for sc, cc in comb:
 
             assert isinstance(sc, DataBase)
+            # Run PNICER for current combination
             ext, ext_err = sc._pnicer_single(control=cc, bin_ext=bin_ext, bin_grid=bin_grid, kernel=kernel)
+
+            # Append data
             all_ext.append(ext)
             all_exterr.append(ext_err)
-
-            names.append("_".join(sc.features_names))
-            print(sc.features_names)
-            # print(sc.extvec.extvec)
-            # print(np.nanmean(ext))
+            names.append("(" + ",".join(sc.features_names) + ")")
+            i += 1
 
         # Convert to arrays and save
         all_ext = np.array(all_ext)
         self._ext_combinations = all_ext.copy()
         all_exterr = np.array(all_exterr)
         self._exterr_combinations = all_exterr.copy()
+        self._combination_names = names
+        self._n_combinations = i
 
         # Chose extinction with minimum error
         all_exterr[~np.isfinite(all_exterr)] = 100 * np.nanmax(all_exterr)
@@ -494,32 +496,72 @@ class DataBase:
             plt.savefig(path, bbox_inches="tight")
         plt.close()
 
-    def hist_extinction_combinations(self):
-        pass
-        # nf = all_ext.shape[0]
-        # from matplotlib.pyplot import GridSpec
-        # fig1 = plt.figure(figsize=[20, 15])
-        # grid = GridSpec(ncols=5, nrows=3, bottom=0.05, top=0.95, left=0.05, right=0.95, hspace=0.1, wspace=0.1)
-        #
-        # for idx in range(nf):
-        #
-        #     ax = plt.subplot(grid[idx])
-        #     ax.hist(all_ext[idx, :], bins=100, range=(-1.5, 2))
-        #     ax.annotate(names[idx], xy=(0.05, 0.9), xycoords="axes fraction")
-        #
-        # fig2 = plt.figure(figsize=[20, 15])
-        # grid = GridSpec(ncols=5, nrows=3, bottom=0.05, top=0.95, left=0.05, right=0.95, hspace=0.1, wspace=0.1)
-        #
-        # r = (-1.5, 2)
-        # for idx in range(nf):
-        #
-        #     ax = plt.subplot(grid[idx])
-        #     ax.hist(all_ext_err[idx, :], bins=20, range=(0, 1))
-        #     ax.annotate(names[idx], xy=(0.05, 0.9), xycoords="axes fraction")
-        #
-        # plt.show()
-        #
-        # exit()
+    def hist_extinction_combinations(self, path=None):
+
+        # If PNICER has not yet been run, raise error
+        if self._ext_combinations is None:
+            raise RuntimeError("You have to run PNICER first!")
+
+        # Determine number of panels
+        n_panels = [np.floor(np.sqrt(self._n_combinations)).astype(int),
+                    np.ceil(np.sqrt(self._n_combinations)).astype(int)]
+        if n_panels[0] * n_panels[1] < self._n_combinations:
+            n_panels[n_panels.index(min(n_panels))] += 1
+
+        # Determine plot range
+        # noinspection PyTypeChecker
+        ax1_range = [DataBase.round_partial(np.nanmean(self._ext_combinations) -
+                                            3 * np.nanstd(self._ext_combinations), 0.1),
+                     DataBase.round_partial(np.nanmean(self._ext_combinations)
+                                            + 3.5 * np.nanstd(self._ext_combinations), 0.1)]
+        # noinspection PyTypeChecker
+        ax2_range = [0, DataBase.round_partial(np.nanmean(self._exterr_combinations)
+                                               + 3.5 * np.nanstd(self._exterr_combinations), 0.1)]
+
+        plt.figure(figsize=[5 * n_panels[1], 5 * n_panels[0] * 0.5])
+        grid = GridSpec(ncols=n_panels[1], nrows=n_panels[0], bottom=0.05, top=0.95, left=0.05, right=0.95,
+                        hspace=0.05, wspace=0.05)
+
+        for idx in range(self._n_combinations):
+
+            ax1 = plt.subplot(grid[idx])
+            ax1.hist(self._ext_combinations[idx, :], bins=25, range=ax1_range, histtype="stepfilled", lw=0,
+                     alpha=0.5, color="#3288bd", log=True)
+            ax1.annotate(self._combination_names[idx], xy=(0.95, 0.9), xycoords="axes fraction", ha="right")
+
+            ax2 = ax1.twiny()
+            ax2.hist(self._exterr_combinations[idx, :], bins=25, range=ax2_range, histtype="step", lw=2,
+                     alpha=0.8, color="#66c2a5", log=True)
+
+            # Set and delete labels
+            if idx >= n_panels[0] * n_panels[1] - n_panels[1]:
+                ax1.set_xlabel("Extinction")
+            else:
+                ax1.axes.xaxis.set_ticklabels([])
+            if idx % n_panels[1] == 0:
+                ax1.set_ylabel("N")
+            else:
+                ax1.axes.yaxis.set_ticklabels([])
+            if idx < n_panels[1]:
+                ax2.set_xlabel("Error")
+            else:
+                ax2.axes.xaxis.set_ticklabels([])
+
+            # Delete first and last label
+            xticks = ax1.xaxis.get_major_ticks()
+            xticks[0].label1.set_visible(False)
+            xticks[-1].label1.set_visible(False)
+            xticks = ax2.xaxis.get_major_ticks()
+            xticks[0].label2.set_visible(False)
+            xticks[-1].label2.set_visible(False)
+            """For some reason this does not work for the y axis..."""
+
+        # Save or show figure
+        if path is None:
+            plt.show()
+        else:
+            plt.savefig(path, bbox_inches="tight")
+        plt.close()
 
 
 # ----------------------------------------------------------------------
