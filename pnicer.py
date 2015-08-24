@@ -32,6 +32,10 @@ class DataBase:
         self.n_features = len(mag)
         self.extvec = ExtinctionVector(extvec=extvec)
 
+        # Define extinction properties
+        self._ext_combinations = None
+        self._exterr_combinations = None
+
         # Generate simple names for the magnitudes if not set
         if self.features_names is None:
             self.features_names = ["Mag" + str(idx + 1) for idx in range(self.n_features)]
@@ -130,7 +134,7 @@ class DataBase:
 
     # ----------------------------------------------------------------------
     # Method to get all combinations of input features
-    def _all_combinations(self):
+    def all_combinations(self):
 
         all_c = [item for sublist in [combinations(range(self.n_features), p) for p in range(2, self.n_features + 1)]
                  for item in sublist]
@@ -147,7 +151,7 @@ class DataBase:
 
     # ----------------------------------------------------------------------
     # Main PNICER routine to get extinction
-    def pnicer(self, control, bin_grid=0.1, bin_ext=0.05, kernel="epanechnikov"):
+    def _pnicer_single(self, control, bin_grid, bin_ext, kernel):
 
         # Check instances
         if self.__class__ != control.__class__:
@@ -215,6 +219,46 @@ class DataBase:
         out[mask], outerr[mask] = ext, ext_err
 
         return out, outerr
+
+    # ----------------------------------------------------------------------
+    # PNICER base implementation for combinations
+    def _pnicer_combinations(self, control, comb, bin_grid, bin_ext, kernel):
+
+        # Check instances
+        if control.__class__ != self.__class__:
+            raise TypeError("input and control instance do not match")
+
+        # We loop over all combinations
+        all_ext, all_exterr = [], []
+
+        names = []
+
+        # Here we loop over color combinations since this is faster
+        # for sc, cc in zip(self.color_combinations(), control.color_combinations()):
+        for sc, cc in comb:
+
+            assert isinstance(sc, DataBase)
+            ext, ext_err = sc._pnicer_single(control=cc, bin_ext=bin_ext, bin_grid=bin_grid, kernel=kernel)
+            all_ext.append(ext)
+            all_exterr.append(ext_err)
+
+            names.append("_".join(sc.features_names))
+            print(sc.features_names)
+            # print(sc.extvec.extvec)
+            # print(np.nanmean(ext))
+
+        # Convert to arrays and save
+        all_ext = np.array(all_ext)
+        self._ext_combinations = all_ext.copy()
+        all_exterr = np.array(all_exterr)
+        self._exterr_combinations = all_exterr.copy()
+
+        # Chose extinction with minimum error
+        all_exterr[~np.isfinite(all_exterr)] = 100 * np.nanmax(all_exterr)
+        ext = all_ext[np.argmin(all_exterr, axis=0), np.arange(self.n_data)]
+        exterr = all_exterr[np.argmin(all_exterr, axis=0), np.arange(self.n_data)]
+
+        return Extinction(lon=self.lon, lat=self.lat, extinction=ext, error=exterr)
 
     # ----------------------------------------------------------------------
     # Method to build a WCS grid with a valid projection
@@ -386,7 +430,7 @@ class DataBase:
             plt.savefig(path, bbox_inches="tight")
         plt.close()
 
-        # Plot source densities for features
+    # Plot source densities for features
     def plot_spatial_kde_gain(self, frame, pixsize=10/60, path=None, kernel="epanechnikov", skip=1):
 
         # Get a WCS grid
@@ -450,6 +494,33 @@ class DataBase:
             plt.savefig(path, bbox_inches="tight")
         plt.close()
 
+    def hist_extinction_combinations(self):
+        pass
+        # nf = all_ext.shape[0]
+        # from matplotlib.pyplot import GridSpec
+        # fig1 = plt.figure(figsize=[20, 15])
+        # grid = GridSpec(ncols=5, nrows=3, bottom=0.05, top=0.95, left=0.05, right=0.95, hspace=0.1, wspace=0.1)
+        #
+        # for idx in range(nf):
+        #
+        #     ax = plt.subplot(grid[idx])
+        #     ax.hist(all_ext[idx, :], bins=100, range=(-1.5, 2))
+        #     ax.annotate(names[idx], xy=(0.05, 0.9), xycoords="axes fraction")
+        #
+        # fig2 = plt.figure(figsize=[20, 15])
+        # grid = GridSpec(ncols=5, nrows=3, bottom=0.05, top=0.95, left=0.05, right=0.95, hspace=0.1, wspace=0.1)
+        #
+        # r = (-1.5, 2)
+        # for idx in range(nf):
+        #
+        #     ax = plt.subplot(grid[idx])
+        #     ax.hist(all_ext_err[idx, :], bins=20, range=(0, 1))
+        #     ax.annotate(names[idx], xy=(0.05, 0.9), xycoords="axes fraction")
+        #
+        # plt.show()
+        #
+        # exit()
+
 
 # ----------------------------------------------------------------------
 # ----------------------------------------------------------------------
@@ -485,7 +556,7 @@ class Magnitudes(DataBase):
         colors = self.mag2color()
 
         # ...and all combinations of colors
-        colors_combinations = colors._all_combinations()
+        colors_combinations = colors.all_combinations()
 
         # TODO: Decide what to add here!
         # # Add color-magnitude combinations
@@ -504,6 +575,15 @@ class Magnitudes(DataBase):
         #                 lon=self.lon, lat=self.lat, names=[self.features_names[n], self.features_names[n+1]])]
 
         return colors_combinations
+
+    # ----------------------------------------------------------------------
+    def pnicer(self, control, bin_grid=0.1, bin_ext=0.05, kernel="epanechnikov", use_color=False):
+        if use_color:
+            comb = zip(self.color_combinations(), control.color_combinations())
+        else:
+            comb = zip(self.all_combinations(), control.all_combinations())
+
+        return self._pnicer_combinations(control=control, comb=comb, bin_grid=bin_grid, bin_ext=bin_ext, kernel=kernel)
 
     # ----------------------------------------------------------------------
     # NICER implementation
@@ -576,85 +656,6 @@ class Magnitudes(DataBase):
         # ...and return :)
         return ext.data, ext_err
 
-    # ----------------------------------------------------------------------
-    # PNICER implementation for all combinations
-    def pnicer_combinations(self, control, bin_grid=0.1, bin_ext=0.05):
-
-        # Check instances
-        if control.__class__ != self.__class__:
-            raise TypeError("input and control instance do not match")
-
-        # We loop over all combinations
-        all_ext, all_ext_err = [], []
-
-        names = []
-
-        # Here we loop over color combinations since this is faster
-        for sc, cc in zip(self.color_combinations(), control.color_combinations()):
-
-            ext, ext_err = sc.pnicer(control=cc, bin_ext=bin_ext, bin_grid=bin_grid)
-            all_ext.append(ext)
-            all_ext_err.append(ext_err)
-
-            names.append("_".join(sc.features_names))
-            # print(sc.features_names)
-            # print(sc.extvec.extvec)
-            # print(np.nanmean(ext))
-
-        # Convert to arrays
-        all_ext = np.array(all_ext)
-        all_ext_err = np.array(all_ext_err)
-
-        self._ext_combinations = all_ext
-        self._exterr_combinations = all_ext_err
-
-
-        # nf = all_ext.shape[0]
-        # from matplotlib.pyplot import GridSpec
-        # fig1 = plt.figure(figsize=[20, 15])
-        # grid = GridSpec(ncols=5, nrows=3, bottom=0.05, top=0.95, left=0.05, right=0.95, hspace=0.1, wspace=0.1)
-        #
-        # for idx in range(nf):
-        #
-        #     ax = plt.subplot(grid[idx])
-        #     ax.hist(all_ext[idx, :], bins=100, range=(-1.5, 2))
-        #     ax.annotate(names[idx], xy=(0.05, 0.9), xycoords="axes fraction")
-        #
-        # fig2 = plt.figure(figsize=[20, 15])
-        # grid = GridSpec(ncols=5, nrows=3, bottom=0.05, top=0.95, left=0.05, right=0.95, hspace=0.1, wspace=0.1)
-        #
-        # r = (-1.5, 2)
-        # for idx in range(nf):
-        #
-        #     ax = plt.subplot(grid[idx])
-        #     ax.hist(all_ext_err[idx, :], bins=20, range=(0, 1))
-        #     ax.annotate(names[idx], xy=(0.05, 0.9), xycoords="axes fraction")
-        #
-        # plt.show()
-        #
-        # exit()
-
-        # Calculate weighted average while ignoring the NaN warnings
-        # TODO: Check error calculation before changing weight rule
-        # TODO: Maybe the weights should be calculated by the standard deviation of the Aks in the control field!
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            weights = 1 / all_ext_err
-            # ext = np.nansum(all_ext * weights, axis=0) / np.nansum(weights, axis=0)
-            # ext = np.nanmean(all_ext, axis=0)
-
-            all_ext_err[~np.isfinite(all_ext_err)] = 100
-            idx = np.nanargmin(all_ext_err, axis=0)
-            ext = []
-            for m, e in zip(idx, all_ext.T):
-                ext.append(e[m])
-            ext = np.array(ext)
-
-            # TODO: Check if this is correct
-            ext_err = np.sqrt(np.nansum((weights * all_ext_err) ** 2, axis=0) / np.nansum(weights, axis=0) ** 2)
-
-        return ext, ext_err
-
 
 # ----------------------------------------------------------------------
 # ----------------------------------------------------------------------
@@ -663,6 +664,11 @@ class Colors(DataBase):
 
     def __init__(self, mag, err, extvec, lon=None, lat=None, names=None):
         super(Colors, self).__init__(mag=mag, err=err, extvec=extvec, lon=lon, lat=lat, names=names)
+
+    # ----------------------------------------------------------------------
+    def pnicer(self, control, bin_grid=0.1, bin_ext=0.05, kernel="epanechnikov"):
+        comb = zip(self.all_combinations(), control.all_combinations())
+        return self._pnicer_combinations(control=control, comb=comb, bin_grid=bin_grid, bin_ext=bin_ext, kernel=kernel)
 
 
 # ----------------------------------------------------------------------
@@ -798,32 +804,6 @@ def _mp_kde_star(args):
     return _mp_kde(*args)
 
 
-# def mp_kde(xgrid, ygrid, xdata, ydata, bandwidth, kernel="epanechnikov"):
-#
-#     grid = np.vstack([xgrid.ravel(), ygrid.ravel()]).T
-#
-#     # Split for parallel processing
-#     grid_split = np.array_split(grid, multiprocessing.cpu_count(), axis=0)
-#
-#     # Define kernel according to Nyquist sampling
-#     kde = KernelDensity(kernel=kernel, bandwidth=bandwidth)
-#
-#     # Create process pool
-#     p = multiprocessing.Pool()
-#
-#     # Prepare data grid
-#     data = np.vstack([xdata, ydata])
-#
-#     # Submit tasks
-#     mp = p.map(_mp_kde_star, zip(repeat(kde), repeat(data.T), grid_split))
-#
-#     # Close pool (!)
-#     p.close()
-#
-#     # Unpack results and return
-#     return np.concatenate(mp).reshape(xgrid.shape)
-
-
 def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov"):
 
     # Split for parallel processing
@@ -901,6 +881,4 @@ def weighted_avg(values, weights):
     average = np.nansum(values * weights) / np.nansum(weights)
     # noinspection PyTypeChecker
     variance = np.nansum((values - average)**2 * weights) / np.nansum(weights)
-    # average = np.average(values, weights=weights)
-    # variance = np.average((values - average)**2, weights=weights)
     return average, np.sqrt(variance)
