@@ -1019,11 +1019,32 @@ class Extinction:
         # reshape
         extmap = np.array(extmap).reshape(grid_lon.shape)
         extmap_err = np.array(extmap_err).reshape(grid_lon.shape)
-        # TODO: Maybe number map should be KDE with bandwidth
         nummap = np.array(nummap).reshape(grid_lon.shape)
 
         # Return extinction map instance
         return ExtinctionMap(ext=extmap, ext_err=extmap_err, num=nummap, header=grid_header)
+
+    # ----------------------------------------------------------------------
+    def save_fits(self, path):
+        """
+        Write the extinction data to a FITS table file
+        :param path: file path; e.g. "/path/to/table.fits"
+        """
+
+        # Create FITS columns
+        col1 = fits.Column(name="Lon", format='D', array=self.db.lon)
+        col2 = fits.Column(name="Lat", format='D', array=self.db.lat)
+        col3 = fits.Column(name="Extinction", format="E", array=self.extinction)
+        col4 = fits.Column(name="Extinction_err", format="E", array=self.error)
+
+        # Column definitions
+        cols = fits.ColDefs([col1, col2, col3, col4])
+
+        # Create binary table object
+        tbhdu = fits.BinTableHDU.from_columns(cols)
+
+        # Write to file
+        tbhdu.writeto(path, clobber=True)
 
 
 # ----------------------------------------------------------------------
@@ -1072,7 +1093,7 @@ class ExtinctionMap:
             plt.savefig(path, bbox_inches="tight")
         plt.close()
 
-    def save(self, path):
+    def save_fits(self, path):
         """
         Method to save extinciton map as FITS file
         :param path: file path if it should be saved. e.g. "/path/to/image.fits"
