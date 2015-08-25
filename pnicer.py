@@ -196,6 +196,7 @@ class DataBase:
         science_rot, control_rot = self.rotate(), control.rotate()
 
         # Now we build a grid from the rotated data for all components but the first
+        # TODO: Should I set bin_grid always to half the kernel bandwidth?
         grid_data = DataBase.build_grid(data=np.vstack(science_rot.features)[1:, :], precision=bin_grid)
 
         # Create a grid to evaluate along the reddening vector
@@ -627,6 +628,7 @@ class DataBase:
                 ax2.axes.xaxis.set_ticklabels([])
 
             # Delete first and last label
+            # TODO: Redo this. Only delete last label
             xticks = ax1.xaxis.get_major_ticks()
             xticks[0].label1.set_visible(False)
             xticks[-1].label1.set_visible(False)
@@ -808,8 +810,7 @@ class Magnitudes(DataBase):
         # ext[mask] = ext_err[mask] = np.nan
 
         # ...and return :)
-        # TODO: Also return extinction class here!
-        return ext.data, ext_err
+        return Extinction(db=self, extinction=ext.data, error=ext_err)
 
 
 # ----------------------------------------------------------------------
