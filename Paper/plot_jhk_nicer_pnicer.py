@@ -143,5 +143,7 @@ for ax in [ax1, ax2]:
     # ax.arrow(0.7, 0.3, features_extinction[1] - features_extinction[2], features_extinction[0] - features_extinction[1],
     #          head_width=0.02, head_length=0.05, fc="k", ec="k", length_includes_head=True)
 
+# TODO: Add third panel with NICER - PNICER (or NICER/PNICER or something similar)
+
 # Save
 plt.savefig("/Users/Antares/Dropbox/Projects/PNICER/Paper/Results/nicer_pnicer.png", bbox_inches="tight")

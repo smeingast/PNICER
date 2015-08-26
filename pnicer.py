@@ -721,6 +721,7 @@ class Magnitudes(DataBase):
 
     # ----------------------------------------------------------------------
     def pnicer(self, control, bin_grid=0.1, bin_ext=0.05, kernel="epanechnikov", use_color=False):
+        # TODO: Add parameter to decalre minimum number of features to use
         """
         PNICER call method for magnitudes. Includes options to use combinations for input features, or convert them
         to colors.
@@ -1136,17 +1137,22 @@ def _mp_kde_star(args):
     return _mp_kde(*args)
 
 
-def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", absolute=False):
+def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", absolute=False, sampling=None):
     """
     Parellisation for kernel density estimation
     :param grid Grid on which to evaluate the density
     :param data input data
     :param bandwidth: Bandwidth of kernel
+    :param sampling: Sampling factor of grid
     :param shape: If set, reshape output data
     :param kernel: e.g. "epanechnikov" or "gaussian"
     :param absolute: Whether to return absolute numbers
     :return: Kernel densities
     """
+
+    # If we want absolute values, we must specify the sampling
+    if absolute:
+        assert sampling, "Sampling needs to be specified"
 
     # Split for parallel processing
     grid_split = np.array_split(grid, multiprocessing.cpu_count(), axis=0)
@@ -1169,7 +1175,7 @@ def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", absolute=Fa
         p = multiprocessing.Pool()
         norm = p.map(_mp_kde_star, zip(repeat(kde), repeat(grid), grid_split))
         p.close()
-        mp /= 0.5 * np.concatenate(norm)
+        mp /= 1/sampling * np.concatenate(norm)
 
     # Unpack results and return
     if shape is None:
