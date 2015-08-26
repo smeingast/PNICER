@@ -78,13 +78,10 @@ ext_nicer = ext_nicer[np.isfinite(ext_nicer)][:, np.newaxis]
 
 # ----------------------------------------------------------------------
 # Do KDE
-res = 0.05
+res = 0.01
 grid_kde = np.arange(start=-1, stop=1, step=res/2, dtype=np.double)[:, np.newaxis]
 
 dens = mp_kde(grid=grid_kde, data=ext_nicer, bandwidth=res, shape=None, kernel="epanechnikov", absolute=True)
-# norm = mp_kde(grid=grid_kde, data=grid_kde, bandwidth=res, shape=None, kernel="epanechnikov")
-#
-# dens /= norm
 
 
 # ----------------------------------------------------------------------
@@ -94,7 +91,7 @@ grid_plt= GridSpec(ncols=1, nrows=1, bottom=0.05, top=0.95, left=0.05, right=0.9
 ax = plt.subplot(grid_plt[0])
 
 ax.plot(grid_kde, dens, lw=2, alpha=0.5)
-edges = np.arange(-1, 1, res / 2)
+edges = np.arange(-1, 1, res)
 ax.hist(ext_nicer, bins=edges, range=(-1, 1))
 
 plt.show()

@@ -1169,7 +1169,7 @@ def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", absolute=Fa
         p = multiprocessing.Pool()
         norm = p.map(_mp_kde_star, zip(repeat(kde), repeat(grid), grid_split))
         p.close()
-        mp /= np.concatenate(norm)
+        mp /= 0.5 * np.concatenate(norm)
 
     # Unpack results and return
     if shape is None:
