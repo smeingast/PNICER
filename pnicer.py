@@ -1126,7 +1126,6 @@ def _mp_kde(kde, data, grid):
     :param grid Grid on which to evaluate the density
     :return density
     """
-
     return np.exp(kde.fit(data).score_samples(grid)) * data.shape[0]
 
 
@@ -1137,7 +1136,7 @@ def _mp_kde_star(args):
     return _mp_kde(*args)
 
 
-def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov"):
+def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", absolute=False):
     """
     Parellisation for kernel density estimation
     :param grid Grid on which to evaluate the density
@@ -1145,6 +1144,7 @@ def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov"):
     :param bandwidth: Bandwidth of kernel
     :param shape: If set, reshape output data
     :param kernel: e.g. "epanechnikov" or "gaussian"
+    :param absolute: Whether to return absolute numbers
     :return: Kernel densities
     """
 
@@ -1156,18 +1156,26 @@ def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov"):
 
     # Create process pool
     p = multiprocessing.Pool()
-
     # Submit tasks
     mp = p.map(_mp_kde_star, zip(repeat(kde), repeat(data), grid_split))
-
     # Close pool (!)
     p.close()
+    # Create array
+    mp = np.concatenate(mp)
+
+    # TODO: test this!!!!
+    # If we want absolute numbers we have to evaluate the same thing for the grid
+    if absolute:
+        p = multiprocessing.Pool()
+        norm = p.map(_mp_kde_star, zip(repeat(kde), repeat(grid), grid_split))
+        p.close()
+        mp /= np.concatenate(norm)
 
     # Unpack results and return
     if shape is None:
-        return np.concatenate(mp)
+        return mp
     else:
-        return np.concatenate(mp).reshape(shape)
+        return mp.reshape(shape)
 
 
 # ----------------------------------------------------------------------
