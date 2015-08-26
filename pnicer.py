@@ -254,6 +254,7 @@ class DataBase:
 
         out[mask], outerr[mask] = ext, ext_err
 
+        # TODO: Somehow all input sources have extinction errors. They also should have NaN
         return out, outerr
 
     # ----------------------------------------------------------------------
@@ -298,6 +299,7 @@ class DataBase:
         self._combination_names = names
         self._n_combinations = i
 
+        # TODO: Should I choose the extinction which is closest to 0 in the de-reddened CF?
         # Chose extinction with minimum error
         all_exterr[~np.isfinite(all_exterr)] = 100 * np.nanmax(all_exterr)
         ext = all_ext[np.argmin(all_exterr, axis=0), np.arange(self.n_data)]
@@ -810,6 +812,7 @@ class Magnitudes(DataBase):
         # ext[mask] = ext_err[mask] = np.nan
 
         # ...and return :)
+        # TODO: Somehow all input sources have extinction errors. They also should have NaN (Same with PNICER)
         return Extinction(db=self, extinction=ext.data, error=ext_err)
 
 
@@ -1112,6 +1115,7 @@ class ExtinctionMap:
 # ----------------------------------------------------------------------
 # ----------------------------------------------------------------------
 # Helper top level methods for parallel processing
+# TODO: Rewrite methods to use Pool().starmap for Python 3.3+
 
 # ----------------------------------------------------------------------
 # KDE functions for parallelisation
