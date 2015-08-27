@@ -3,17 +3,17 @@ from __future__ import absolute_import, division, print_function
 
 # ----------------------------------------------------------------------
 # Import stuff
-import numpy as np
 import warnings
+import wcsaxes
+import numpy as np
 import multiprocessing
 import matplotlib.pyplot as plt
 
 from astropy import wcs
 from astropy.io import fits
-from wcsaxes import WCS as awcs
 from multiprocessing import Pool
-from itertools import combinations, repeat
 from matplotlib.pyplot import GridSpec
+from itertools import combinations, repeat
 from sklearn.neighbors import KernelDensity, NearestNeighbors
 
 
@@ -478,7 +478,7 @@ class DataBase:
         for idx in range(self.n_features):
 
             # Add axes
-            ax = plt.subplot(grid[idx], projection=awcs(header=header))
+            ax = plt.subplot(grid[idx], projection=wcsaxes.WCS(header=header))
 
             # Get density
             xgrid = np.vstack([lon_grid.ravel(), lat_grid.ravel()]).T
@@ -546,7 +546,7 @@ class DataBase:
             # Norm and save scale
             if idx > 0:
                 # Add axes
-                ax = plt.subplot(grid[idx - 1], projection=awcs(header=header))
+                ax = plt.subplot(grid[idx - 1], projection=wcsaxes.WCS(header=header))
 
                 # Plot density
                 with warnings.catch_warnings():
@@ -1116,7 +1116,6 @@ class ExtinctionMap:
 # ----------------------------------------------------------------------
 # ----------------------------------------------------------------------
 # Helper top level methods for parallel processing
-# TODO: Rewrite methods to use Pool().starmap for Python 3.3+
 
 # ----------------------------------------------------------------------
 # KDE functions for parallelisation
