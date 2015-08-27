@@ -86,7 +86,6 @@ class DataBase:
 
         # Generate feature masks and number of good data points per feature
         self.features_masks = [np.isfinite(m) & np.isfinite(e) for m, e in zip(self.features, self.features_err)]
-        # TODO: See where else I can use this
         self.combined_mask = np.prod(np.vstack(self.features_masks), axis=0, dtype=bool)
 
         # ----------------------------------------------------------------------
