@@ -1022,8 +1022,12 @@ class Extinction:
         if len(extinction) != len(error):
             raise ValueError("Extinction and error arrays must have equal length")
 
+        # ----------------------------------------------------------------------
+        # Calculate some simple things
+        self.extinction_std = np.nanstd(self.extinction)
+
     # ----------------------------------------------------------------------
-    def build_map(self, bandwidth, method="median", nicest=False):
+    def build_map(self, bandwidth, method="median", sampling=2, nicest=False):
         """
         Method to build an extinction map
         :param bandwidth: Resolution of map
@@ -1032,11 +1036,14 @@ class Extinction:
         :return: ExtinctionMap instance
         """
 
+        # Sampling must be an integer
+        assert isinstance(sampling, int), "sampling must be an integer"
+
         # First let's get a grid
-        grid_header, grid_lon, grid_lat = self.db.build_wcs_grid(frame="galactic", pixsize=bandwidth / 2.)
+        grid_header, grid_lon, grid_lat = self.db.build_wcs_grid(frame="galactic", pixsize=bandwidth / sampling)
 
+        # Run extinction mapping for each pixel
         with Pool() as pool:
-
             # Submit tasks
             mp = pool.starmap(get_extinction_pixel,
                               zip(grid_lon.ravel(), grid_lat.ravel(), repeat(self.db.lon),
