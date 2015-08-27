@@ -224,6 +224,7 @@ class DataBase:
         for vec in dens_vectors:
 
             # In case there are too few stars
+            # TODO: Check how many sources are non-0 :)
             if np.sum(vec) < 3:
                 grid_mean.append(np.nan)
                 grid_std.append(np.nan)
