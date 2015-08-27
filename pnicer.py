@@ -1115,13 +1115,22 @@ class ExtinctionMap:
         :return:
         """
 
-        # TODO: Make this a bit more fancy
-        from mpl_toolkits.axes_grid1 import make_axes_locatable
-        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=[size, size * (self.shape[0] / self.shape[1])])
+        fig = plt.figure(figsize=[size, 0.9 * size * (self.shape[0] / self.shape[1])])
+        ax = fig.add_axes([0.05, 0.05, 0.85, 0.9], projection=wcsaxes.WCS(self.fits_header))
+        cax = fig.add_axes([0.9, 0.05, 0.02, 0.9])
 
-        im = ax.imshow(self.map, origin="lower", interpolation="nearest", vmin=0, vmax=2)
-        cax = make_axes_locatable(ax).append_axes("right", size="5%", pad=0.05)
-        plt.colorbar(im, cax=cax)
+        im = ax.imshow(self.map, origin="lower", interpolation="nearest", cmap="binary",
+                       vmin=np.floor(np.percentile(self.map[np.isfinite(self.map)], 1) * 10) / 10,
+                       vmax=np.ceil(np.percentile(self.map[np.isfinite(self.map)], 99) * 10) / 10)
+
+        # Add colorbar
+        fig.colorbar(im, cax=cax, label="Extinction (mag)")
+
+        # Add axes labels
+        lon = ax.coords[0]
+        lat = ax.coords[1]
+        lon.set_axislabel("Longitude")
+        lat.set_axislabel("Latitude")
 
         # Save or show figure
         if path is None:
