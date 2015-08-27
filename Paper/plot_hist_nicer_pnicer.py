@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from pnicer import Magnitudes
 from astropy.io import fits
 from matplotlib.pyplot import GridSpec
-from matplotlib.ticker import MultipleLocator, MaxNLocator
+from matplotlib.ticker import MultipleLocator
 from pnicer import mp_kde
 
 
@@ -59,7 +59,7 @@ erange = [-0.5, 0.5]
 grid_kde = np.arange(start=1.1*erange[0], stop=1.1*erange[1],
                      step=res/sampling, dtype=np.double)[:, np.newaxis]
 
-for i in range(3, 4):
+for i in range(3, 6):
 
     print(features_names[:i])
 
@@ -70,7 +70,7 @@ for i in range(3, 4):
                          lon=control_glon, lat=control_glat, names=features_names[:i])
 
     # Run PNICER and NICER on control field
-    ext_pnicer = control.pnicer(control=control, bin_ext=0.1, bin_grid=0.1, use_color=True).extinction
+    ext_pnicer = control.pnicer(control=control, sampling=sampling, use_color=True).extinction
     ext_nicer = control.nicer(control=control).extinction
 
     # Filter NaNs
@@ -87,7 +87,7 @@ for i in range(3, 4):
 # ----------------------------------------------------------------------
 # Plot
 fig = plt.figure(figsize=[10, 6])
-grid_plt= GridSpec(ncols=1, nrows=1, bottom=0.09, top=0.99, left=0.09, right=0.99, hspace=0.1, wspace=0.1)
+grid_plt = GridSpec(ncols=1, nrows=1, bottom=0.09, top=0.99, left=0.09, right=0.99, hspace=0.1, wspace=0.1)
 ax = plt.subplot(grid_plt[0])
 
 ncolor = ["#fcbba1", "#ef3b2c", "#67000d"]
@@ -111,13 +111,13 @@ ax.set_xlim(erange)
 #             "\nPNICER std = " + str(np.around(np.std(ext_pnicer), 2)),
 #             xy=(0.05, 0.95), xycoords="axes fraction", ha="left", va="top")
 
-# ax.set_xlabel("$A_K$ (mag)")
-# ax.set_ylabel("N")
-# ax.xaxis.set_minor_locator(MultipleLocator(0.05))
-# ax.yaxis.set_minor_locator(MultipleLocator(200))
+ax.set_xlabel("$A_K$ (mag)")
+ax.set_ylabel("N")
+ax.xaxis.set_minor_locator(MultipleLocator(0.05))
+ax.yaxis.set_minor_locator(MultipleLocator(200))
 
 # Set legend
-# plt.legend(loc=1, frameon=False)
+plt.legend(loc=1, frameon=False)
 
 # Save
 plt.savefig("/Users/Antares/Dropbox/Projects/PNICER/Paper/Results/Ak_hist_nicer_pnicer.pdf", bbox_inches="tight")

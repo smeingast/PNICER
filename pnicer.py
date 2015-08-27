@@ -1123,11 +1123,6 @@ def _mp_kde(kde, data, grid):
     :param grid Grid on which to evaluate the density
     :return density
     """
-    # return np.exp(kde.fit(data).score_samples(grid)) * data.shape[0]
-    # print(data.shape[0] / grid.shape[0])
-    # print(grid.shape[0])
-    # print(data.shape[0])
-    # print()
     return np.exp(kde.fit(data).score_samples(grid))
 
 
@@ -1170,7 +1165,6 @@ def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", absolute=Fa
     # Create array
     mp = np.concatenate(mp)
 
-    # TODO: test this!!!!
     # If we want absolute numbers we have to evaluate the same thing for the grid
     if absolute:
         mp *= data.shape[0] / np.sum(mp) * sampling
