@@ -1214,9 +1214,6 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, ext_err, bandwidth, me
 
     # Current data in bin within truncation radius
     ext = ext[index]
-    # TODO: Check what to do with negative extinction for weighting
-    # This raises a lot of warnings!
-    # ext[ext < 0] = 0
     ext_err = ext_err[index]
     dis = dis[index]
 
