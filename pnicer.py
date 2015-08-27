@@ -13,6 +13,7 @@ from astropy import wcs
 from astropy.io import fits
 from multiprocessing import Pool
 from matplotlib.pyplot import GridSpec
+from matplotlib.ticker import AutoMinorLocator, MaxNLocator
 from itertools import combinations, repeat
 from sklearn.neighbors import KernelDensity, NearestNeighbors
 
@@ -85,6 +86,8 @@ class DataBase:
 
         # Generate feature masks and number of good data points per feature
         self.features_masks = [np.isfinite(m) & np.isfinite(e) for m, e in zip(self.features, self.features_err)]
+        # TODO: See where else I can use this
+        self.combined_mask = np.prod(np.vstack(self.features_masks), axis=0, dtype=bool)
 
         # ----------------------------------------------------------------------
         # Plot range
@@ -249,10 +252,7 @@ class DataBase:
         out = np.full(self.n_data, fill_value=np.nan, dtype=float)
         outerr = np.full(self.n_data, fill_value=np.nan, dtype=float)
 
-        # Combined mask for all features
-        mask = np.prod(np.vstack(self.features_masks), axis=0, dtype=bool)
-
-        out[mask], outerr[mask] = ext, ext_err
+        out[self.combined_mask], outerr[self.combined_mask] = ext, ext_err
 
         return out, outerr
 
@@ -572,11 +572,12 @@ class DataBase:
             plt.savefig(path, bbox_inches="tight")
         plt.close()
 
-    def hist_extinction_combinations(self, path=None):
+    def plot_kde_extinction_combinations(self, path=None, bandwidth=None, sampling=16):
         """
         Plot histogram of extinctions for all combinations. Requires PNICER to be run beforehand
         :param path: file path if it should be saved. e.g. "/path/to/image.png"
-        :return:
+        :param bandwidth: Bandwidth of KDE. If not set, use Scott's rule divided by 2
+        :param sampling: Sampling factor of grid (the larger, the more samples)
         """
 
         # If PNICER has not yet been run, raise error
@@ -596,27 +597,52 @@ class DataBase:
                      DataBase.round_partial(np.nanmean(self._ext_combinations)
                                             + 3.5 * np.nanstd(self._ext_combinations), 0.1)]
         # noinspection PyTypeChecker
-        ax2_range = [0, DataBase.round_partial(np.nanmean(self._exterr_combinations)
-                                               + 3.5 * np.nanstd(self._exterr_combinations), 0.1)]
+        ax2_range = [0., DataBase.round_partial(np.nanmean(self._exterr_combinations)
+                                                + 3.5 * np.nanstd(self._exterr_combinations), 0.1)]
 
         plt.figure(figsize=[5 * n_panels[1], 5 * n_panels[0] * 0.5])
         grid = GridSpec(ncols=n_panels[1], nrows=n_panels[0], bottom=0.05, top=0.95, left=0.05, right=0.95,
-                        hspace=0.05, wspace=0.05)
+                        hspace=0, wspace=0)
 
         for idx in range(self._n_combinations):
 
-            ax1 = plt.subplot(grid[idx])
-            ax1.hist(self._ext_combinations[idx, :], bins=25, range=ax1_range, histtype="stepfilled", lw=0,
-                     alpha=0.5, color="#3288bd", log=True)
-            ax1.annotate(self._combination_names[idx], xy=(0.95, 0.9), xycoords="axes fraction", ha="right")
+            # Get densities for extinction
+            ext = self._ext_combinations[idx, :]
+            # noinspection PyTypeChecker
+            ext = ext[np.isfinite(ext)]
+            if bandwidth is None:
+                bandwidth = np.float(3.5 * np.std(ext) / np.power(np.sqrt(len(ext)), 1/3)) / 2
+            grid_ext = np.arange(np.floor(ax1_range[0]), np.ceil(ax1_range[1]), bandwidth / sampling)
+            dens_ext = mp_kde(grid=grid_ext, data=ext, bandwidth=bandwidth, shape=None,
+                              kernel="epanechnikov", absolute=True, sampling=sampling)
 
+            # Get densities for extinction error
+            exterr = self._exterr_combinations[idx, :]
+            # noinspection PyTypeChecker
+            exterr = exterr[np.isfinite(exterr)]
+            if bandwidth is None:
+                bandwidth = np.float(3.5 * np.std(exterr) / np.power(np.sqrt(len(exterr)), 1/3)) / 2
+            grid_exterr = np.arange(np.floor(ax2_range[0]), np.ceil(ax2_range[1]), bandwidth / sampling)
+            dens_exterr = mp_kde(grid=grid_exterr, data=exterr[np.isfinite(exterr)], bandwidth=bandwidth, shape=None,
+                                 kernel="epanechnikov", absolute=True, sampling=sampling)
+
+            # Add axes
+            ax1 = plt.subplot(grid[idx])
             ax2 = ax1.twiny()
-            ax2.hist(self._exterr_combinations[idx, :], bins=25, range=ax2_range, histtype="step", lw=2,
-                     alpha=0.8, color="#66c2a5", log=True)
+
+            # Plot
+            ax1.plot(grid_ext, dens_ext, lw=3, alpha=0.7, color="#cb181d")
+            ax2.plot(grid_exterr, dens_exterr, lw=3, alpha=0.7, color="#2171b5")
+
+            for ax in [ax1, ax2]:
+                ax.xaxis.set_major_locator(MaxNLocator(5))
+                ax.yaxis.set_major_locator(MaxNLocator(5))
+                ax.xaxis.set_minor_locator(AutoMinorLocator(5))
+                ax.yaxis.set_minor_locator(AutoMinorLocator(5))
 
             # Set and delete labels
             if idx >= n_panels[0] * n_panels[1] - n_panels[1]:
-                ax1.set_xlabel("Extinction")
+                ax1.set_xlabel("Extinction (mag)")
             else:
                 ax1.axes.xaxis.set_ticklabels([])
             if idx % n_panels[1] == 0:
@@ -624,19 +650,19 @@ class DataBase:
             else:
                 ax1.axes.yaxis.set_ticklabels([])
             if idx < n_panels[1]:
-                ax2.set_xlabel("Error")
+                ax2.set_xlabel("Error (mag)")
             else:
                 ax2.axes.xaxis.set_ticklabels([])
 
             # Delete first and last label
-            # TODO: Redo this. Only delete last label
             xticks = ax1.xaxis.get_major_ticks()
-            xticks[0].label1.set_visible(False)
-            xticks[-1].label1.set_visible(False)
+            xticks[-1].set_visible(False)
             xticks = ax2.xaxis.get_major_ticks()
-            xticks[0].label2.set_visible(False)
-            xticks[-1].label2.set_visible(False)
-            """For some reason this does not work for the y axis..."""
+            xticks[-1].set_visible(False)
+            yticks = ax1.yaxis.get_major_ticks()
+            yticks[-1].set_visible(False)
+            yticks = ax2.yaxis.get_major_ticks()
+            yticks[-1].set_visible(False)
 
         # Save or show figure
         if path is None:
@@ -1145,6 +1171,14 @@ def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", absolute=Fa
     # If we want absolute values, we must specify the sampling
     if absolute:
         assert sampling, "Sampling needs to be specified"
+
+    # Dimensions of grid and data must match
+    assert len(grid.shape) == len(data.shape), "Data and Grid dimensions must match"
+
+    # If only one dimension, extend
+    if len(grid.shape) == 1:
+        grid = grid[:, np.newaxis]
+        data = data[:, np.newaxis]
 
     # Split for parallel processing
     grid_split = np.array_split(grid, multiprocessing.cpu_count(), axis=0)
