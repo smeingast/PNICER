@@ -699,7 +699,13 @@ class Magnitudes(DataBase):
         # ...and all combinations of colors
         colors_combinations = colors.all_combinations()
 
-        # TODO: Decide what to add here!
+        """
+        At a later stage I could include to also allow just two bands to produce and extinction with PNICER when used
+        with colors. For now, color_combinations only produces combinations with at least two colors, i.e. at least
+        three bands. In other words: PNICER for now requires always at least two input features: Either two magnitudes
+        or two colors. In the casae of magnitudes, I spread the paramter space thin, in case of colors I need at least
+        three bands.
+        """
         # # Add color-magnitude combinations
         # for n in reversed(range(colors.n_features)):
         #     colors_combinations[:0] = \
@@ -719,7 +725,7 @@ class Magnitudes(DataBase):
 
     # ----------------------------------------------------------------------
     def pnicer(self, control, sampling=2, kernel="epanechnikov", use_color=False):
-        # TODO: Add parameter to decalre minimum number of features to use
+        # TODO: Add parameter to declare minimum number of features to use
         """
         PNICER call method for magnitudes. Includes options to use combinations for input features, or convert them
         to colors.
