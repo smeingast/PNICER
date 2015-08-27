@@ -336,8 +336,8 @@ class DataBase:
         mywcs.wcs.cdelt = np.array([-pixsize, pixsize])
         mywcs.wcs.crval = [(lon_range[0] + lon_range[1]) / 2., (lat_range[0] + lat_range[1]) / 2.]
         mywcs.wcs.ctype = ctype
-        # TODO: Set median of mean of something instead of -20
-        mywcs.wcs.set_pv([(2, 1, -20.)])
+
+        mywcs.wcs.set_pv([(2, 1, np.around(np.median(self.lat), 1))])
 
         # Make header
         myheader = mywcs.to_header()
