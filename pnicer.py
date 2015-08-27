@@ -13,7 +13,6 @@ from astropy import wcs
 from astropy.io import fits
 from wcsaxes import WCS as awcs
 from sklearn.neighbors import KernelDensity, NearestNeighbors
-from matplotlib.ticker import AutoMinorLocator, MaxNLocator
 from matplotlib.pyplot import GridSpec
 
 
@@ -177,13 +176,12 @@ class DataBase:
         return combination_instances
 
     # ----------------------------------------------------------------------
-    def _pnicer_single(self, control, bin_grid, bin_ext, kernel):
+    def _pnicer_single(self, control, sampling, kernel):
         """
         Main PNICER routine to get extinction. This will return only the extinction values for data for which all
         features are available
         :param control: instance of control field data
-        :param bin_grid: Discrete bin width for data grid
-        :param bin_ext: Discrete bin width along extinction vector
+        :param sampling: Sampling of grid relative to bandwidth of kernel
         :param kernel: name of kernel to be used for density estimation. e.g. "epanechnikov" or "gaussian"
         :return: Extinction and error for input data
         """
@@ -195,8 +193,13 @@ class DataBase:
         # Let's rotate the data spaces
         science_rot, control_rot = self.rotate(), control.rotate()
 
+        # Get bandwidth of kernel
+        bandwidth = np.around(np.mean(np.nanmean(self.features_err, axis=1)), 2)
+
+        # Determine bin widths for grid according to bandwidth and sampling
+        bin_grid = bin_ext = np.float(bandwidth / sampling)
+
         # Now we build a grid from the rotated data for all components but the first
-        # TODO: Should I set bin_grid always to half the kernel bandwidth?
         grid_data = DataBase.build_grid(data=np.vstack(science_rot.features)[1:, :], precision=bin_grid)
 
         # Create a grid to evaluate along the reddening vector
@@ -207,23 +210,19 @@ class DataBase:
         xgrid = np.column_stack([np.tile(grid_ext, grid_data.shape[1]),
                                  np.repeat(grid_data, len(grid_ext), axis=1).T])
 
-        # Get bandwidth of kernel
-        # TODO: Maybe implement different kernels based on errors...humm
-        bandwidth = np.mean(np.nanmean(self.features_err, axis=1))
-
         # With our grid, we evaluate the density on it for the control field (!)
-        dens = mp_kde(grid=xgrid, data=np.vstack(control_rot.features).T, bandwidth=bandwidth, kernel=kernel)
+        dens = mp_kde(grid=xgrid, data=np.vstack(control_rot.features).T, bandwidth=bandwidth, kernel=kernel,
+                      absolute=True, sampling=sampling)
 
         # Get all unique vectors
-        # TODO: Require at least, say, 3 sources in a vector, otherwise discard the PDF.
         dens_vectors = dens.reshape([grid_data.shape[1], len(grid_ext)])
 
         # Calculate weighted average and standard deviation for each vector
         grid_mean, grid_std = [], []
         for vec in dens_vectors:
 
-            # In case there are only 0 probabilities
-            if np.sum(vec) < 1E-6:
+            # In case there are too few stars
+            if np.sum(vec) < 3:
                 grid_mean.append(np.nan)
                 grid_std.append(np.nan)
             else:
@@ -236,7 +235,7 @@ class DataBase:
         grid_mean = np.array(grid_mean)
 
         # Let's get the nearest neighbor grid point for each source
-        nbrs = NearestNeighbors(n_neighbors=1, algorithm='ball_tree').fit(grid_data.T)
+        nbrs = NearestNeighbors(n_neighbors=1, algorithm="ball_tree").fit(grid_data.T)
         _, indices = nbrs.kneighbors(np.vstack(science_rot.features)[1:, :].T)
         indices = indices[:, 0]
 
@@ -254,18 +253,16 @@ class DataBase:
 
         out[mask], outerr[mask] = ext, ext_err
 
-        # TODO: Somehow all input sources have extinction errors. They also should have NaN
         return out, outerr
 
     # ----------------------------------------------------------------------
-    def _pnicer_combinations(self, control, comb, bin_grid, bin_ext, kernel):
+    def _pnicer_combinations(self, control, comb, sampling, kernel):
         """
         PNICER base implementation for combinations. Basically calls the pnicer_single implementation for all
         combinations. The outpur extinction is then the one with the smallest error from all combinations
         :param control: instance of control field data
         :param comb: zip object of combinations to use
-        :param bin_grid: Discrete bin width for data grid
-        :param bin_ext: Discrete bin width along extinction vector
+        :param sampling: Sampling of grid relative to bandwidth of kernel
         :param kernel: name of kernel to be used for density estimation. e.g. "epanechnikov" or "gaussian"
         :return: Extinction instance with the calcualted extinction and error
         """
@@ -283,7 +280,7 @@ class DataBase:
 
             assert isinstance(sc, DataBase)
             # Run PNICER for current combination
-            ext, ext_err = sc._pnicer_single(control=cc, bin_ext=bin_ext, bin_grid=bin_grid, kernel=kernel)
+            ext, ext_err = sc._pnicer_single(control=cc, sampling=sampling, kernel=kernel)
 
             # Append data
             all_ext.append(ext)
@@ -299,11 +296,12 @@ class DataBase:
         self._combination_names = names
         self._n_combinations = i
 
-        # TODO: Should I choose the extinction which is closest to 0 in the de-reddened CF?
         # Chose extinction with minimum error
         all_exterr[~np.isfinite(all_exterr)] = 100 * np.nanmax(all_exterr)
         ext = all_ext[np.argmin(all_exterr, axis=0), np.arange(self.n_data)]
         exterr = all_exterr[np.argmin(all_exterr, axis=0), np.arange(self.n_data)]
+        # Make error cut
+        ext[exterr > 10] = exterr[exterr > 10] = np.nan
 
         return Extinction(db=self, extinction=ext, error=exterr)
 
@@ -720,14 +718,13 @@ class Magnitudes(DataBase):
         return colors_combinations
 
     # ----------------------------------------------------------------------
-    def pnicer(self, control, bin_grid=0.1, bin_ext=0.05, kernel="epanechnikov", use_color=False):
+    def pnicer(self, control, sampling=2, kernel="epanechnikov", use_color=False):
         # TODO: Add parameter to decalre minimum number of features to use
         """
         PNICER call method for magnitudes. Includes options to use combinations for input features, or convert them
         to colors.
         :param control: instance of control field
-        :param bin_grid: Discrete bin width for data grid
-        :param bin_ext: Discrete bin width along extinction vector
+        :param sampling: Sampling of grid relative to bandwidth of kernel
         :param kernel: name of kernel to be used for density estimation. e.g. "epanechnikov" or "gaussian"
         :param use_color: Whether or not to convert to colors
         :return: Extinction instance with the calculated extinction and error
@@ -737,7 +734,7 @@ class Magnitudes(DataBase):
         else:
             comb = zip(self.all_combinations(), control.all_combinations())
 
-        return self._pnicer_combinations(control=control, comb=comb, bin_grid=bin_grid, bin_ext=bin_ext, kernel=kernel)
+        return self._pnicer_combinations(control=control, comb=comb, sampling=sampling, kernel=kernel)
 
     # ----------------------------------------------------------------------
     # NICER implementation
@@ -836,18 +833,17 @@ class Colors(DataBase):
         super(Colors, self).__init__(mag=mag, err=err, extvec=extvec, lon=lon, lat=lat, names=names)
 
     # ----------------------------------------------------------------------
-    def pnicer(self, control, bin_grid=0.1, bin_ext=0.05, kernel="epanechnikov"):
+    def pnicer(self, control, sampling=2, kernel="epanechnikov"):
         """
         PNICER call method for colors.
         :param control: instance of control field
-        :param bin_grid: Discrete bin width for data grid
-        :param bin_ext: Discrete bin width along extinction vector
+        :param sampling: Sampling of grid relative to bandwidth of kernel
         :param kernel: name of kernel to be used for density estimation. e.g. "epanechnikov" or "gaussian"
         :return: Extinction instance with the calculated extinction and error
         """
 
         comb = zip(self.all_combinations(), control.all_combinations())
-        return self._pnicer_combinations(control=control, comb=comb, bin_grid=bin_grid, bin_ext=bin_ext, kernel=kernel)
+        return self._pnicer_combinations(control=control, comb=comb, sampling=sampling, kernel=kernel)
 
 
 # ----------------------------------------------------------------------
@@ -1127,7 +1123,12 @@ def _mp_kde(kde, data, grid):
     :param grid Grid on which to evaluate the density
     :return density
     """
-    return np.exp(kde.fit(data).score_samples(grid)) * data.shape[0]
+    # return np.exp(kde.fit(data).score_samples(grid)) * data.shape[0]
+    # print(data.shape[0] / grid.shape[0])
+    # print(grid.shape[0])
+    # print(data.shape[0])
+    # print()
+    return np.exp(kde.fit(data).score_samples(grid))
 
 
 def _mp_kde_star(args):
@@ -1172,10 +1173,7 @@ def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", absolute=Fa
     # TODO: test this!!!!
     # If we want absolute numbers we have to evaluate the same thing for the grid
     if absolute:
-        p = multiprocessing.Pool()
-        norm = p.map(_mp_kde_star, zip(repeat(kde), repeat(grid), grid_split))
-        p.close()
-        mp /= 1/sampling * np.concatenate(norm)
+        mp *= data.shape[0] / np.sum(mp) * sampling
 
     # Unpack results and return
     if shape is None:

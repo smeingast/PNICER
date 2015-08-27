@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from pnicer import Magnitudes
 from astropy.io import fits
 from matplotlib.pyplot import GridSpec
-from matplotlib.ticker import MultipleLocator
+from matplotlib.ticker import MultipleLocator, MaxNLocator
 from pnicer import mp_kde
 
 
@@ -53,9 +53,12 @@ science_error = [science_dummy[n] for n in errors_names]
 control_error = [control_dummy[n] for n in errors_names]
 
 dens_nicer, dens_pnicer = [], []
-res = 0.02
-sampling = 4
-grid_kde = np.arange(start=-1, stop=1, step=res/sampling, dtype=np.double)[:, np.newaxis]
+res = 0.01
+sampling = 2
+erange = [-0.5, 0.5]
+grid_kde = np.arange(start=1.1*erange[0], stop=1.1*erange[1],
+                     step=res/sampling, dtype=np.double)[:, np.newaxis]
+
 for i in range(3, 4):
 
     print(features_names[:i])
@@ -67,7 +70,7 @@ for i in range(3, 4):
                          lon=control_glon, lat=control_glat, names=features_names[:i])
 
     # Run PNICER and NICER on control field
-    ext_pnicer = control.pnicer(control=control, bin_ext=0.02, bin_grid=0.1, use_color=True).extinction
+    ext_pnicer = control.pnicer(control=control, bin_ext=0.1, bin_grid=0.1, use_color=True).extinction
     ext_nicer = control.nicer(control=control).extinction
 
     # Filter NaNs
@@ -83,26 +86,38 @@ for i in range(3, 4):
 
 # ----------------------------------------------------------------------
 # Plot
-fig = plt.figure(figsize=[12, 6])
-grid_plt= GridSpec(ncols=1, nrows=1, bottom=0.05, top=0.95, left=0.05, right=0.95, hspace=0.1, wspace=0.1)
+fig = plt.figure(figsize=[10, 6])
+grid_plt= GridSpec(ncols=1, nrows=1, bottom=0.09, top=0.99, left=0.09, right=0.99, hspace=0.1, wspace=0.1)
 ax = plt.subplot(grid_plt[0])
 
-ncolor = ["#cb181d", "#a50f15", "#67000d"]
-pcolor = ["#6baed6", "#2171b5", "#08306b"]
-lw, alpha = 2, 1
-for n, p, nc, pc in zip(dens_nicer, dens_pnicer, ncolor, pcolor):
-    ax.plot(grid_kde, n, lw=lw, alpha=alpha, color=nc)
-    ax.plot(grid_kde, p, lw=lw, alpha=alpha, color=pc)
+ncolor = ["#fcbba1", "#ef3b2c", "#67000d"]
+pcolor = ["#9ecae1", "#4292c6", "#08306b"]
+lnicer, lpnicer = [None, None, "NICER"], [None, None, "PNICER"]
+lw, alpha = 3, 1
+for n, p, nc, pc, ln, lp in zip(dens_nicer, dens_pnicer, ncolor, pcolor, lnicer, lpnicer):
+    ax.plot(grid_kde, n, lw=lw, alpha=alpha, color=nc, label=ln)
+    ax.plot(grid_kde, p, lw=lw, alpha=alpha, color=pc, label=lp)
 
-# ax.set_yscale("log")
+    # edges = np.arange(-1, 1, res)
+    # ax.hist(ext_nicer, bins=edges, range=(-1, 1), alpha=0.5, color="red")
+    # ax.hist(ext_pnicer, bins=edges, range=(-1, 1), alpha=0.5, color="blue")
 
-# edges = np.arange(-1, 1, res)
-# ax.hist(ext_nicer, bins=edges, range=(-1, 1), alpha=0.5, color="red")
-# ax.hist(ext_pnicer, bins=edges, range=(-1, 1), alpha=0.5, color="blue")
+
+# Set plot limits
+ax.set_xlim(erange)
 
 # Annotate the standard deviations
 # ax.annotate("NICER std = " + str(np.around(np.std(ext_nicer), 2)) +
 #             "\nPNICER std = " + str(np.around(np.std(ext_pnicer), 2)),
 #             xy=(0.05, 0.95), xycoords="axes fraction", ha="left", va="top")
 
-plt.show()
+# ax.set_xlabel("$A_K$ (mag)")
+# ax.set_ylabel("N")
+# ax.xaxis.set_minor_locator(MultipleLocator(0.05))
+# ax.yaxis.set_minor_locator(MultipleLocator(200))
+
+# Set legend
+# plt.legend(loc=1, frameon=False)
+
+# Save
+plt.savefig("/Users/Antares/Dropbox/Projects/PNICER/Paper/Results/Ak_hist_nicer_pnicer.pdf", bbox_inches="tight")

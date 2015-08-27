@@ -22,7 +22,8 @@ control_path = "/Users/Antares/Dropbox/Data/Orion/VISION/Catalog/VISION_CF+_Spit
 results_path = "/Users/Antares/Dropbox/Projects/Dereddening/Results/"
 
 # Load colormap
-cmap = brewer2mpl.get_map('RdYlBu', 'Diverging', number=11, reverse=True).get_mpl_colormap(N=11, gamma=1)
+cmap1 = brewer2mpl.get_map('RdYlBu', 'Diverging', number=11, reverse=True).get_mpl_colormap(N=11, gamma=1)
+cmap2 = brewer2mpl.get_map('RdYlBu', 'Diverging', number=11, reverse=True).get_mpl_colormap(N=15, gamma=1)
 
 
 # ----------------------------------------------------------------------
@@ -102,12 +103,20 @@ avg_pnicer = point_average(xdata=xdata, ydata=ydata, zdata=ext_pnicer.extinction
 
 # ----------------------------------------------------------------------
 # Plot results
-fig = plt.figure(figsize=[11, 5])
-grid = GridSpec(ncols=3, nrows=1, bottom=0.09, top=0.99, left=0.05, right=0.95, hspace=0, wspace=0,
-                width_ratios=[1, 1, 0.05])
-ax1 = plt.subplot(grid[0])
-ax2 = plt.subplot(grid[1])
-ax3 = plt.subplot(grid[2])
+fig = plt.figure(figsize=[20, 6.1])
+gs1 = GridSpec(ncols=3, nrows=1, bottom=0.09, top=0.99, left=0.05, right=0.6121, hspace=0, wspace=0,
+               width_ratios=[1, 1, 0.05])
+
+gs2 = GridSpec(ncols=2, nrows=1, bottom=0.09, top=0.99, left=0.6821, right=0.97, hspace=0, wspace=0,
+               width_ratios=[1, 0.05])
+
+
+# Add axes
+ax1 = plt.subplot(gs1[0])
+ax2 = plt.subplot(gs1[1])
+cax12 = plt.subplot(gs1[2])
+ax3 = plt.subplot(gs2[0])
+cax3 = plt.subplot(gs2[1])
 
 # Define some scatter plot parameters
 s = 5
@@ -115,19 +124,20 @@ vmin, vmax = -0.55, 0.55
 alpha = 1
 
 # Create scatter plot
-im1 = ax1.scatter(control.features[1] - control.features[2], control.features[0] - control.features[1],
-                  s=s, lw=0, c=avg_pnicer, vmin=vmin, vmax=vmax, cmap=cmap, alpha=alpha)
-im2 = ax2.scatter(control.features[1] - control.features[2], control.features[0] - control.features[1],
-                  s=s, lw=0, c=avg_nicer, vmin=vmin, vmax=vmax, cmap=cmap, alpha=alpha)
+im1 = ax1.scatter(xdata, ydata, s=s, lw=0, c=avg_pnicer, vmin=vmin, vmax=vmax, cmap=cmap1, alpha=alpha)
+im2 = ax2.scatter(xdata, ydata, s=s, lw=0, c=avg_nicer, vmin=vmin, vmax=vmax, cmap=cmap1, alpha=alpha)
 
-cbar = plt.colorbar(im1, cax=ax3, label="$A_K$", ticks=MultipleLocator(0.1))
+cbar1 = plt.colorbar(im1, cax=cax12, label="$A_K$", ticks=MultipleLocator(0.1))
+
+im3 = ax3.scatter(xdata, ydata, s=s, lw=0, c=avg_pnicer - avg_nicer, vmin=-0.25, vmax=0.25, cmap=cmap2, alpha=alpha)
+cbar3 = plt.colorbar(im3, cax=cax3, label="$\Delta A_K$", ticks=MultipleLocator(0.1))
 
 # Modify axes
 ax1.annotate("PNICER", xy=(0.05, 0.95), xycoords="axes fraction", ha="left", va="top")
 ax2.annotate("NICER", xy=(0.05, 0.95), xycoords="axes fraction", ha="left", va="top")
 ax1.set_ylabel("$J - H$ (mag)")
 ax2.axes.yaxis.set_ticklabels([])
-for ax in [ax1, ax2]:
+for ax in [ax1, ax2, ax3]:
     ax.set_xlim(xrange)
     ax.set_ylim(yrange)
     ax.set_xlabel("$H - K_S$ (mag)")
@@ -143,7 +153,6 @@ for ax in [ax1, ax2]:
     # ax.arrow(0.7, 0.3, features_extinction[1] - features_extinction[2], features_extinction[0] - features_extinction[1],
     #          head_width=0.02, head_length=0.05, fc="k", ec="k", length_includes_head=True)
 
-# TODO: Add third panel with NICER - PNICER (or NICER/PNICER or something similar)
 
 # Save
 plt.savefig("/Users/Antares/Dropbox/Projects/PNICER/Paper/Results/nicer_pnicer.png", bbox_inches="tight")
