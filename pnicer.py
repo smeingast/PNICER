@@ -1010,14 +1010,13 @@ class Extinction:
         # First let's get a grid
         grid_header, grid_lon, grid_lat = self.db.build_wcs_grid(frame="galactic", pixsize=bandwidth / 2.)
 
-        # Create process pool
-        p = multiprocessing.Pool()
-        # Submit tasks
-        mp = p.map(get_extinction_pixel_star, zip(grid_lon.ravel(), grid_lat.ravel(), repeat(self.db.lon),
-                                                  repeat(self.db.lat), repeat(self.extinction), repeat(self.error),
-                                                  repeat(bandwidth), repeat(method), repeat(nicest)))
-        # Close pool (!)
-        p.close()
+        with Pool() as pool:
+
+            # Submit tasks
+            mp = pool.starmap(get_extinction_pixel,
+                              zip(grid_lon.ravel(), grid_lat.ravel(), repeat(self.db.lon),
+                                  repeat(self.db.lat), repeat(self.extinction), repeat(self.error),
+                                  repeat(bandwidth), repeat(method), repeat(nicest)))
 
         # Unpack results
         extmap, extmap_err, nummap = list(zip(*mp))
@@ -1267,15 +1266,6 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, ext_err, bandwidth, me
 
     # Return
     return epixel, epixel_err, npixel
-
-
-# ----------------------------------------------------------------------
-# For pool.starmap() method to accept multiple arguments
-def get_extinction_pixel_star(args):
-    """
-    starmap method for extinction pixel
-    """
-    return get_extinction_pixel(*args)
 
 
 # ----------------------------------------------------------------------
