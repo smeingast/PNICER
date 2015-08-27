@@ -8,12 +8,13 @@ import warnings
 import multiprocessing
 import matplotlib.pyplot as plt
 
-from itertools import combinations, repeat
 from astropy import wcs
 from astropy.io import fits
 from wcsaxes import WCS as awcs
-from sklearn.neighbors import KernelDensity, NearestNeighbors
+from multiprocessing import Pool
+from itertools import combinations, repeat
 from matplotlib.pyplot import GridSpec
+from sklearn.neighbors import KernelDensity, NearestNeighbors
 
 
 # ----------------------------------------------------------------------
@@ -725,7 +726,6 @@ class Magnitudes(DataBase):
 
     # ----------------------------------------------------------------------
     def pnicer(self, control, sampling=2, kernel="epanechnikov", use_color=False):
-        # TODO: Add parameter to declare minimum number of features to use
         """
         PNICER call method for magnitudes. Includes options to use combinations for input features, or convert them
         to colors.
@@ -816,7 +816,6 @@ class Magnitudes(DataBase):
         # ext[mask] = ext_err[mask] = np.nan
 
         # ...and return :)
-        # TODO: Somehow all input sources have extinction errors. They also should have NaN (Same with PNICER)
         return Extinction(db=self, extinction=ext.data, error=ext_err)
 
 
@@ -1132,13 +1131,6 @@ def _mp_kde(kde, data, grid):
     return np.exp(kde.fit(data).score_samples(grid))
 
 
-def _mp_kde_star(args):
-    """
-    starmap for kernel density
-    """
-    return _mp_kde(*args)
-
-
 def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", absolute=False, sampling=None):
     """
     Parellisation for kernel density estimation
@@ -1162,12 +1154,9 @@ def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", absolute=Fa
     # Define kernel according to Nyquist sampling
     kde = KernelDensity(kernel=kernel, bandwidth=bandwidth)
 
-    # Create process pool
-    p = multiprocessing.Pool()
-    # Submit tasks
-    mp = p.map(_mp_kde_star, zip(repeat(kde), repeat(data), grid_split))
-    # Close pool (!)
-    p.close()
+    with Pool() as pool:
+        mp = pool.starmap(_mp_kde, zip(repeat(kde), repeat(data), grid_split))
+
     # Create array
     mp = np.concatenate(mp)
 

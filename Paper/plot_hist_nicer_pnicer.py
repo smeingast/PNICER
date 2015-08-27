@@ -61,8 +61,6 @@ grid_kde = np.arange(start=1.1*erange[0], stop=1.1*erange[1],
 
 for i in range(3, 6):
 
-    print(features_names[:i])
-
     # Initialize data
     science = Magnitudes(mag=science_data[:i], err=science_error[:i], extvec=features_extinction[:i],
                          lon=science_glon, lat=science_glat, names=features_names[:i])
@@ -70,7 +68,7 @@ for i in range(3, 6):
                          lon=control_glon, lat=control_glat, names=features_names[:i])
 
     # Run PNICER and NICER on control field
-    ext_pnicer = control.pnicer(control=control, sampling=sampling, use_color=True).extinction
+    ext_pnicer = control.pnicer(control=control, sampling=sampling, use_color=False).extinction
     ext_nicer = control.nicer(control=control).extinction
 
     # Filter NaNs
