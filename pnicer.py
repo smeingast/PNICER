@@ -133,9 +133,8 @@ class DataBase:
         :return: Instance of input with rotated data
         """
 
-        mask = np.prod(np.vstack(self.features_masks), axis=0, dtype=bool)
-        data = np.vstack(self.features).T[mask].T
-        err = np.vstack(self.features_err).T[mask].T
+        data = np.vstack(self.features).T[self.combined_mask].T
+        err = np.vstack(self.features_err).T[self.combined_mask].T
 
         # Rotate data
         rotdata = self.extvec.rotmatrix.dot(data)
@@ -145,11 +144,11 @@ class DataBase:
 
         # In case no coordinates are supplied
         if self.lon is not None:
-            lon = self.lon[mask]
+            lon = self.lon[self.combined_mask]
         else:
             lon = None
         if self.lat is not None:
-            lat = self.lat[mask]
+            lat = self.lat[self.combined_mask]
         else:
             lat = None
 
@@ -770,10 +769,11 @@ class Magnitudes(DataBase):
 
     # ----------------------------------------------------------------------
     # NICER implementation
-    def nicer(self, control):
+    def nicer(self, control, all_features=False):
         """
         NICER routine as descibed in Lombardi & Alves 2001. Generalized for arbitrary input magnitudes
         :param control: control field instance to calculate intrinsic colors
+        :param all_features: If set, return only extinction values for sources with data for all features
         :return: Extinction instance
         """
 
@@ -838,8 +838,8 @@ class Magnitudes(DataBase):
         ext_err = np.sqrt(np.array([np.dot(b.data[:, idx], first[idx, :]) for idx in range(self.n_data)]))
 
         # Combined mask for all features
-        # mask = np.prod(np.vstack(self.features_masks), axis=0, dtype=bool)
-        # ext[mask] = ext_err[mask] = np.nan
+        if all_features:
+            ext[~self.combined_mask] = ext_err[~self.combined_mask] = np.nan
 
         # ...and return :)
         return Extinction(db=self, extinction=ext.data, error=ext_err)
