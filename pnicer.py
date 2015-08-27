@@ -1155,16 +1155,17 @@ def _mp_kde(kde, data, grid):
     return np.exp(kde.fit(data).score_samples(grid))
 
 
-def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", absolute=False, sampling=None):
+def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", norm=False, absolute=False, sampling=None):
     """
     Parellisation for kernel density estimation
     :param grid Grid on which to evaluate the density
     :param data input data
     :param bandwidth: Bandwidth of kernel
-    :param sampling: Sampling factor of grid
     :param shape: If set, reshape output data
     :param kernel: e.g. "epanechnikov" or "gaussian"
+    :param norm: Normalize output. "max", "mean", "sum"
     :param absolute: Whether to return absolute numbers
+    :param sampling: Sampling factor of grid
     :return: Kernel densities
     """
 
@@ -1195,6 +1196,14 @@ def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", absolute=Fa
     # If we want absolute numbers we have to evaluate the same thing for the grid
     if absolute:
         mp *= data.shape[0] / np.sum(mp) * sampling
+
+    # Normlaize if set
+    if norm == "max":
+        mp /= np.nanmax(mp)
+    elif norm == "mean":
+        mp /= np.nanmean(mp)
+    elif norm == "sum":
+        mp /= np.nansum(mp)
 
     # Unpack results and return
     if shape is None:
