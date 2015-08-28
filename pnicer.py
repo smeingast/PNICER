@@ -839,6 +839,8 @@ class Magnitudes(DataBase):
         # Calculate variance (has to be done in loop due to RAM issues!)
         first = np.array([np.dot(cov.data[idx, :, :], b.data[:, idx]) for idx in range(self.n_data)])
         var = np.array([np.dot(b.data[:, idx], first[idx, :]) for idx in range(self.n_data)])
+        # Now we have to mask the large variance data again
+        var[~np.isfinite(ext)] = np.nan
 
         # Combined mask for all features
         if all_features:
@@ -1110,31 +1112,54 @@ class ExtinctionMap:
         if (len(self.map.shape) != 2) | (len(self.var.shape) != 2) | (len(self.num.shape) != 2):
             raise TypeError("Input must be 2D arrays")
 
-    def plot_map(self, path=None, size=10):
+    def plot_map(self, path=None, figsize=5):
         """
         Simple method to plot extinction map
         :param path: file path if it should be saved. e.g. "/path/to/image.png"
-        :param size: figure size adjustment parameter
+        :param figsize: figure size adjustment parameter
         :return:
         """
 
-        # TODO: Add variance and Number map to plot
-        fig = plt.figure(figsize=[size, 0.9 * size * (self.shape[0] / self.shape[1])])
-        ax = fig.add_axes([0.05, 0.05, 0.85, 0.9], projection=wcsaxes.WCS(self.fits_header))
-        cax = fig.add_axes([0.9, 0.05, 0.02, 0.9])
+        fig = plt.figure(figsize=[figsize, 3 * 0.9 * figsize * (self.shape[0] / self.shape[1])])
+        grid = GridSpec(ncols=2, nrows=3, bottom=0.05, top=0.95, left=0.05, right=0.95, hspace=0.08, wspace=0,
+                        height_ratios=[1, 1, 1], width_ratios=[1, 0.05])
 
-        im = ax.imshow(self.map, origin="lower", interpolation="nearest", cmap="binary",
-                       vmin=np.floor(np.percentile(self.map[np.isfinite(self.map)], 1) * 10) / 10,
-                       vmax=np.ceil(np.percentile(self.map[np.isfinite(self.map)], 99) * 10) / 10)
+        for idx in range(0, 6, 2):
 
-        # Add colorbar
-        fig.colorbar(im, cax=cax, label="Extinction (mag)")
+            # print(idx)
+            ax = plt.subplot(grid[idx], projection=wcsaxes.WCS(self.fits_header))
+            cax = plt.subplot(grid[idx + 1])
 
-        # Add axes labels
-        lon = ax.coords[0]
-        lat = ax.coords[1]
-        lon.set_axislabel("Longitude")
-        lat.set_axislabel("Latitude")
+            # Plot Extinction map
+            if idx == 0:
+                im = ax.imshow(self.map, origin="lower", interpolation="nearest", cmap="binary",
+                               vmin=np.floor(np.percentile(self.map[np.isfinite(self.map)], 1) * 10) / 10,
+                               vmax=np.ceil(np.percentile(self.map[np.isfinite(self.map)], 99) * 10) / 10)
+                fig.colorbar(im, cax=cax, label="Extinction (mag)")
+
+            # Plot variance map
+            if idx == 2:
+                im = ax.imshow(self.var, origin="lower", interpolation="nearest", cmap="binary",
+                               vmin=np.floor(np.percentile(self.var[np.isfinite(self.var)], 1) * 10) / 10,
+                               vmax=np.ceil(np.percentile(self.var[np.isfinite(self.var)], 99) * 10) / 10)
+                fig.colorbar(im, cax=cax, label="Variance")
+
+            if idx == 4:
+                im = ax.imshow(self.num, origin="lower", interpolation="nearest", cmap="binary",
+                               vmin=np.floor(np.percentile(self.num[np.isfinite(self.num)], 1) * 10) / 10,
+                               vmax=np.ceil(np.percentile(self.num[np.isfinite(self.num)], 99) * 10) / 10)
+                fig.colorbar(im, cax=cax, label="N")
+
+            # Add axes labels
+            lon = ax.coords[0]
+            lat = ax.coords[1]
+            if idx == 4:
+                lon.set_axislabel("Longitude")
+            lat.set_axislabel("Latitude")
+
+            # Hide tick labels
+            if (idx == 0) | (idx == 2):
+                lon.set_ticklabel_position("")
 
         # Save or show figure
         if path is None:
@@ -1254,29 +1279,30 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, method
     else:
         trunc = 3
 
-    # Restrict the input array to some manageable size
-    index = (xdata > xgrid - trunc * bandwidth) & (xdata < xgrid + trunc * bandwidth) & \
-            (ydata > ygrid - trunc * bandwidth) & (ydata < ygrid + trunc * bandwidth)
+    # Truncate input data to either pixel size (median or average) or to 3 times the bandwidth for the given kernel
+    index = (xdata > xgrid - trunc * bandwidth / 2) & (xdata < xgrid + trunc * bandwidth / 2) & \
+            (ydata > ygrid - trunc * bandwidth / 2) & (ydata < ygrid + trunc * bandwidth / 2)
 
     # If we have nothing here, immediately return
     if np.sum(index) == 0:
         return np.nan, np.nan, 0
 
     # pre-filter
-    ext, xdata, ydata = ext[index], xdata[index], ydata[index]
+    ext, var, xdata, ydata = ext[index], var[index], xdata[index], ydata[index]
 
     # Calculate the distance to the grid point in a spherical metric
     dis = np.degrees(np.arccos(np.sin(np.radians(ydata)) * np.sin(np.radians(ygrid)) +
                                np.cos(np.radians(ydata)) * np.cos(np.radians(ygrid)) *
                                np.cos(np.radians(xdata - xgrid))))
 
-    # Get sources within the truncation radius
-    index = dis < trunc * bandwidth
-
-    # Current data in bin within truncation radius
-    ext = ext[index]
-    var = var[index]
-    dis = dis[index]
+    # TODO: Decide whether to truncate the input sources to a circular patch
+    # # Get sources within the truncation radius
+    # index = dis < trunc * bandwidth
+    #
+    # # Current data in bin within truncation radius
+    # ext = ext[index]
+    # var = var[index]
+    # dis = dis[index]
 
     # Calulate number of sources in bin
     # TODO: Should be the number of stars used to calculate the extinction
@@ -1290,7 +1316,9 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, method
     # Based on chosen method calculate extinction or weights
     # TODO: Implement correct errors for mean and median
     if method == "average":
-        return np.nanmean(ext), np.nan, npixel
+        pixel_ext = np.nanmean(ext)
+        pixel_var = np.sqrt(np.nansum(var)) / npixel
+        return pixel_ext, pixel_var, npixel
     elif method == "median":
         return np.nanmedian(ext), np.nan, npixel
     elif method == "uniform":
