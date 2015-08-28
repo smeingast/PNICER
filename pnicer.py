@@ -1037,6 +1037,7 @@ class Extinction:
         Method to build an extinction map
         :param bandwidth: Resolution of map
         :param method: Method to be used. e.g. "median", "gaussian", "epanechnikov", "uniform", "triangular"
+        :param sampling: Sampling of data. i.e. how many pixels per bandwidth
         :param nicest: whether or not to adjust weights with NICEST correction factor
         :return: ExtinctionMap instance
         """
@@ -1264,6 +1265,7 @@ def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", norm=False,
 # ----------------------------------------------------------------------
 # Extinction mapping functions
 def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, method, nicest=False):
+    # TODO: Check what the slow part of this is and try to improve
     """
     Calculate extinction fro a given grid point
     :param xgrid: X grid point
@@ -1338,9 +1340,11 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, method
     weights[weights < 0] = 0
 
     # Modify weights for NICEST
+    # TODO: Find out how to generalise this and add to class
+    slope = 0.33
+    k_lambda = 1
     if nicest:
-        # TODO: Correctly implement NICEST
-        weights *= 10**(0.33 * ext)
+        weights *= 10**(slope * k_lambda * ext)
 
     # Mask weights with no extinction
     weights[~np.isfinite(ext)] = np.nan
@@ -1353,7 +1357,12 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, method
         pixel_var = np.nansum(weights**2 * var) / np.nansum(weights)**2
 
     # Return
-    return pixel_ext, pixel_var, npixel
+    if nicest:
+        # Calculate correction factor
+        cor = slope * k_lambda * np.log(10) * np.nansum(weights * var) / np.nansum(weights)
+        return pixel_ext - cor, pixel_var, npixel
+    else:
+        return pixel_ext, pixel_var, npixel
 
 
 # ----------------------------------------------------------------------
