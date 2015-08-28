@@ -1301,6 +1301,10 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric
                                np.cos(np.radians(ydata)) * np.cos(np.radians(ygrid)) *
                                np.cos(np.radians(xdata - xgrid))))
 
+    # There must be at least three sources within one bandwidth which have extinction data
+    if np.sum(np.isfinite(ext[dis < bandwidth / 2])) < 3:
+        return np.nan, np.nan, 0
+
     # Now we truncate the data to the truncation scale (i.e. a circular patch on the sky)
     index = dis < trunc * bandwidth / 2
 
@@ -1309,10 +1313,6 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric
 
     # Calulate number of sources left over after truncation
     npixel = np.sum(index)
-
-    # If there are no stars, or less than three extinction measurements return
-    if (npixel == 0) or (np.sum(np.isfinite(ext)) < 3):
-        return np.nan, np.nan, npixel
 
     # Based on chosen metric calculate extinction or weights
     if metric == "average":
