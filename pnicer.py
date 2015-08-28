@@ -1064,7 +1064,7 @@ class Extinction:
         map_num = np.array(map_num).reshape(grid_lon.shape)
 
         # Return extinction map instance
-        return ExtinctionMap(ext=map_ext, var=map_var, num=map_num, header=grid_header)
+        return ExtinctionMap(ext=map_ext, var=map_var, num=map_num, header=grid_header, metric=method)
 
     # ----------------------------------------------------------------------
     def save_fits(self, path):
@@ -1093,18 +1093,20 @@ class Extinction:
 # ----------------------------------------------------------------------
 class ExtinctionMap:
 
-    def __init__(self, ext, var, num, header):
+    def __init__(self, ext, var, num, header, metric):
         """
         Extinction map class
         :param ext: 2D Extintion map
         :param var: 2D Extinction variance map
         :param num: 2D number map
         :param header: header of grid from which extinction map was built.
+        :param metric: Metric used to create the map
         """
 
         self.map = ext
         self.var = var
         self.num = num
+        self.metric = metric
         self.shape = self.map.shape
         self.fits_header = header
 
@@ -1142,7 +1144,10 @@ class ExtinctionMap:
                 im = ax.imshow(self.var, origin="lower", interpolation="nearest", cmap="binary",
                                vmin=np.floor(np.percentile(self.var[np.isfinite(self.var)], 1) * 10) / 10,
                                vmax=np.ceil(np.percentile(self.var[np.isfinite(self.var)], 99) * 10) / 10)
-                fig.colorbar(im, cax=cax, label="Variance")
+                if self.metric == "median":
+                    fig.colorbar(im, cax=cax, label="MAD")
+                else:
+                    fig.colorbar(im, cax=cax, label="Variance")
 
             if idx == 4:
                 im = ax.imshow(self.num, origin="lower", interpolation="nearest", cmap="binary",
@@ -1314,13 +1319,14 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, method
         return np.nan, np.nan, npixel
 
     # Based on chosen method calculate extinction or weights
-    # TODO: Implement correct errors for mean and median
     if method == "average":
         pixel_ext = np.nanmean(ext)
         pixel_var = np.sqrt(np.nansum(var)) / npixel
         return pixel_ext, pixel_var, npixel
     elif method == "median":
-        return np.nanmedian(ext), np.nan, npixel
+        pixel_ext = np.nanmedian(ext)
+        pixel_mad = np.median(np.abs(ext - pixel_ext))
+        return pixel_ext, pixel_mad, npixel
     elif method == "uniform":
         weights = np.ones_like(ext)
     elif method == "triangular":
