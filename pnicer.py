@@ -1312,8 +1312,8 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, method
     # Calulate number of sources left over after truncation
     npixel = np.sum(index)
 
-    # If there are no stars, or less than two extinction measurements skip
-    if (npixel == 0) or (np.sum(np.isfinite(ext)) < 2):
+    # If there are no stars, or less than three extinction measurements skip
+    if (npixel == 0) or (np.sum(np.isfinite(ext)) < 3):
         return np.nan, np.nan, npixel
 
     # Based on chosen method calculate extinction or weights
@@ -1351,15 +1351,16 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, method
 
     # Get extinction based on weights
     with warnings.catch_warnings():
-        # Ignore NaN and 0 division warnings
         warnings.simplefilter("ignore")
         pixel_ext = np.nansum(weights * ext) / np.nansum(weights)
         pixel_var = np.nansum(weights**2 * var) / np.nansum(weights)**2
 
     # Return
     if nicest:
-        # Calculate correction factor
-        cor = slope * k_lambda * np.log(10) * np.nansum(weights * var) / np.nansum(weights)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            # Calculate correction factor
+            cor = slope * k_lambda * np.log(10) * np.nansum(weights * var) / np.nansum(weights)
         return pixel_ext - cor, pixel_var, npixel
     else:
         return pixel_ext, pixel_var, npixel
