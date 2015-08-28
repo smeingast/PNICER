@@ -1246,7 +1246,7 @@ def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", norm=False,
     if absolute:
         mp *= data.shape[0] / np.sum(mp) * sampling
 
-    # Normlaize if set
+    # Normalize if set
     if norm == "max":
         mp /= np.nanmax(mp)
     elif norm == "mean":
@@ -1275,7 +1275,7 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, method
     :param bandwidth: bandwidth of kernel
     :param method: Method to be used. e.g. "median", "gaussian", "epanechnikov", "uniform", "triangular"
     :param nicest: Wether or not to use NICEST weight adjustment
-    :return: extintion, error, and number of sources for pixel
+    :return: extintion, variance, and number of sources for pixel
     """
 
     # In case the average or median is to be calculated, I set bandwidth == truncation scale
@@ -1296,25 +1296,21 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, method
     ext, var, xdata, ydata = ext[index], var[index], xdata[index], ydata[index]
 
     # Calculate the distance to the grid point in a spherical metric
+    # TODO: Check if selection of sources for a pixel is OK
     dis = np.degrees(np.arccos(np.sin(np.radians(ydata)) * np.sin(np.radians(ygrid)) +
                                np.cos(np.radians(ydata)) * np.cos(np.radians(ygrid)) *
                                np.cos(np.radians(xdata - xgrid))))
 
-    # TODO: Decide whether to truncate the input sources to a circular patch
-    # # Get sources within the truncation radius
-    # index = dis < trunc * bandwidth
-    #
-    # # Current data in bin within truncation radius
-    # ext = ext[index]
-    # var = var[index]
-    # dis = dis[index]
+    # For all kernel which use weights, we truncate a circular patch
+    if method not in ["average", "median"]:
+        index = dis < trunc * bandwidth / 2
+        # Current data in bin within truncation radius
+        ext, var, dis, xdata, ydata = ext[index], var[index], dis[index], xdata[index], ydata[index]
 
-    # Calulate number of sources in bin
-    # TODO: Should be the number of stars used to calculate the extinction
+    # Calulate number of sources left over after truncation
     npixel = np.sum(index)
 
     # If there are no stars, or less than two extinction measurements skip
-    # TODO: If there is no star, maybe I should not return NaN...
     if (npixel == 0) or (np.sum(np.isfinite(ext)) < 2):
         return np.nan, np.nan, npixel
 
@@ -1330,9 +1326,9 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, method
     elif method == "uniform":
         weights = np.ones_like(ext)
     elif method == "triangular":
-        weights = 1 - np.abs((dis / bandwidth))
+        weights = 1 - np.abs(dis / bandwidth)
     elif method == "gaussian":
-        weights = 1 / (2 * np.pi) * np.exp(-0.5 * (dis / bandwidth)**2)
+        weights = np.exp(-0.5 * (dis / bandwidth)**2)
     elif method == "epanechnikov":
         weights = 1 - (dis / bandwidth)**2
     else:
@@ -1343,6 +1339,7 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, method
 
     # Modify weights for NICEST
     if nicest:
+        # TODO: Correctly implement NICEST
         weights *= 10**(0.33 * ext)
 
     # Mask weights with no extinction
@@ -1352,9 +1349,8 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, method
     with warnings.catch_warnings():
         # Ignore NaN and 0 division warnings
         warnings.simplefilter("ignore")
-        pixel_ext = np.nansum(weights * np.array(ext)) / np.nansum(weights)
-        # TODO: Is this correct? I guess not!
-        pixel_var = np.sqrt(np.nansum((weights * np.array(var)) ** 2) / np.nansum(weights) ** 2)
+        pixel_ext = np.nansum(weights * ext) / np.nansum(weights)
+        pixel_var = np.nansum(weights**2 * var) / np.nansum(weights)**2
 
     # Return
     return pixel_ext, pixel_var, npixel
