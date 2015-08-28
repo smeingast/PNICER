@@ -1264,8 +1264,7 @@ def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", norm=False,
 
 # ----------------------------------------------------------------------
 # Extinction mapping functions
-def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, method, nicest=False):
-    # TODO: Check what the slow part of this is and try to improve
+def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric, nicest=False):
     """
     Calculate extinction fro a given grid point
     :param xgrid: X grid point
@@ -1275,79 +1274,80 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, method
     :param ext: extinction data for each source
     :param var: extinction variance for each source
     :param bandwidth: bandwidth of kernel
-    :param method: Method to be used. e.g. "median", "gaussian", "epanechnikov", "uniform", "triangular"
+    :param metric: Method to be used. e.g. "median", "gaussian", "epanechnikov", "uniform", "triangular"
     :param nicest: Wether or not to use NICEST weight adjustment
     :return: extintion, variance, and number of sources for pixel
     """
 
     # In case the average or median is to be calculated, I set bandwidth == truncation scale
-    if (method == "average") | (method == "median"):
+    if (metric == "average") | (metric == "median"):
         trunc = 1
     else:
         trunc = 3
 
-    # Truncate input data to either pixel size (median or average) or to 3 times the bandwidth for the given kernel
-    index = (xdata > xgrid - trunc * bandwidth / 2) & (xdata < xgrid + trunc * bandwidth / 2) & \
-            (ydata > ygrid - trunc * bandwidth / 2) & (ydata < ygrid + trunc * bandwidth / 2)
+    # Truncate input data to a more managable size
+    index = (xdata > xgrid - trunc * bandwidth) & (xdata < xgrid + trunc * bandwidth) & \
+            (ydata > ygrid - trunc * bandwidth) & (ydata < ygrid + trunc * bandwidth)
 
     # If we have nothing here, immediately return
     if np.sum(index) == 0:
         return np.nan, np.nan, 0
 
-    # pre-filter
+    # Apply pre-filtering
     ext, var, xdata, ydata = ext[index], var[index], xdata[index], ydata[index]
 
     # Calculate the distance to the grid point in a spherical metric
-    # TODO: Check if selection of sources for a pixel is OK
     dis = np.degrees(np.arccos(np.sin(np.radians(ydata)) * np.sin(np.radians(ygrid)) +
                                np.cos(np.radians(ydata)) * np.cos(np.radians(ygrid)) *
                                np.cos(np.radians(xdata - xgrid))))
 
-    # For all kernel which use weights, we truncate a circular patch
-    if method not in ["average", "median"]:
-        index = dis < trunc * bandwidth / 2
-        # Current data in bin within truncation radius
-        ext, var, dis, xdata, ydata = ext[index], var[index], dis[index], xdata[index], ydata[index]
+    # Now we truncate the data to the truncation scale (i.e. a circular patch on the sky)
+    index = dis < trunc * bandwidth / 2
+
+    # Get data within truncation radius
+    ext, var, dis, xdata, ydata = ext[index], var[index], dis[index], xdata[index], ydata[index]
 
     # Calulate number of sources left over after truncation
     npixel = np.sum(index)
 
-    # If there are no stars, or less than three extinction measurements skip
+    # If there are no stars, or less than three extinction measurements return
     if (npixel == 0) or (np.sum(np.isfinite(ext)) < 3):
         return np.nan, np.nan, npixel
 
-    # Based on chosen method calculate extinction or weights
-    if method == "average":
+    # Based on chosen metric calculate extinction or weights
+    if metric == "average":
         pixel_ext = np.nanmean(ext)
         pixel_var = np.sqrt(np.nansum(var)) / npixel
         return pixel_ext, pixel_var, npixel
-    elif method == "median":
+    elif metric == "median":
         pixel_ext = np.nanmedian(ext)
         pixel_mad = np.median(np.abs(ext - pixel_ext))
         return pixel_ext, pixel_mad, npixel
-    elif method == "uniform":
+    elif metric == "uniform":
         weights = np.ones_like(ext)
-    elif method == "triangular":
+    elif metric == "triangular":
         weights = 1 - np.abs(dis / bandwidth)
-    elif method == "gaussian":
+    elif metric == "gaussian":
         weights = np.exp(-0.5 * (dis / bandwidth)**2)
-    elif method == "epanechnikov":
+    elif metric == "epanechnikov":
         weights = 1 - (dis / bandwidth)**2
     else:
-        raise TypeError("method not implemented")
+        raise TypeError("metric not implemented")
 
     # Set negative weights to 0
     weights[weights < 0] = 0
 
     # Modify weights for NICEST
-    # TODO: Find out how to generalise this and add to class
-    slope = 0.33
-    k_lambda = 1
+    # TODO: This needs to be generalised
+    slope, k_lambda = 0.33, 1
     if nicest:
         weights *= 10**(slope * k_lambda * ext)
 
     # Mask weights with no extinction
     weights[~np.isfinite(ext)] = np.nan
+
+    # Assertion to not raise editor warnings
+    assert isinstance(weights, np.ndarray)
 
     # Get extinction based on weights
     with warnings.catch_warnings():
