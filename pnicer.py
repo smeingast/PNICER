@@ -229,6 +229,7 @@ class DataBase:
                 grid_mean.append(np.nan)
                 grid_var.append(np.nan)
             else:
+                # Get weighted average position along vector and the weighted variance
                 a, b = weighted_avg(values=grid_ext, weights=vec)
                 grid_mean.append(a)
                 grid_var.append(b / self.extvec.extinction_norm)  # The normalisation converts this to extinction
@@ -245,13 +246,14 @@ class DataBase:
         # Now we have the instrisic colors for each vector and indices for all sources.
         # It's time to calculate the extinction. :)
         ext = (science_rot.features[0] - grid_mean[indices]) / self.extvec.extinction_norm
-        ext_err = grid_var[indices]
+        var = grid_var[indices]
 
         # Lastly we put all the extinction measurements back into a full array
         out = np.full(self.n_data, fill_value=np.nan, dtype=float)
         outvar = np.full(self.n_data, fill_value=np.nan, dtype=float)
 
-        out[self.combined_mask], outvar[self.combined_mask] = ext, ext_err
+        # Output data for all sources
+        out[self.combined_mask], outvar[self.combined_mask] = ext, var
 
         return out, outvar
 
@@ -1231,7 +1233,7 @@ def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", norm=False,
 
 # ----------------------------------------------------------------------
 # Extinction mapping functions
-def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, ext_err, bandwidth, method, nicest=False):
+def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, method, nicest=False):
     """
     Calculate extinction fro a given grid point
     :param xgrid: X grid point
@@ -1239,7 +1241,7 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, ext_err, bandwidth, me
     :param xdata: X data
     :param ydata: Y data
     :param ext: extinction data for each source
-    :param ext_err: extinction error for each source
+    :param var: extinction variance for each source
     :param bandwidth: bandwidth of kernel
     :param method: Method to be used. e.g. "median", "gaussian", "epanechnikov", "uniform", "triangular"
     :param nicest: Wether or not to use NICEST weight adjustment
@@ -1273,7 +1275,7 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, ext_err, bandwidth, me
 
     # Current data in bin within truncation radius
     ext = ext[index]
-    ext_err = ext_err[index]
+    var = var[index]
     dis = dis[index]
 
     # Calulate number of sources in bin
@@ -1316,12 +1318,12 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, ext_err, bandwidth, me
     with warnings.catch_warnings():
         # Ignore NaN and 0 division warnings
         warnings.simplefilter("ignore")
-        epixel = np.nansum(weights * np.array(ext)) / np.nansum(weights)
+        pixel_ext = np.nansum(weights * np.array(ext)) / np.nansum(weights)
         # TODO: Is this correct? I guess not!
-        epixel_err = np.sqrt(np.nansum((weights * np.array(ext_err)) ** 2) / np.nansum(weights) ** 2)
+        pixel_var = np.sqrt(np.nansum((weights * np.array(var)) ** 2) / np.nansum(weights) ** 2)
 
     # Return
-    return epixel, epixel_err, npixel
+    return pixel_ext, pixel_var, npixel
 
 
 # ----------------------------------------------------------------------
