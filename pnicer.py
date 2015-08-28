@@ -43,7 +43,7 @@ class DataBase:
 
         # Define combination properties determined while running PNICER
         self._ext_combinations = None
-        self._exterr_combinations = None
+        self._var_combinations = None
         self._combination_names = None
         self._n_combinations = 0
 
@@ -185,7 +185,7 @@ class DataBase:
         :param control: instance of control field data
         :param sampling: Sampling of grid relative to bandwidth of kernel
         :param kernel: name of kernel to be used for density estimation. e.g. "epanechnikov" or "gaussian"
-        :return: Extinction and error for input data
+        :return: Extinction and variance for input data
         """
 
         # Check instances
@@ -220,21 +220,21 @@ class DataBase:
         dens_vectors = dens.reshape([grid_data.shape[1], len(grid_ext)])
 
         # Calculate weighted average and standard deviation for each vector
-        grid_mean, grid_std = [], []
+        grid_mean, grid_var = [], []
         for vec in dens_vectors:
 
             # In case there are too few stars
             # TODO: Check how many sources are non-0 :)
             if np.sum(vec) < 3:
                 grid_mean.append(np.nan)
-                grid_std.append(np.nan)
+                grid_var.append(np.nan)
             else:
                 a, b = weighted_avg(values=grid_ext, weights=vec)
                 grid_mean.append(a)
-                grid_std.append(b / self.extvec.extinction_norm)  # The normalisation converts this to extinction
+                grid_var.append(b / self.extvec.extinction_norm)  # The normalisation converts this to extinction
 
         # Convert to arrays
-        grid_std = np.array(grid_std)
+        grid_var = np.array(grid_var)
         grid_mean = np.array(grid_mean)
 
         # Let's get the nearest neighbor grid point for each source
@@ -245,15 +245,15 @@ class DataBase:
         # Now we have the instrisic colors for each vector and indices for all sources.
         # It's time to calculate the extinction. :)
         ext = (science_rot.features[0] - grid_mean[indices]) / self.extvec.extinction_norm
-        ext_err = grid_std[indices]
+        ext_err = grid_var[indices]
 
         # Lastly we put all the extinction measurements back into a full array
         out = np.full(self.n_data, fill_value=np.nan, dtype=float)
-        outerr = np.full(self.n_data, fill_value=np.nan, dtype=float)
+        outvar = np.full(self.n_data, fill_value=np.nan, dtype=float)
 
-        out[self.combined_mask], outerr[self.combined_mask] = ext, ext_err
+        out[self.combined_mask], outvar[self.combined_mask] = ext, ext_err
 
-        return out, outerr
+        return out, outvar
 
     # ----------------------------------------------------------------------
     def _pnicer_combinations(self, control, comb, sampling, kernel):
@@ -272,7 +272,7 @@ class DataBase:
             raise TypeError("input and control instance do not match")
 
         # We loop over all combinations
-        all_ext, all_exterr, names = [], [], []
+        all_ext, all_var, names = [], [], []
 
         # Here we loop over color combinations since this is faster
         i = 0
@@ -280,30 +280,30 @@ class DataBase:
 
             assert isinstance(sc, DataBase)
             # Run PNICER for current combination
-            ext, ext_err = sc._pnicer_single(control=cc, sampling=sampling, kernel=kernel)
+            ext, var = sc._pnicer_single(control=cc, sampling=sampling, kernel=kernel)
 
             # Append data
             all_ext.append(ext)
-            all_exterr.append(ext_err)
+            all_var.append(var)
             names.append("(" + ",".join(sc.features_names) + ")")
             i += 1
 
         # Convert to arrays and save
         all_ext = np.array(all_ext)
         self._ext_combinations = all_ext.copy()
-        all_exterr = np.array(all_exterr)
-        self._exterr_combinations = all_exterr.copy()
+        all_var = np.array(all_var)
+        self._var_combinations = all_var.copy()
         self._combination_names = names
         self._n_combinations = i
 
         # Chose extinction with minimum error
-        all_exterr[~np.isfinite(all_exterr)] = 100 * np.nanmax(all_exterr)
-        ext = all_ext[np.argmin(all_exterr, axis=0), np.arange(self.n_data)]
-        exterr = all_exterr[np.argmin(all_exterr, axis=0), np.arange(self.n_data)]
+        all_var[~np.isfinite(all_var)] = 100 * np.nanmax(all_var)
+        ext = all_ext[np.argmin(all_var, axis=0), np.arange(self.n_data)]
+        exterr = all_var[np.argmin(all_var, axis=0), np.arange(self.n_data)]
         # Make error cut
         ext[exterr > 10] = exterr[exterr > 10] = np.nan
 
-        return Extinction(db=self, extinction=ext, error=exterr)
+        return Extinction(db=self, extinction=ext, variance=exterr)
 
     # ----------------------------------------------------------------------
     def build_wcs_grid(self, frame, pixsize=10./60):
@@ -596,8 +596,8 @@ class DataBase:
                      DataBase.round_partial(np.nanmean(self._ext_combinations)
                                             + 3.5 * np.nanstd(self._ext_combinations), 0.1)]
         # noinspection PyTypeChecker
-        ax2_range = [0., DataBase.round_partial(np.nanmean(self._exterr_combinations)
-                                                + 3.5 * np.nanstd(self._exterr_combinations), 0.1)]
+        ax2_range = [0., DataBase.round_partial(np.nanmean(self._var_combinations)
+                                                + 3.5 * np.nanstd(self._var_combinations), 0.1)]
 
         plt.figure(figsize=[5 * n_panels[1], 5 * n_panels[0] * 0.5])
         grid = GridSpec(ncols=n_panels[1], nrows=n_panels[0], bottom=0.05, top=0.95, left=0.05, right=0.95,
@@ -616,7 +616,7 @@ class DataBase:
                               kernel="epanechnikov", absolute=True, sampling=sampling)
 
             # Get densities for extinction error
-            exterr = self._exterr_combinations[idx, :]
+            exterr = self._var_combinations[idx, :]
             # noinspection PyTypeChecker
             exterr = exterr[np.isfinite(exterr)]
             if bandwidth is None:
@@ -835,14 +835,14 @@ class Magnitudes(DataBase):
 
         # Calculate variance (has to be done in loop due to RAM issues!)
         first = np.array([np.dot(cov.data[idx, :, :], b.data[:, idx]) for idx in range(self.n_data)])
-        ext_err = np.sqrt(np.array([np.dot(b.data[:, idx], first[idx, :]) for idx in range(self.n_data)]))
+        var = np.array([np.dot(b.data[:, idx], first[idx, :]) for idx in range(self.n_data)])
 
         # Combined mask for all features
         if all_features:
-            ext[~self.combined_mask] = ext_err[~self.combined_mask] = np.nan
+            ext[~self.combined_mask] = var[~self.combined_mask] = np.nan
 
         # ...and return :)
-        return Extinction(db=self, extinction=ext.data, error=ext_err)
+        return Extinction(db=self, extinction=ext.data, variance=var)
 
 
 # ----------------------------------------------------------------------
@@ -1002,12 +1002,12 @@ class ExtinctionVector:
 # ----------------------------------------------------------------------
 class Extinction:
 
-    def __init__(self, db, extinction, error=None):
+    def __init__(self, db, extinction, variance=None):
         """
         Class for extinction measurements
         :param db: Base class from which the extinction was derived
         :param extinction: extinction measurements
-        :param error: extinction error
+        :param variance: extinction variance
         """
 
         # Check if db is really a DataBase instance
@@ -1015,17 +1015,16 @@ class Extinction:
 
         self.db = db
         self.extinction = extinction
-        self.error = error
-        if self.error is None:
-            self.error = np.zeros_like(extinction)
+        self.variance = variance
+        if self.variance is None:
+            self.variance = np.zeros_like(extinction)
 
-        # extinction and error must have same length
-        if len(extinction) != len(error):
-            raise ValueError("Extinction and error arrays must have equal length")
+        # extinction and variance must have same length
+        if len(self.extinction) != len(self.variance):
+            raise ValueError("Extinction and variance arrays must have equal length")
 
         # ----------------------------------------------------------------------
         # Calculate some simple things
-        self.extinction_std = np.nanstd(self.extinction)
 
     # ----------------------------------------------------------------------
     def build_map(self, bandwidth, method="median", sampling=2, nicest=False):
@@ -1048,19 +1047,19 @@ class Extinction:
             # Submit tasks
             mp = pool.starmap(get_extinction_pixel,
                               zip(grid_lon.ravel(), grid_lat.ravel(), repeat(self.db.lon),
-                                  repeat(self.db.lat), repeat(self.extinction), repeat(self.error),
+                                  repeat(self.db.lat), repeat(self.extinction), repeat(self.variance),
                                   repeat(bandwidth), repeat(method), repeat(nicest)))
 
         # Unpack results
-        extmap, extmap_err, nummap = list(zip(*mp))
+        map_ext, map_var, map_num = list(zip(*mp))
 
         # reshape
-        extmap = np.array(extmap).reshape(grid_lon.shape)
-        extmap_err = np.array(extmap_err).reshape(grid_lon.shape)
-        nummap = np.array(nummap).reshape(grid_lon.shape)
+        map_ext = np.array(map_ext).reshape(grid_lon.shape)
+        map_var = np.array(map_var).reshape(grid_lon.shape)
+        map_num = np.array(map_num).reshape(grid_lon.shape)
 
         # Return extinction map instance
-        return ExtinctionMap(ext=extmap, ext_err=extmap_err, num=nummap, header=grid_header)
+        return ExtinctionMap(ext=map_ext, var=map_var, num=map_num, header=grid_header)
 
     # ----------------------------------------------------------------------
     def save_fits(self, path):
@@ -1073,7 +1072,7 @@ class Extinction:
         col1 = fits.Column(name="Lon", format='D', array=self.db.lon)
         col2 = fits.Column(name="Lat", format='D', array=self.db.lat)
         col3 = fits.Column(name="Extinction", format="E", array=self.extinction)
-        col4 = fits.Column(name="Extinction_err", format="E", array=self.error)
+        col4 = fits.Column(name="Variance", format="E", array=self.variance)
 
         # Column definitions
         cols = fits.ColDefs([col1, col2, col3, col4])
@@ -1089,23 +1088,23 @@ class Extinction:
 # ----------------------------------------------------------------------
 class ExtinctionMap:
 
-    def __init__(self, ext, ext_err, num, header):
+    def __init__(self, ext, var, num, header):
         """
         Extinction map class
         :param ext: 2D Extintion map
-        :param ext_err: 2D Extinction error map
+        :param var: 2D Extinction variance map
         :param num: 2D number map
         :param header: header of grid from which extinction map was built.
         """
 
         self.map = ext
-        self.err = ext_err
+        self.var = var
         self.num = num
         self.shape = self.map.shape
         self.fits_header = header
 
         # Input must be 2D
-        if (len(self.map.shape) != 2) | (len(self.err.shape) != 2) | (len(self.num.shape) != 2):
+        if (len(self.map.shape) != 2) | (len(self.var.shape) != 2) | (len(self.num.shape) != 2):
             raise TypeError("Input must be 2D arrays")
 
     def plot_map(self, path=None, size=10):
@@ -1116,6 +1115,7 @@ class ExtinctionMap:
         :return:
         """
 
+        # TODO: Add variance and Number map to plot
         fig = plt.figure(figsize=[size, 0.9 * size * (self.shape[0] / self.shape[1])])
         ax = fig.add_axes([0.05, 0.05, 0.85, 0.9], projection=wcsaxes.WCS(self.fits_header))
         cax = fig.add_axes([0.9, 0.05, 0.02, 0.9])
@@ -1150,7 +1150,7 @@ class ExtinctionMap:
         # Create and save
         hdulist = fits.HDUList([fits.PrimaryHDU(),
                                 fits.ImageHDU(data=self.map, header=self.fits_header),
-                                fits.ImageHDU(data=self.err, header=self.fits_header),
+                                fits.ImageHDU(data=self.var, header=self.fits_header),
                                 fits.ImageHDU(data=self.num, header=self.fits_header)])
         hdulist.writeto(path, clobber=True)
 
@@ -1381,10 +1381,10 @@ def weighted_avg(values, weights):
     Calculates weighted mean and standard deviation
     :param values: data values
     :param weights: weights
-    :return: weighted mean and standard deviation
+    :return: weighted mean and variance
     """
 
     average = np.nansum(values * weights) / np.nansum(weights)
     # noinspection PyTypeChecker
     variance = np.nansum((values - average)**2 * weights) / np.nansum(weights)
-    return average, np.sqrt(variance)
+    return average, variance
