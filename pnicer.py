@@ -288,7 +288,7 @@ class DataBase:
             names.append("(" + ",".join(sc.features_names) + ")")
             i += 1
 
-        # Convert to arrays and save
+        # Convert to arrays and save combination data
         all_ext = np.array(all_ext)
         self._ext_combinations = all_ext.copy()
         all_var = np.array(all_var)
@@ -296,14 +296,15 @@ class DataBase:
         self._combination_names = names
         self._n_combinations = i
 
-        # Chose extinction with minimum error
+        # Chose extinction as minimum error across all combinations
         all_var[~np.isfinite(all_var)] = 100 * np.nanmax(all_var)
         ext = all_ext[np.argmin(all_var, axis=0), np.arange(self.n_data)]
-        exterr = all_var[np.argmin(all_var, axis=0), np.arange(self.n_data)]
+        var = all_var[np.argmin(all_var, axis=0), np.arange(self.n_data)]
         # Make error cut
-        ext[exterr > 10] = exterr[exterr > 10] = np.nan
+        ext[var > 10] = var[var > 10] = np.nan
 
-        return Extinction(db=self, extinction=ext, variance=exterr)
+        # Return
+        return Extinction(db=self, extinction=ext, variance=var)
 
     # ----------------------------------------------------------------------
     def build_wcs_grid(self, frame, pixsize=10./60):
