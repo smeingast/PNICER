@@ -222,7 +222,6 @@ class DataBase:
         # Calculate weighted average and standard deviation for each vector
         grid_mean, grid_var = [], []
         for vec in dens_vectors:
-
             # In case there are too few stars
             # TODO: Check how many sources are non-0 :)
             if np.sum(vec) < 3:
@@ -1029,7 +1028,8 @@ class Extinction:
             raise ValueError("Extinction and variance arrays must have equal length")
 
         # ----------------------------------------------------------------------
-        # Calculate some simple things
+        # Calculate de-reddened features
+        self.features_dered = [f - self.extinction * v for f, v in zip(self.db.features, self.db.extvec.extvec)]
 
     # ----------------------------------------------------------------------
     def build_map(self, bandwidth, method="median", sampling=2, nicest=False):
@@ -1046,6 +1046,7 @@ class Extinction:
         assert isinstance(sampling, int), "sampling must be an integer"
 
         # First let's get a grid
+        # TODO: Sampling?? -> How many pixels per bandwidth or something else? Like 2x sampling = 1 pix/ bandwidth?
         grid_header, grid_lon, grid_lat = self.db.build_wcs_grid(frame="galactic", pixsize=bandwidth / sampling)
 
         # Run extinction mapping for each pixel

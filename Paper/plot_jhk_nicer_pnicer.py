@@ -68,6 +68,7 @@ science = Magnitudes(mag=science_data, err=science_error, extvec=features_extinc
 control = Magnitudes(mag=control_data, err=control_error, extvec=features_extinction,
                      lon=control_glon, lat=control_glat, names=features_names)
 
+
 # ----------------------------------------------------------------------
 # Define X/Y data for plot
 xdata = control.features[1] - control.features[2]
