@@ -205,8 +205,8 @@ class DataBase:
         grid_data = DataBase.build_grid(data=np.vstack(science_rot.features)[1:, :], precision=bin_grid)
 
         # Create a grid to evaluate along the reddening vector
-        grid_ext = np.arange(start=np.floor(min(science_rot.features[0])),
-                             stop=np.ceil(max(science_rot.features[0])), step=bin_ext)
+        grid_ext = np.arange(start=np.floor(min(control_rot.features[0])),
+                             stop=np.ceil(max(control_rot.features[0])), step=bin_ext)
 
         # Now we combine those to get _all_ grid points
         xgrid = np.column_stack([np.tile(grid_ext, grid_data.shape[1]),
@@ -223,7 +223,6 @@ class DataBase:
         grid_mean, grid_var = [], []
         for vec in dens_vectors:
             # In case there are too few stars
-            # TODO: Check how many sources are non-0 :)
             if np.sum(vec) < 3:
                 grid_mean.append(np.nan)
                 grid_var.append(np.nan)

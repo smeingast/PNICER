@@ -26,46 +26,94 @@ cmap = brewer2mpl.get_map('Blues', 'Sequential', number=9, reverse=False).get_mp
 # ----------------------------------------------------------------------
 # Load data
 control_dummy = fits.open(control_path)[1].data
-
 control_glon = control_dummy["GLON"]
 control_glat = control_dummy["GLAT"]
+
+science_dummy = fits.open(science_path)[1].data
+idx_cut = [39589, 51256, 1021]
+idx_all = idx_cut + [x for x in range(100, 108, 1)]
+science_glon_all = science_dummy["GLON"][idx_all]
+science_glat_all = science_dummy["GLAT"][idx_all]
+
+science_glon_cut = science_dummy["GLON"][idx_cut]
+science_glat_cut = science_dummy["GLAT"][idx_cut]
 
 
 # ----------------------------------------------------------------------
 # Define features to be used
-features_names = ["J", "H", "Ks", "IRAC1"]
-errors_names = ["J_err", "H_err", "Ks_err", "IRAC1_err"]
-features_extinction = [2.5, 1.55, 1.0, 0.636]
+# features_names = ["J", "H", "Ks", "IRAC1"]
+features_names = ["J", "H", "Ks"]
+# errors_names = ["J_err", "H_err", "Ks_err", "IRAC1_err"]
+errors_names = ["J_err", "H_err", "Ks_err"]
+# features_extinction = [2.5, 1.55, 1.0, 0.636]
+features_extinction = [2.5, 1.55, 1.0]
 
 # ----------------------------------------------------------------------
 # Load data into lists for PNICER
 control_data = [control_dummy[n] for n in features_names]
 control_error = [control_dummy[n] for n in errors_names]
 
+science_data_all = [science_dummy[n][idx_all] for n in features_names]
+science_error_all = [science_dummy[n][idx_all] for n in errors_names]
+science_data_cut = [science_dummy[n][idx_cut] for n in features_names]
+science_error_cut = [science_dummy[n][idx_cut] for n in errors_names]
+
+# print(science_data_cut)
+# exit()
+
 
 # ----------------------------------------------------------------------
 # Initialize data
 control = Magnitudes(mag=control_data, err=control_error, extvec=features_extinction,
-                     lon=control_glon, lat=control_glat, names=features_names)  # .mag2color()
-control_rot = control.rotate()
+                     lon=control_glon, lat=control_glat, names=features_names)
+control_colors = control.mag2color()
+
+science_all = Magnitudes(mag=science_data_all, err=science_error_all, extvec=features_extinction,
+                         lon=science_glon_all, lat=science_glat_all, names=features_names)
+science_all_colors = science_all.mag2color()
 
 # Define single source to be de-reddened
-fake = [np.array([x, y]) for x, y in zip([19.04, 17.16, 16.22, 15.16], [21, 19.57, 18.15, 17.02, 16.51])]
-fake_err = [np.array([x, y]) for x, y in zip([0.1, 0.1, 0.1, 0.1], [0.1, 0.1, 0.1, 0.1])]
-
-fake = Magnitudes(mag=fake, err=fake_err, extvec=features_extinction, names=features_names)  # .mag2color()
-fake_rot = fake.rotate()
-
-print(fake.features)
+science_cut = Magnitudes(mag=science_data_cut, err=science_error_cut, extvec=features_extinction,
+                         lon=science_glon_cut, lat=science_glat_cut, names=features_names)
+science_cut_colors = science_cut.mag2color()
 
 # ----------------------------------------------------------------------
 # Run PNICER
-ext_fake = fake.pnicer(control=control, sampling=2)
-print(ext_fake.extinction)
-ext_fake = fake.nicer(control=control)
-print(ext_fake.extinction)
+print("Science all single")
+ext_all_single, _ = science_all_colors._pnicer_single(control=control_colors, sampling=2, kernel="epanechnikov")
+print(ext_all_single[:3])
+print()
+print("Science cut single")
+ext_cut_single, _ = science_cut_colors._pnicer_single(control=control_colors, sampling=2, kernel="epanechnikov")
+print(ext_cut_single)
+print()
+print("Science all combinattions")
+ext_all_comb = science_all_colors.pnicer(control=control_colors, sampling=2, kernel="epanechnikov")
+print(ext_all_comb.extinction[:3])
+print()
+print("Science cut combinations")
+ext_cut_comb = science_cut_colors.pnicer(control=control_colors, sampling=2, kernel="epanechnikov")
+print(ext_cut_comb.extinction)
+print()
+print("NICER all")
+ext_all_nicer = science_all.nicer(control=control)
+print(ext_all_nicer.extinction[:3])
+print()
 exit()
 
+# Make scatter plot of data
+fig, ax = plt.subplots(nrows=1, ncols=1, figsize=[10, 10])
+skip = 10
+ax.scatter(science_dummy["H"][::skip] - science_dummy["Ks"][::skip],
+           science_dummy["J"][::skip] - science_dummy["H"][::skip], lw=0, s=1, alpha=0.5, color="blue")
+ax.scatter(control_dummy["H"][::skip / 2] - control_dummy["Ks"][::skip / 2],
+           control_dummy["J"][::skip / 2] - control_dummy["H"][::skip / 2], lw=0, s=2, alpha=0.5, color="yellow")
+ax.scatter(science_cut_colors.features[1], science_cut_colors.features[0], lw=20, s=20, color="red")
+ax.scatter(ext_cut_comb.features_dered[1], ext_cut_comb.features_dered[0], lw=20, s=20, color="green")
+
+plt.show()
+
+exit()
 # ----------------------------------------------------------------------
 # Get densities for normal data
 idx_combinations = [(1, 2), (1, 0), (2, 0)]
