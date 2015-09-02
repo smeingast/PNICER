@@ -574,6 +574,7 @@ class DataBase:
         plt.close()
 
     def plot_kde_extinction_combinations(self, path=None, bandwidth=None, sampling=16):
+        # TODO: Make this better
         """
         Plot histogram of extinctions for all combinations. Requires PNICER to be run beforehand
         :param path: file path if it should be saved. e.g. "/path/to/image.png"

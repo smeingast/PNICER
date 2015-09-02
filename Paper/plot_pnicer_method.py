@@ -46,20 +46,24 @@ control_error = [control_dummy[n] for n in errors_names]
 # ----------------------------------------------------------------------
 # Initialize data
 control = Magnitudes(mag=control_data, err=control_error, extvec=features_extinction,
-                     lon=control_glon, lat=control_glat, names=features_names).mag2color()
+                     lon=control_glon, lat=control_glat, names=features_names)  # .mag2color()
 control_rot = control.rotate()
 
 # Define single source to be de-reddened
-fake = [np.array([x, y]) for x, y in zip([2, 1, 0.8], [1.5, 1.25, 1.5])]
-fake_err = [np.array([x, y]) for x, y in zip([0.1, 0.1, 0.1], [0.1, 0.1, 0.1])]
-fake = Colors(mag=fake, err=fake_err, extvec=control.extvec.extvec)
+fake = [np.array([x, y]) for x, y in zip([19.04, 17.16, 16.22, 15.16], [21, 19.57, 18.15, 17.02, 16.51])]
+fake_err = [np.array([x, y]) for x, y in zip([0.1, 0.1, 0.1, 0.1], [0.1, 0.1, 0.1, 0.1])]
+
+fake = Magnitudes(mag=fake, err=fake_err, extvec=features_extinction, names=features_names)  # .mag2color()
 fake_rot = fake.rotate()
 
+print(fake.features)
 
 # ----------------------------------------------------------------------
 # Run PNICER
-ext_fake = fake.pnicer(control=control)
-# print(ext_fake.extinction)
+ext_fake = fake.pnicer(control=control, sampling=2)
+print(ext_fake.extinction)
+ext_fake = fake.nicer(control=control)
+print(ext_fake.extinction)
 exit()
 
 # ----------------------------------------------------------------------
@@ -112,13 +116,15 @@ for ax_cn, ax_cr, idx, cidx in zip(ax_cn_all, ax_cr_all, range(3), idx_combinati
     ax_cr.imshow(dens_control_rot[idx].T, interpolation="nearest", origin="lower", extent=edges, cmap=cmap)
 
     # Show extinction arrows
-    ax_cn.arrow(1.5, 0, control.extvec.extvec[cidx[0]], control.extvec.extvec[cidx[1]])
+    ax_cn.arrow(1.5, 0, control.extvec.extvec[cidx[0]], control.extvec.extvec[cidx[1]], length_includes_head=True)
     if idx >= 1:
-        ax_cr.arrow(2.0, 0, control_rot.extvec.extvec[cidx[0]], control_rot.extvec.extvec[cidx[1]])
+        ax_cr.arrow(2.0, 0, control_rot.extvec.extvec[cidx[0]], control_rot.extvec.extvec[cidx[1]], length_includes_head=True)
 
     # Show fake source
     ax_cn.scatter(fake.features[cidx[0]], fake.features[cidx[1]])
     ax_cr.scatter(fake_rot.features[cidx[0]], fake_rot.features[cidx[1]])
+
+    ax_cn.scatter(ext_fake.features_dered[cidx[0]], ext_fake.features_dered[cidx[1]])
 
     for x, y in zip(fake.features[cidx[0]], fake.features[cidx[1]]):
         k = control.extvec.extvec[cidx[1]] / control.extvec.extvec[cidx[0]]
@@ -142,21 +148,21 @@ for ax_cn, ax_cr, idx, cidx in zip(ax_cn_all, ax_cr_all, range(3), idx_combinati
     # for ax in [ax_cr, ax_sr]:
     #     # Show fake source
     #     ax.scatter(fake_rot.features[cidx[0]], fake_rot.features[cidx[1]])
-    #
-    # for ax in [ax_cn, ax_sn, ax_cr, ax_sr]:
-    #
-    #     # Adjust axes
-    #     if idx == 0:
-    #         ax.axes.xaxis.set_ticklabels([])
-    #         ax.set_ylabel("$K_S - IRAC1$")
-    #
-    #     if idx == 1:
-    #         ax.set_ylabel("$J - H$")
-    #         ax.set_xlabel("$H - K_S$")
-    #
-    #     if idx == 2:
-    #         ax.axes.yaxis.set_ticklabels([])
-    #         ax.set_xlabel("$K_S - IRAC1$")
+
+    for ax in [ax_cn, ax_cr]:
+
+        # Adjust axes
+        if idx == 0:
+            ax.axes.xaxis.set_ticklabels([])
+            ax.set_ylabel("$K_S - IRAC1$")
+
+        if idx == 1:
+            ax.set_ylabel("$J - H$")
+            ax.set_xlabel("$H - K_S$")
+
+        if idx == 2:
+            ax.axes.yaxis.set_ticklabels([])
+            ax.set_xlabel("$K_S - IRAC1$")
 
 # Plot PDF
 

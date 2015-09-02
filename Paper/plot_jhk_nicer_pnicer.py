@@ -40,16 +40,16 @@ control_glat = control_dummy["GLAT"]
 
 # ----------------------------------------------------------------------
 # Define features to be used
-features_names = ["J", "H", "Ks", "IRAC1", "IRAC2"]
-# features_names = ["J", "H", "Ks", "IRAC1"]
+# features_names = ["J", "H", "Ks", "IRAC1", "IRAC2"]
+features_names = ["J", "H", "Ks", "IRAC1"]
 # features_names = ["J", "H", "Ks"]
-errors_names = ["J_err", "H_err", "Ks_err", "IRAC1_err", "IRAC2_err"]
-# errors_names = ["J_err", "H_err", "Ks_err", "IRAC1_err"]
+# errors_names = ["J_err", "H_err", "Ks_err", "IRAC1_err", "IRAC2_err"]
+errors_names = ["J_err", "H_err", "Ks_err", "IRAC1_err"]
 # errors_names = ["J_err", "H_err", "Ks_err"]
 
 # Define extinction
-features_extinction = [2.5, 1.55, 1.0, 0.636, 0.54]
-# features_extinction = [2.5, 1.55, 1.0, 0.636]
+# features_extinction = [2.5, 1.55, 1.0, 0.636, 0.54]
+features_extinction = [2.5, 1.55, 1.0, 0.636]
 # features_extinction = [2.5, 1.55, 1.0]
 
 
@@ -88,7 +88,7 @@ hist = ndimage.gaussian_filter(hist, sigma=0.5, order=0)
 
 # ----------------------------------------------------------------------
 # Run PNICER and NICER on control field
-ext_pnicer = control.pnicer(control=control, bin_ext=0.02, bin_grid=0.02, use_color=False)
+ext_pnicer = control.pnicer(control=control, sampling=2, use_color=False)
 ext_nicer = control.nicer(control=control)
 
 
