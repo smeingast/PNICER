@@ -86,8 +86,10 @@ edges = (np.min(x), np.max(x), np.min(y), np.max(y))
 
 dens_control_norm = []
 for i2, i1 in idx_combinations:
-    data = np.vstack([control_colors.features[i1][control_colors.combined_mask],
-                      control_colors.features[i2][control_colors.combined_mask]]).T
+    fil = (np.isfinite(control_colors.features[i1])) & (np.isfinite(control_colors.features[i2]))
+    xdata = control_colors.features[i1][fil]
+    ydata = control_colors.features[i2][fil]
+    data = np.vstack([xdata, ydata]).T
     dens_control_norm.append(mp_kde(grid=xgrid, data=data, bandwidth=grid_bw * 2, shape=x.shape, kernel="epanechnikov"))
 
 
@@ -115,7 +117,7 @@ for ax_cn, idx, cidx in zip(ax_cn_all, range(3), idx_combinations):
     # Show densities
     dens = dens_control_norm[idx].T
     # ax_cn.imshow(dens_control_norm[idx].T, interpolation="nearest", origin="lower", extent=edges, cmap=cmap)
-    ax_cn.contour(dens / np.max(dens), origin="lower", extent=edges, levels=[0.005, 0.03, 0.25, 0.6],
+    ax_cn.contour(dens / np.max(dens), origin="lower", extent=edges, levels=[0.005, 0.03, 0.25, 0.5],
                   colors="black", linewidths=2)
 
     # Plot line through sources along extinction

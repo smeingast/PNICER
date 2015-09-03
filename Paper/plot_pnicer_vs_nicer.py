@@ -27,7 +27,7 @@ cmap = brewer2mpl.get_map('RdYlBu', 'Diverging', number=11, reverse=True).get_mp
 
 # ----------------------------------------------------------------------
 # Load data
-skip = 1
+skip = 3
 science_dummy = fits.open(science_path)[1].data
 control_dummy = fits.open(control_path)[1].data
 
@@ -37,11 +37,11 @@ control_glat = control_dummy["GLAT"][::skip]
 
 # ----------------------------------------------------------------------
 # Define features to be used
-features_names = ["J", "H", "Ks", "IRAC1"]
-errors_names = ["J_err", "H_err", "Ks_err", "IRAC1_err"]
+features_names = ["J", "H", "Ks", "IRAC1", "IRAC2"]
+errors_names = ["J_err", "H_err", "Ks_err", "IRAC1_err", "IRAC2_err"]
 
 # Define extinction
-features_extinction = [2.5, 1.55, 1.0, 0.636]
+features_extinction = [2.5, 1.55, 1.0, 0.636, 0.54]
 
 
 # ----------------------------------------------------------------------
@@ -65,10 +65,23 @@ xsize = ysize = 0.05
 
 
 # ----------------------------------------------------------------------
+# Get 2D histogram of control field CCD
+"""Same as in method plot"""
+grid_bw = 0.04
+l, h = -0.6, 2.4 + grid_bw / 2
+x, y = np.meshgrid(np.arange(start=l, stop=h, step=grid_bw), np.arange(start=l, stop=h, step=grid_bw))
+xgrid = np.vstack([x.ravel(), y.ravel()]).T
+edges = (np.min(x), np.max(x), np.min(y), np.max(y))
+fil = (np.isfinite(xdata)) & (np.isfinite(ydata))
+data = np.vstack([xdata[fil], ydata[fil]]).T
+hist = mp_kde(grid=xgrid, data=data, bandwidth=grid_bw * 2, shape=x.shape, kernel="epanechnikov")
+
+
+# ----------------------------------------------------------------------
 # Create plot grid
 fig = plt.figure(figsize=[10, 15])
-grid = GridSpec(ncols=2, nrows=4, bottom=0.05, top=0.9, left=0.05, right=0.95, hspace=0, wspace=0.1,
-                height_ratios=[0.05, 1, 1, 1])
+grid = GridSpec(ncols=2, nrows=5, bottom=0.05, top=0.9, left=0.05, right=0.95, hspace=0, wspace=0.1,
+                height_ratios=[0.05, 1, 1, 1, 1])
 
 # Add cax
 cax = plt.subplot(grid[0])
@@ -76,7 +89,7 @@ cax = plt.subplot(grid[0])
 # ----------------------------------------------------------------------
 # Calculate extinction for given features
 
-for idx, pidx in zip(range(2, 5), range(2, 7, 2)):
+for idx, pidx in zip(range(2, 6), range(2, 9, 2)):
 
     # Initialize data
     control = Magnitudes(mag=control_data[0:idx], err=control_error[0:idx], extvec=features_extinction[0:idx],
@@ -88,7 +101,7 @@ for idx, pidx in zip(range(2, 5), range(2, 7, 2)):
     else:
         use_color = True
     pnicer = control.pnicer(control=control, sampling=2, kernel="epanechnikov", use_color=use_color).extinction
-    nicer = control.nicer(control=control, all_features=False).extinction
+    nicer = control.nicer(control=control, n_features=2).extinction
 
     # Get average extinction within box for each source
     avg_pnicer = point_average(xdata=xdata, ydata=ydata, zdata=pnicer, xsize=xsize, ysize=ysize)
@@ -120,6 +133,10 @@ for idx, pidx in zip(range(2, 5), range(2, 7, 2)):
     # Plot histograms
     ax_hist.plot(grid_kde, nicer_hist, color="#d53e4f", lw=3, label="NICER")
     ax_hist.plot(grid_kde, pnicer_hist, color="#3288bd", lw=3, label="PNICER")
+
+    # Plot CCD contour
+    ax_diff.contour(hist / np.max(hist), extent=edges, levels=[0.005, 0.03, 0.25, 0.5],
+                    colors="black", linewidths=1, alpha=0.3)
 
     if pidx == 2:
         ax_hist.legend(loc="upper center", bbox_to_anchor=(0.5, 1.105), ncol=2, frameon=False)
@@ -159,6 +176,7 @@ for idx, pidx in zip(range(2, 5), range(2, 7, 2)):
     ax_hist.yaxis.set_ticks_position('both')
     ax_hist.yaxis.set_label_position("right")
     ax_hist.set_ylabel("N")
+
 
 # Save
 plt.savefig("/Users/Antares/Dropbox/Projects/PNICER/Paper/Results/nicer_vs_pnicer.png", bbox_inches="tight")

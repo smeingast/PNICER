@@ -771,7 +771,7 @@ class Magnitudes(DataBase):
 
     # ----------------------------------------------------------------------
     # NICER implementation
-    def nicer(self, control, all_features=False):
+    def nicer(self, control, all_features=False, n_features=None):
         """
         NICER routine as descibed in Lombardi & Alves 2001. Generalized for arbitrary input magnitudes
         :param control: control field instance to calculate intrinsic colors
@@ -784,6 +784,9 @@ class Magnitudes(DataBase):
 
         if self.n_features != control.n_features:
             raise ValueError("Number of features in the control field must match input")
+
+        # Features to be required can only be as much as input features
+        assert n_features <= self.n_features, "Can't require more features than there are available"
 
         # Get reddening vector
         k = [x - y for x, y in zip(self.extvec.extvec[:-1], self.extvec.extvec[1:])]
@@ -842,8 +845,14 @@ class Magnitudes(DataBase):
         var[~np.isfinite(ext)] = np.nan
 
         # Combined mask for all features
+        # TODO: Maybe remove that
         if all_features:
-            ext[~self.combined_mask] = var[~self.combined_mask] = np.nan
+            n_features = self.n_features
+            # ext[~self.combined_mask] = var[~self.combined_mask] = np.nan
+
+        if n_features > 1:
+            mask = np.where(np.sum(np.vstack(self.features_masks), axis=0, dtype=int) < n_features)[0]
+            ext[mask] = var[mask] = np.nan
 
         # ...and return :)
         return Extinction(db=self, extinction=ext.data, variance=var)
