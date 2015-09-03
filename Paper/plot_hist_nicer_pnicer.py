@@ -59,7 +59,8 @@ erange = [-0.5, 0.5]
 grid_kde = np.arange(start=1.1*erange[0], stop=1.1*erange[1],
                      step=res/sampling, dtype=np.double)[:, np.newaxis]
 
-for i in range(3, 6):
+for i in range(3, 5):
+# for i in range(4, 5):
 
     # Initialize data
     science = Magnitudes(mag=science_data[:i], err=science_error[:i], extvec=features_extinction[:i],
@@ -88,13 +89,12 @@ fig = plt.figure(figsize=[10, 6])
 grid_plt = GridSpec(ncols=1, nrows=1, bottom=0.09, top=0.99, left=0.09, right=0.99, hspace=0.1, wspace=0.1)
 ax = plt.subplot(grid_plt[0])
 
-ncolor = ["#fcbba1", "#ef3b2c", "#67000d"]
-pcolor = ["#9ecae1", "#4292c6", "#08306b"]
+lstyles, lwidths = ["dotted", "dashed", "solid"], [2, 2, 4]
 lnicer, lpnicer = [None, None, "NICER"], [None, None, "PNICER"]
-lw, alpha = 3, 1
-for n, p, nc, pc, ln, lp in zip(dens_nicer, dens_pnicer, ncolor, pcolor, lnicer, lpnicer):
-    ax.plot(grid_kde, n, lw=lw, alpha=alpha, color=nc, label=ln)
-    ax.plot(grid_kde, p, lw=lw, alpha=alpha, color=pc, label=lp)
+alpha = 1
+for n, p, ls, lw, ln, lp in zip(dens_nicer, dens_pnicer, lstyles, lwidths, lnicer, lpnicer):
+    ax.plot(grid_kde, n, lw=lw, alpha=alpha, color="#d53e4f", label=ln, ls=ls)
+    ax.plot(grid_kde, p, lw=lw, alpha=alpha, color="#3288bd", label=lp, ls=ls)
 
     # edges = np.arange(-1, 1, res)
     # ax.hist(ext_nicer, bins=edges, range=(-1, 1), alpha=0.5, color="red")
