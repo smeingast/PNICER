@@ -27,7 +27,7 @@ cmap = brewer2mpl.get_map('RdYlBu', 'Diverging', number=11, reverse=True).get_mp
 
 # ----------------------------------------------------------------------
 # Load data
-skip = 3
+skip = 1
 science_dummy = fits.open(science_path)[1].data
 control_dummy = fits.open(control_path)[1].data
 
@@ -79,7 +79,7 @@ hist = mp_kde(grid=xgrid, data=data, bandwidth=grid_bw * 2, shape=x.shape, kerne
 
 # ----------------------------------------------------------------------
 # Create plot grid
-fig = plt.figure(figsize=[10, 15])
+fig = plt.figure(figsize=[10, 20])
 grid = GridSpec(ncols=2, nrows=5, bottom=0.05, top=0.9, left=0.05, right=0.95, hspace=0, wspace=0.1,
                 height_ratios=[0.05, 1, 1, 1, 1])
 
@@ -106,6 +106,7 @@ for idx, pidx in zip(range(2, 6), range(2, 9, 2)):
         n_features = 2
     else:
         n_features = 3
+    """Watch out! If I use only magnitudes for PNICER, I have to set n_features to 2 always!"""
     nicer = control.nicer(control=control, n_features=n_features).extinction
 
     # Get average extinction within box for each source
@@ -164,11 +165,11 @@ for idx, pidx in zip(range(2, 6), range(2, 9, 2)):
     ax_hist.yaxis.set_minor_locator(AutoMinorLocator(5))
 
     # Delete tick labels
-    if idx < 4:
+    if idx < 5:
         ax_diff.axes.xaxis.set_ticklabels([])
         ax_hist.axes.xaxis.set_ticklabels([])
 
-    if idx == 4:
+    if idx == 5:
         ax_diff.set_xlabel("$H-K_S \/ \mathrm{(mag)}$")
         ax_hist.set_xlabel("$A_K \/ \mathrm{(mag)}$")
 
