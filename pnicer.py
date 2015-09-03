@@ -779,11 +779,9 @@ class Magnitudes(DataBase):
         :return: Extinction instance
         """
 
-        if isinstance(control, DataBase) is False:
-            raise TypeError("control is not Data class instance")
-
-        if self.n_features != control.n_features:
-            raise ValueError("Number of features in the control field must match input")
+        # Some assertions
+        assert self.__class__ == control.__class__,  "control and instance class do not match"
+        assert self.n_features == control.n_features, "Number of features in the control instance must match input"
 
         # Features to be required can only be as much as input features
         if n_features is not None:
