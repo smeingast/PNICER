@@ -101,7 +101,12 @@ for idx, pidx in zip(range(2, 6), range(2, 9, 2)):
     else:
         use_color = True
     pnicer = control.pnicer(control=control, sampling=2, kernel="epanechnikov", use_color=use_color).extinction
-    nicer = control.nicer(control=control, n_features=2).extinction
+    # Here we require at least two colors for anything after the first iteration
+    if idx == 2:
+        n_features = 2
+    else:
+        n_features = 3
+    nicer = control.nicer(control=control, n_features=n_features).extinction
 
     # Get average extinction within box for each source
     avg_pnicer = point_average(xdata=xdata, ydata=ydata, zdata=pnicer, xsize=xsize, ysize=ysize)
