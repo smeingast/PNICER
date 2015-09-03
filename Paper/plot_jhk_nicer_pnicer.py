@@ -19,7 +19,6 @@ from MyFunctions import point_average
 # Define file paths
 science_path = "/Users/Antares/Dropbox/Data/Orion/VISION/Catalog/VISION_+_Spitzer_s.fits"
 control_path = "/Users/Antares/Dropbox/Data/Orion/VISION/Catalog/VISION_CF+_Spitzer_s.fits"
-results_path = "/Users/Antares/Dropbox/Projects/Dereddening/Results/"
 
 # Load colormap
 cmap1 = brewer2mpl.get_map('RdYlBu', 'Diverging', number=11, reverse=True).get_mpl_colormap(N=11, gamma=1)
@@ -151,7 +150,8 @@ for ax in [ax1, ax2, ax3]:
                colors="black", linewidths=1, alpha=0.3)
 
     # Extinction vector
-    # ax.arrow(0.7, 0.3, features_extinction[1] - features_extinction[2], features_extinction[0] - features_extinction[1],
+    # ax.arrow(0.7, 0.3, features_extinction[1] - features_extinction[2],
+    #          features_extinction[0] - features_extinction[1],
     #          head_width=0.02, head_length=0.05, fc="k", ec="k", length_includes_head=True)
 
 
