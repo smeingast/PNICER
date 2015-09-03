@@ -144,7 +144,7 @@ for ax_cn, idx, cidx in zip(ax_cn_all, range(3), idx_combinations):
 
     # Show extinction arrows
     ax_cn.arrow(1.5, 0, control_colors.extvec.extvec[cidx[0]], control_colors.extvec.extvec[cidx[1]],
-                length_includes_head=True, width=0.01, head_width=0.04, head_length=0.06)
+                length_includes_head=True, width=0.01, head_width=0.04, head_length=0.06, facecolor="black")
 
     # Annotate extinction arrow
     ax_cn.annotate("$A_K \/ = \/ 1$",
