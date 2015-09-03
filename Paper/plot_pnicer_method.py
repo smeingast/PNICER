@@ -148,7 +148,8 @@ for ax_cn, idx, cidx in zip(ax_cn_all, range(3), idx_combinations):
 
     # Annotate extinction arrow
     ax_cn.annotate("$A_K \/ = \/ 1$",
-                   xy=[1.5 + 0.40 * control_colors.extvec.extvec[cidx[0]], 0.12 * control_colors.extvec.extvec[cidx[1]]],
+                   xy=[1.5 + 0.40 * control_colors.extvec.extvec[cidx[0]],
+                       0.12 * control_colors.extvec.extvec[cidx[1]]],
                    xycoords="data", ha="center", va="center",
                    rotation=np.degrees(np.arctan(control_colors.extvec.extvec[cidx[1]] /
                                                  control_colors.extvec.extvec[cidx[0]])))
