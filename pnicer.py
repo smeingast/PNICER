@@ -271,7 +271,7 @@ class DataBase:
 
         # Calculate extinctions
         ext = (self.features[0] - cf_mean) / self.extvec.extvec[0]
-        var = (self.features_err[0]**2 + cf_var**2) / self.extvec.extvec[0]**2
+        var = (self.features_err[0]**2 + cf_var) / self.extvec.extvec[0]**2
 
         return ext, var
 
