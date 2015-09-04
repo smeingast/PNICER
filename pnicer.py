@@ -222,6 +222,7 @@ class DataBase:
         # Calculate weighted average and standard deviation for each vector
         grid_mean, grid_var = [], []
         for vec in dens_vectors:
+
             # In case there are too few stars
             if np.sum(vec) < 3:
                 grid_mean.append(np.nan)
@@ -277,7 +278,6 @@ class DataBase:
 
     # ----------------------------------------------------------------------
     def _pnicer_combinations(self, control, comb, sampling, kernel):
-        # TODO: Implement PNICER for just one feature with stand alone method
         """
         PNICER base implementation for combinations. Basically calls the pnicer_single implementation for all
         combinations. The outpur extinction is then the one with the smallest error from all combinations
