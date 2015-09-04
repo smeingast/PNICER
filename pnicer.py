@@ -55,26 +55,21 @@ class DataBase:
         # Do some input checks
 
         # Dimensions of extinction vector must be equal to dimensions of data
-        if self.extvec.n_dimensions != self.n_features:
-            raise ValueError("Dimensions of extinction vector must be equal to number of features")
+        assert self.extvec.n_dimensions == self.n_features, \
+            "Dimensions of extinction vector must be equal to number of features"
 
         # Input data must be in lists
-        if sum([type(x) in [list] for x in [self.features, self.features_err]]) != 2:
-            raise TypeError("Input must be in lists")
+        assert sum([type(x) in [list] for x in [self.features, self.features_err]]) == 2, "Input must be in lists"
 
         # There must be at least one feature
-        if self.n_features < 1:
-            raise ValueError("There must be at least two features!")
+        assert self.n_features > 0, "There must be at least two features!"
 
         # All input lists must have equal length
-        if len(set([len(l) for l in [self.features, self.features_err, self.features_names]])) != 1:
-            raise ValueError("Input lists must have equal length")
+        assert len(set([len(l) for l in [self.features, self.features_err, self.features_names]])) == 1,\
+            "Input lists must have equal length"
 
         # Input data must also have the same size
-        if len(set([x.size for x in self.features])) != 1:
-            raise ValueError("Input arrays must have equal size")
-        else:
-            self.n_data = self.features[0].size
+        assert len(set([x.size for x in self.features])) == 1, "Input arrays must have equal size"
 
         # Coordinates must be supplied for all data if set
         if (lon is not None) | (lat is not None):
@@ -83,6 +78,7 @@ class DataBase:
 
         # ----------------------------------------------------------------------
         # Calculate some stuff
+        self.n_data = self.features[0].size
 
         # Generate feature masks and number of good data points per feature
         self.features_masks = [np.isfinite(m) & np.isfinite(e) for m, e in zip(self.features, self.features_err)]
@@ -191,8 +187,7 @@ class DataBase:
         """
 
         # Check instances
-        if self.__class__ != control.__class__:
-            raise TypeError("Input and control instance not compatible")
+        assert self.__class__ == control.__class__, "Input and control instance not compatible"
 
         # Let's rotate the data spaces
         science_rot, control_rot = self.rotate(), control.rotate()
