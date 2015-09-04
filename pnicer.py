@@ -270,14 +270,13 @@ class DataBase:
         assert self.n_features == 1 & control.n_features == 1, "Only one feature allowed for this method"
 
         # Get mean and std of control field
-        # TODO: Variance of extinction should also include measurement errors
         # TODO: Average or weighted average
         cf_mean, cf_var = weighted_avg(values=control.features[0], weights=control.features_err[0])
         # cf_mean, cf_var = np.nanmean(control.features[0]), np.nanvar(control.features[0])
 
         # Calculate extinctions
         ext = (self.features[0] - cf_mean) / self.extvec.extvec[0]
-        var = np.full_like(ext, fill_value=cf_var)
+        var = (self.features_err[0]**2 + cf_var**2) / self.extvec.extvec[0]**2
 
         return ext, var
 
