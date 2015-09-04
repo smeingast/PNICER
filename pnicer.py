@@ -276,7 +276,7 @@ class DataBase:
         return ext, var
 
     # ----------------------------------------------------------------------
-    def _pnicer_combinations(self, db, control, comb, sampling, kernel):
+    def _pnicer_combinations(self, control, comb, sampling, kernel):
         """
         PNICER base implementation for combinations. Basically calls the pnicer_single implementation for all
         combinations. The outpur extinction is then the one with the smallest error from all combinations
@@ -297,6 +297,7 @@ class DataBase:
         i = 0
         for sc, cc in comb:
 
+            # print(sc.features_names)
             # Type assertion to not raise editor warning
             assert isinstance(sc, DataBase)
 
@@ -321,10 +322,12 @@ class DataBase:
         self._combination_names = names
         self._n_combinations = i
 
-        # calculate weighted average
-        # weight = np.array(all_n)[:, None]**2 / all_var
+        # TODO: Weighted average or min?
+        # # calculate weighted average
+        # weight = np.array(all_n)[:, None] / all_var
         # ext = np.nansum(all_ext * weight, axis=0) / np.nansum(weight, axis=0)
         # var = np.nansum(all_var * weight**2, axis=0) / np.nansum(weight, axis=0)**2
+        # return Extinction(db=db, extinction=ext, variance=var)
 
         # Chose extinction as minimum error across all combinations
         all_var[~np.isfinite(all_var)] = 100 * np.nanmax(all_var)
@@ -338,7 +341,7 @@ class DataBase:
         ext[var > 10] = var[var > 10] = np.nan
 
         # Return
-        return Extinction(db=db, extinction=ext, variance=var)
+        return Extinction(db=self, extinction=ext, variance=var)
 
     # ----------------------------------------------------------------------
     def build_wcs_grid(self, frame, pixsize=10./60):
@@ -764,26 +767,26 @@ class Magnitudes(DataBase):
         return colors_combinations
 
     # ----------------------------------------------------------------------
-    def pnicer(self, control, sampling=2, kernel="epanechnikov", use_color=False):
+    def pnicer(self, control, sampling=2, kernel="epanechnikov", add_colors=False):
         """
         PNICER call method for magnitudes. Includes options to use combinations for input features, or convert them
         to colors.
         :param control: instance of control field
         :param sampling: Sampling of grid relative to bandwidth of kernel
         :param kernel: name of kernel to be used for density estimation. e.g. "epanechnikov" or "gaussian"
-        :param use_color: Whether or not to convert to colors
+        :param add_colors: Whether or not to add colors to calculate probabilities
         :return: Extinction instance with the calculated extinction and error
         """
-        if use_color:
+
+        if add_colors:
             # To create a color, we need at least two features
             assert self.n_features >= 2, "To use colors, at least two features are required"
-            comb = zip(self.color_combinations(), control.color_combinations())
-            db = self.mag2color()
+            comb = zip(self.all_combinations(idxstart=2) + self.color_combinations(),
+                       control.all_combinations(idxstart=2) + control.color_combinations())
         else:
             comb = zip(self.all_combinations(idxstart=2), control.all_combinations(idxstart=2))
-            db = self
 
-        return self._pnicer_combinations(control=control, db=db, comb=comb, sampling=sampling, kernel=kernel)
+        return self._pnicer_combinations(control=control, comb=comb, sampling=sampling, kernel=kernel)
 
     # ----------------------------------------------------------------------
     # NICER implementation
@@ -897,7 +900,7 @@ class Colors(DataBase):
         """
 
         comb = zip(self.all_combinations(idxstart=1), control.all_combinations(idxstart=1))
-        return self._pnicer_combinations(control=control, db=self, comb=comb, sampling=sampling, kernel=kernel)
+        return self._pnicer_combinations(control=control, comb=comb, sampling=sampling, kernel=kernel)
 
 
 # ----------------------------------------------------------------------

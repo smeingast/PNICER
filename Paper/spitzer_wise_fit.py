@@ -19,6 +19,7 @@ from scipy.odr import Model, RealData, ODR
 from astropy.io import fits
 from matplotlib.pyplot import GridSpec
 from matplotlib.ticker import MultipleLocator
+import matplotlib.colors as colors
 
 
 # ----------------------------------------------------------------------
@@ -39,12 +40,21 @@ def get_sign(val):
 
 # ----------------------------------------------------------------------
 # Load colorbrewer colormaps
-cmap = brewer2mpl.get_map('RdBu', 'Diverging', number=4, reverse=True).get_mpl_colormap(N=20, gamma=1)
+cmap = brewer2mpl.get_map("Reds", "Sequential", number=9, reverse=False).get_mpl_colormap(N=20, gamma=1)
+
+# Truncate colormap
+def truncate_colormap(cmap, minval=0.0, maxval=1.0, n=20):
+    new_cmap = colors.LinearSegmentedColormap.from_list(
+        'trunc({n},{a:.2f},{b:.2f})'.format(n=cmap.name, a=minval, b=maxval),
+        cmap(np.linspace(minval, maxval, n)))
+    return new_cmap
+cmap = truncate_colormap(cmap, 0.5, 1)
+
 
 
 # ----------------------------------------------------------------------
 # Read data
-skip = 1
+skip = 10
 sxw_data = fits.open(sxw_path)[1].data
 
 irac1 = sxw_data["IRAC1"][::skip]
@@ -111,27 +121,27 @@ x_fit = np.linspace(3, 19, 2)
 
 s = ax0.scatter(wise1[i1w1_filter], irac1[i1w1_filter],
                 c=np.sqrt(irac1err[i1w1_filter] ** 2 + wise1_err[i1w1_filter] ** 2), s=5,
-                alpha=0.5, lw=0, cmap=cmap, vmin=0, vmax=0.4)
+                alpha=0.7, lw=0, cmap=cmap, vmin=0, vmax=0.4)
 ax0.plot(x_fit, fit[0].beta[0] * x_fit + fit[0].beta[1], '-k', lw=2, ls="--")
 ax0.set_xlabel("WISE$_{3.4}$ (mag)")
 ax0.set_ylabel("IRAC (mag)")
 
 # Write equation
-ax0.annotate("IRAC$_{3.6}$ = " + str(np.around(fit[0].beta[0], 4)) + r"$\times$ WISE$_{3.4}$ " +
-             get_sign(fit[0].beta[1]) + " " + str(np.abs(np.around(fit[0].beta[1], 4))),
+ax0.annotate("IRAC$_{3.6}$ = " + str(np.around(fit[0].beta[0], 3)) + r"$\times$ WISE$_{3.4}$ " +
+             get_sign(fit[0].beta[1]) + " " + str(np.abs(np.around(fit[0].beta[1], 3))),
              xy=(0.05, 0.97), xycoords="axes fraction", ha="left", va="top", size=12)
 
 ax1.scatter(wise2[i2w2_filter], irac2[i2w2_filter],
             c=np.sqrt(irac2err[i2w2_filter] ** 2 + wise2_err[i2w2_filter] ** 2), s=5,
-            alpha=0.5, lw=0, cmap=cmap, vmin=0, vmax=0.4)
+            alpha=0.7, lw=0, cmap=cmap, vmin=0, vmax=0.4)
 
 ax1.plot(x_fit, fit[1].beta[0] * x_fit + fit[1].beta[1], '-k', lw=2, ls="--")
 ax1.set_xlabel("WISE$_{4.6}$ (mag)")
 # ax1.set_ylabel("IRAC2 (mag)")
 
 # Write equation
-ax1.annotate("IRAC$_{4.5}$ = " + str(np.around(fit[1].beta[0], 4)) + r"$\times$ WISE$_{4.6}$ " +
-             get_sign(fit[1].beta[1]) + " " + str(np.abs(np.around(fit[1].beta[1], 4))),
+ax1.annotate("IRAC$_{4.5}$ = " + str(np.around(fit[1].beta[0], 3)) + r"$\times$ WISE$_{4.6}$ " +
+             get_sign(fit[1].beta[1]) + " " + str(np.abs(np.around(fit[1].beta[1], 3))),
              xy=(0.05, 0.97), xycoords="axes fraction", ha="left", va="top", size=12)
 
 # Remove tick labels
@@ -154,6 +164,7 @@ for ax in [ax0, ax1]:
 # Add colorbar
 cb = plt.colorbar(cax=cax, mappable=s)
 cb.set_label('Combined error (mag)')
+
 # Set alpha to 1
 cb.set_alpha(1)
 cb.draw_all()

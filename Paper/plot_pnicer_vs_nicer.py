@@ -27,7 +27,7 @@ cmap = brewer2mpl.get_map('RdYlBu', 'Diverging', number=11, reverse=True).get_mp
 
 # ----------------------------------------------------------------------
 # Load data
-skip = 10
+skip = 1
 science_dummy = fits.open(science_path)[1].data
 control_dummy = fits.open(control_path)[1].data
 
@@ -96,8 +96,9 @@ for idx, pidx in zip(range(2, 6), range(2, 9, 2)):
                          lon=control_glon, lat=control_glat, names=features_names[0:idx])
 
     # Get NICER and PNICER extinction
-    # TODO: Too many univariate values get selected due to low errors. If I increase the errors, the std gets smaller
-    pnicer = control.pnicer(control=control, sampling=2, kernel="epanechnikov", use_color=True).extinction
+    pnicer = control.pnicer(control=control, sampling=2, kernel="epanechnikov", add_colors=True).extinction
+    # pnicer = control.mag2color().pnicer(control=control.mag2color(), sampling=2, kernel="epanechnikov").extinction
+    # pnicer = control.pnicer(control=control, sampling=2, kernel="epanechnikov", add_colors=True).extinction
     nicer = control.nicer(control=control).extinction
 
     # Get average extinction within box for each source
@@ -126,14 +127,14 @@ for idx, pidx in zip(range(2, 6), range(2, 9, 2)):
     nicer = nicer[np.abs(nicer) < 2]
 
     # Do KDE
-    pnicer_hist = mp_kde(grid=grid_kde, data=pnicer, bandwidth=res, sampling=sampling,
-                         shape=None, kernel="epanechnikov", absolute=True)
+    pnicer_all_hist = mp_kde(grid=grid_kde, data=pnicer, bandwidth=res, sampling=sampling,
+                             shape=None, kernel="epanechnikov", absolute=True)
     nicer_hist = mp_kde(grid=grid_kde, data=nicer, bandwidth=res, sampling=sampling,
                         shape=None, kernel="epanechnikov", absolute=True)
 
     # Plot histograms
     ax_hist.plot(grid_kde, nicer_hist, color="#d53e4f", lw=3, label="NICER")
-    ax_hist.plot(grid_kde, pnicer_hist, color="#3288bd", lw=3, label="PNICER")
+    ax_hist.plot(grid_kde, pnicer_all_hist, color="#3288bd", lw=3, label="PNICER")
 
     # Plot CCD contour
     ax_diff.contour(hist / np.max(hist), extent=edges, levels=[0.005, 0.03, 0.25, 0.5],
