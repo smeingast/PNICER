@@ -62,8 +62,8 @@ class DataBase:
         if sum([type(x) in [list] for x in [self.features, self.features_err]]) != 2:
             raise TypeError("Input must be in lists")
 
-        # There must be at least two features
-        if self.n_features < 2:
+        # There must be at least one feature
+        if self.n_features < 1:
             raise ValueError("There must be at least two features!")
 
         # All input lists must have equal length
@@ -178,7 +178,7 @@ class DataBase:
         return combination_instances
 
     # ----------------------------------------------------------------------
-    def _pnicer_single(self, control, sampling, kernel):
+    def _pnicer_multivariate(self, control, sampling, kernel):
         """
         Main PNICER routine to get extinction. This will return only the extinction values for data for which all
         features are available
@@ -256,7 +256,27 @@ class DataBase:
         return out, outvar
 
     # ----------------------------------------------------------------------
+    def _pnicer_univariate(self, control):
+        """
+        Univariate implementation of PNICER
+        :param control: control field instance
+        :return: extinction and variance estimates for each source
+        """
+
+        assert self.__class__ == control.__class__, "Instance and control class do not match"
+        assert self.n_features == 1 & control.n_features == 1, "Only one feature allowed for this method"
+
+        # Get mean and std of control field
+        cf_mean, var = weighted_avg(values=control.features[0], weights=control.features_err[0])
+
+        # Calculate extinctions
+        ext = (self.features[0] - cf_mean) / self.extvec.extvec[0]
+
+        return ext, var
+
+    # ----------------------------------------------------------------------
     def _pnicer_combinations(self, control, comb, sampling, kernel):
+        # TODO: Implement PNICER for just one feature with stand alone method
         """
         PNICER base implementation for combinations. Basically calls the pnicer_single implementation for all
         combinations. The outpur extinction is then the one with the smallest error from all combinations
@@ -268,8 +288,7 @@ class DataBase:
         """
 
         # Check instances
-        if control.__class__ != self.__class__:
-            raise TypeError("input and control instance do not match")
+        assert control.__class__ != self.__class__, "instance and control class do not match"
 
         # We loop over all combinations
         all_ext, all_var, names = [], [], []
@@ -280,7 +299,7 @@ class DataBase:
 
             assert isinstance(sc, DataBase)
             # Run PNICER for current combination
-            ext, var = sc._pnicer_single(control=cc, sampling=sampling, kernel=kernel)
+            ext, var = sc._pnicer_multivariate(control=cc, sampling=sampling, kernel=kernel)
 
             # Append data
             all_ext.append(ext)
