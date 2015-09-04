@@ -158,13 +158,15 @@ class DataBase:
                               names=[x + "_rot" for x in self.features_names])
 
     # ----------------------------------------------------------------------
-    def all_combinations(self):
+    def all_combinations(self, idxstart):
         """
         Method to get all combinations of input features
+        :param idxstart: Minimun number of features required. Used to exclude single magnitudes for univariate PNICER.
         :return: All combinations from input features
         """
 
-        all_c = [item for sublist in [combinations(range(self.n_features), p) for p in range(1, self.n_features + 1)]
+        all_c = [item for sublist in [combinations(range(self.n_features), p)
+                                      for p in range(idxstart, self.n_features + 1)]
                  for item in sublist]
 
         combination_instances = []
@@ -300,6 +302,8 @@ class DataBase:
         # Here we loop over color combinations since this is faster
         i = 0
         for sc, cc in comb:
+
+            print(sc.features_names)
 
             # Type assertion to not raise editor warning
             assert isinstance(sc, DataBase)
@@ -753,29 +757,7 @@ class Magnitudes(DataBase):
         colors = self.mag2color()
 
         # ...and all combinations of colors
-        colors_combinations = colors.all_combinations()
-
-        """
-        At a later stage I could include to also allow just two bands to produce and extinction with PNICER when used
-        with colors. For now, color_combinations only produces combinations with at least two colors, i.e. at least
-        three bands. In other words: PNICER for now requires always at least two input features: Either two magnitudes
-        or two colors. In the casae of magnitudes, I spread the paramter space thin, in case of colors I need at least
-        three bands.
-        """
-        # # Add color-magnitude combinations
-        # for n in reversed(range(colors.n_features)):
-        #     colors_combinations[:0] = \
-        #         [Colors(mag=[self.features[n+1], colors.features[n]],
-        #                 err=[self.features_err[n+1], colors.features_err[n]],
-        #                 extvec=[self.extvec.extvec[n+1], colors.extvec.extvec[n]],
-        #                 lon=self.lon, lat=self.lat, names=[self.features_names[n+1], colors.features_names[n]])]
-
-        # for n in reversed(range(colors.n_features)):
-        #     colors_combinations[:0] = \
-        #         [Colors(mag=[self.features[n], self.features[n+1]],
-        #                 err=[self.features_err[n], self.features_err[n+1]],
-        #                 extvec=[self.extvec.extvec[n], self.extvec.extvec[n+1]],
-        #                 lon=self.lon, lat=self.lat, names=[self.features_names[n], self.features_names[n+1]])]
+        colors_combinations = colors.all_combinations(idxstart=1)
 
         return colors_combinations
 
@@ -795,7 +777,7 @@ class Magnitudes(DataBase):
             assert self.n_features >= 2, "To use colors, at least two features are required"
             comb = zip(self.color_combinations(), control.color_combinations())
         else:
-            comb = zip(self.all_combinations(), control.all_combinations())
+            comb = zip(self.all_combinations(idxstart=2), control.all_combinations(idxstart=2))
 
         return self._pnicer_combinations(control=control, comb=comb, sampling=sampling, kernel=kernel)
 
@@ -910,7 +892,7 @@ class Colors(DataBase):
         :return: Extinction instance with the calculated extinction and error
         """
 
-        comb = zip(self.all_combinations(), control.all_combinations())
+        comb = zip(self.all_combinations(idxstart=1), control.all_combinations(idxstart=1))
         return self._pnicer_combinations(control=control, comb=comb, sampling=sampling, kernel=kernel)
 
 
