@@ -538,12 +538,13 @@ class DataBase:
             plt.savefig(path, bbox_inches="tight")
         plt.close()
 
-    def plot_spatial_kde_gain(self, frame, pixsize=10/60, path=None, kernel="epanechnikov", skip=1,
+    def plot_spatial_kde_gain(self, frame, pixsize=10/60, contour=None, path=None, kernel="epanechnikov", skip=1,
                               cmap=None):
         """
         Plot source densities for features
         :param frame: "equatorial" or "galactic"
         :param pixsize: pixel size of grid
+        :param contour: 2D data if contours should be drawn
         :param path: file path if it should be saved. e.g. "/path/to/image.png"
         :param kernel: name of kernel for KDE. e.g. "epanechnikov" or "gaussian"
         :param skip: Integer to skip every n-th source (for faster plotting)
@@ -556,6 +557,12 @@ class DataBase:
         if cmap is None:
             cmap = "coolwarm_r"
 
+        if contour is not None:
+            # Must be 2D map
+            assert len(contour[0].shape) == 2, "Input data not 2D"
+            # Must be astropy WCS
+            assert isinstance(contour[1], wcs.wcs.WCS), "Input data not astropy WCS object"
+
         # Get a WCS grid
         header, lon_grid, lat_grid = self.build_wcs_grid(frame=frame, pixsize=pixsize)
 
@@ -563,10 +570,13 @@ class DataBase:
         ar = lon_grid.shape[0] / lon_grid.shape[1]
 
         # Determine number of panels
-        n_panels = [np.floor(np.sqrt(self.n_features - 1)).astype(int),
-                    np.ceil(np.sqrt(self.n_features - 1)).astype(int)]
-        if n_panels[0] * n_panels[1] < self.n_features - 1:
+        n_panels = [np.floor(np.sqrt(self.n_features)).astype(int),
+                    np.ceil(np.sqrt(self.n_features)).astype(int)]
+        if n_panels[0] * n_panels[1] < self.n_features:
             n_panels[n_panels.index(min(n_panels))] += 1
+
+        # Plot index for row-wise plotting
+        plot_idx = np.arange(sum(n_panels)).reshape(n_panels, order="F").ravel()
 
         # Create grid
         fig = plt.figure(figsize=[10 * n_panels[0], 10 * n_panels[1] * ar])
@@ -576,65 +586,81 @@ class DataBase:
         # Add colorbar
         cax = fig.add_axes([0.91, 0.05, 0.01, 0.85])
 
-        # To avoid editor warnings
-        dens, dens_norm = 0, 0
-
         # Loop over features and plot
-        for idx in range(self.n_features):
-
-            # Save previous density
-            if idx > 0:
-                dens_norm = dens.copy()
+        dens, ax, im = [], [], []
+        for idx, pidx in zip(range(self.n_features), plot_idx):
 
             # Get density
             xgrid = np.vstack([lon_grid.ravel(), lat_grid.ravel()]).T
             data = np.vstack([self.lon[self.features_masks[idx]][::skip], self.lat[self.features_masks[idx]][::skip]]).T
-            dens = mp_kde(grid=xgrid, data=data, bandwidth=pixsize*2, shape=lon_grid.shape, kernel=kernel,
-                          absolute=True, sampling=2)
+            dens.append(mp_kde(grid=xgrid, data=data, bandwidth=pixsize*2, shape=lon_grid.shape, kernel=kernel,
+                               absolute=True, sampling=2))
 
             # Mask threshold
-            dens[dens < 1] = np.nan
+            dens[-1][dens[-1] < 1] = np.nan
 
-            if idx > 0:
+            # First, draw total gain
+            if idx == 0:
+                ax.append(plt.subplot(grid[0], projection=wcsaxes.WCS(header=header)))
+                data = np.vstack([self.lon[::skip], self.lat[::skip]]).T
+                dens_tot = mp_kde(grid=xgrid, data=data, bandwidth=pixsize*2, shape=lon_grid.shape, kernel=kernel,
+                                  absolute=True, sampling=2)
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    im.append(ax[-1].imshow(dens_tot / dens[0] - 1, origin="lower", interpolation="nearest",
+                                            cmap=cmap, vmin=-0.5, vmax=0.5))
+            else:
 
                 # Add axes
-                ax = plt.subplot(grid[idx - 1], projection=wcsaxes.WCS(header=header))
-
-                # Zoom
-                ax.set_xlim(0.1 * dens.shape[1], dens.shape[1] - 0.1 * dens.shape[1])
-                ax.set_ylim(0.1 * dens.shape[0], dens.shape[0] - 0.1 * dens.shape[0])
+                ax.append(plt.subplot(grid[pidx], projection=wcsaxes.WCS(header=header)))
 
                 # Plot density
                 with warnings.catch_warnings():
                     # Ignore NaN and 0 division warnings
                     warnings.simplefilter("ignore")
-                    im = ax.imshow(dens / dens_norm - 1, origin="lower", interpolation="nearest",
-                                   cmap=cmap, vmin=-0.5, vmax=0.5)
+                    im.append(ax[-1].imshow(dens[idx] / dens[idx-1] - 1, origin="lower", interpolation="nearest",
+                                            cmap=cmap, vmin=-0.5, vmax=0.5))
 
-                    plt.colorbar(im, cax=cax, ticks=MultipleLocator(0.1), label="Relative source density gain")
+                    plt.colorbar(im[-1], cax=cax, ticks=MultipleLocator(0.1), label="Relative source density gain")
 
-                # Grab axes
-                lon = ax.coords[0]
-                lat = ax.coords[1]
+            # Plot contour
+            if contour is not None:
+                ax[-1].contour(contour[0], levels=[1], colors="black", lw=2, alpha=1,
+                               transform=ax[-1].get_transform(contour[1]))
 
-                # Set minor ticks
-                lon.set_major_formatter("d")
-                lon.display_minor_ticks(True)
-                lon.set_minor_frequency(4)
-                lat.set_major_formatter("d")
-                lat.display_minor_ticks(True)
-                lat.set_minor_frequency(2)
+            # Grab axes
+            lon = ax[-1].coords[0]
+            lat = ax[-1].coords[1]
 
-                # Set labels
-                if idx % n_panels[1] == 1:
-                    lat.set_axislabel("Latitude")
-                else:
-                    lat.set_ticklabel_position("")
-                if idx / n_panels[1] > 1:
-                    lon.set_axislabel("Longitude")
-                else:
-                    # Hide tick labels
-                    lon.set_ticklabel_position("")
+            # Set minor ticks
+            lon.set_major_formatter("d")
+            lon.display_minor_ticks(True)
+            lon.set_minor_frequency(4)
+            lat.set_major_formatter("d")
+            lat.display_minor_ticks(True)
+            lat.set_minor_frequency(2)
+
+            # Set labels
+            if pidx % n_panels[1] == 0:
+                l = "Galactic Latitude (°)" if frame == "galactic" else "Declination"
+                lat.set_axislabel(l)
+            else:
+                lat.set_ticklabel_position("")
+            if pidx // n_panels[1] >= 1:
+                l = "Galactic Longitude (°)" if frame == "galactic" else "Right Ascension"
+                lon.set_axislabel(l)
+            else:
+                # Hide tick labels
+                lon.set_ticklabel_position("")
+
+        # For VISION
+        for a, d in zip(ax, dens):
+            a.set_xlim(0.1 * d.shape[1], d.shape[1] - 0.1 * d.shape[1])
+            a.set_ylim(0.1 * d.shape[0], d.shape[0] - 0.1 * d.shape[0])
+
+        # Set new scaling
+        im[0].norm.vmin, im[0].norm.vmax = -1.5, 1.5
+        im[1].norm.vmin, im[1].norm.vmax = -1.5, 1.5
 
         # Save or show figure
         if path is None:

@@ -1,12 +1,9 @@
 from __future__ import absolute_import, division, print_function
-__author__ = 'Stefan Meingast'
 
 
 # ----------------------------------------------------------------------
 # Import stuff
-import numpy as np
 import brewer2mpl
-import matplotlib.pyplot as plt
 
 from astropy import wcs
 from astropy.io import fits
@@ -43,7 +40,6 @@ science_glat = science_dummy["GLAT"]
 control_glon = control_dummy["GLON"]
 control_glat = control_dummy["GLAT"]
 
-
 features_names = ["J", "H", "Ks", "IRAC1", "IRAC2"]
 errors_names = ["J_err", "H_err", "Ks_err", "IRAC1_err", "IRAC2_err"]
 features_extinction = [2.5, 1.55, 1.0, 0.636, 0.54]
@@ -69,6 +65,6 @@ science = Magnitudes(mag=science_data, err=science_error, extvec=features_extinc
 
 # ----------------------------------------------------------------------
 # Plot spatial source density gain
-science.plot_spatial_kde_gain(frame="galactic", pixsize=2/60, path=results_path + "source_gain_kde.pdf",
-                              kernel="epanechnikov", skip=4, cmap=cmap)
+science.plot_spatial_kde_gain(frame="galactic", pixsize=5/60, path=results_path + "source_gain_kde.pdf",
+                              kernel="epanechnikov", skip=5, cmap=cmap) #, contour=[herschel_data, herschel_wcs])
 
