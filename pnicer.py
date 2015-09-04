@@ -13,7 +13,7 @@ from astropy import wcs
 from astropy.io import fits
 from multiprocessing import Pool
 from matplotlib.pyplot import GridSpec
-from matplotlib.ticker import AutoMinorLocator, MaxNLocator
+from matplotlib.ticker import AutoMinorLocator, MaxNLocator, MultipleLocator
 from itertools import combinations, repeat
 from sklearn.neighbors import KernelDensity, NearestNeighbors
 
@@ -538,7 +538,8 @@ class DataBase:
             plt.savefig(path, bbox_inches="tight")
         plt.close()
 
-    def plot_spatial_kde_gain(self, frame, pixsize=10/60, path=None, kernel="epanechnikov", skip=1):
+    def plot_spatial_kde_gain(self, frame, pixsize=10/60, path=None, kernel="epanechnikov", skip=1,
+                              cmap=None):
         """
         Plot source densities for features
         :param frame: "equatorial" or "galactic"
@@ -546,8 +547,15 @@ class DataBase:
         :param path: file path if it should be saved. e.g. "/path/to/image.png"
         :param kernel: name of kernel for KDE. e.g. "epanechnikov" or "gaussian"
         :param skip: Integer to skip every n-th source (for faster plotting)
+        :param cmap: colormap for plotting
         :return:
         """
+
+        assert (frame == "equatorial") | (frame == "galactic"), "Frame not suppoerted"
+
+        if cmap is None:
+            cmap = "coolwarm_r"
+
         # Get a WCS grid
         header, lon_grid, lat_grid = self.build_wcs_grid(frame=frame, pixsize=pixsize)
 
@@ -561,9 +569,12 @@ class DataBase:
             n_panels[n_panels.index(min(n_panels))] += 1
 
         # Create grid
-        plt.figure(figsize=[10 * n_panels[0], 10 * n_panels[1] * ar])
-        grid = GridSpec(ncols=n_panels[0], nrows=n_panels[1], bottom=0.05, top=0.95, left=0.05, right=0.95,
-                        hspace=0.2, wspace=0.2)
+        fig = plt.figure(figsize=[10 * n_panels[0], 10 * n_panels[1] * ar])
+        grid = GridSpec(ncols=n_panels[0], nrows=n_panels[1], bottom=0.05, top=0.9, left=0.05, right=0.9,
+                        hspace=0.05, wspace=0.05)
+
+        # Add colorbar
+        cax = fig.add_axes([0.91, 0.05, 0.01, 0.85])
 
         # To avoid editor warnings
         dens, dens_norm = 0, 0
@@ -578,29 +589,52 @@ class DataBase:
             # Get density
             xgrid = np.vstack([lon_grid.ravel(), lat_grid.ravel()]).T
             data = np.vstack([self.lon[self.features_masks[idx]][::skip], self.lat[self.features_masks[idx]][::skip]]).T
-            dens = mp_kde(grid=xgrid, data=data, bandwidth=pixsize*2, shape=lon_grid.shape, kernel=kernel)
+            dens = mp_kde(grid=xgrid, data=data, bandwidth=pixsize*2, shape=lon_grid.shape, kernel=kernel,
+                          absolute=True, sampling=2)
 
-            # Norm and save scale
+            # Mask threshold
+            dens[dens < 1] = np.nan
+
             if idx > 0:
+
                 # Add axes
                 ax = plt.subplot(grid[idx - 1], projection=wcsaxes.WCS(header=header))
+
+                # Zoom
+                ax.set_xlim(0.1 * dens.shape[1], dens.shape[1] - 0.1 * dens.shape[1])
+                ax.set_ylim(0.1 * dens.shape[0], dens.shape[0] - 0.1 * dens.shape[0])
 
                 # Plot density
                 with warnings.catch_warnings():
                     # Ignore NaN and 0 division warnings
                     warnings.simplefilter("ignore")
-                    ax.imshow(dens / dens_norm, origin="lower", interpolation="nearest",
-                              cmap="coolwarm_r", vmin=0, vmax=2)
+                    im = ax.imshow(dens / dens_norm - 1, origin="lower", interpolation="nearest",
+                                   cmap=cmap, vmin=-0.5, vmax=0.5)
+
+                    plt.colorbar(im, cax=cax, ticks=MultipleLocator(0.1), label="Relative source density gain")
 
                 # Grab axes
                 lon = ax.coords[0]
                 lat = ax.coords[1]
 
+                # Set minor ticks
+                lon.set_major_formatter("d")
+                lon.display_minor_ticks(True)
+                lon.set_minor_frequency(4)
+                lat.set_major_formatter("d")
+                lat.display_minor_ticks(True)
+                lat.set_minor_frequency(2)
+
                 # Set labels
                 if idx % n_panels[1] == 1:
                     lat.set_axislabel("Latitude")
+                else:
+                    lat.set_ticklabel_position("")
                 if idx / n_panels[1] > 1:
                     lon.set_axislabel("Longitude")
+                else:
+                    # Hide tick labels
+                    lon.set_ticklabel_position("")
 
         # Save or show figure
         if path is None:

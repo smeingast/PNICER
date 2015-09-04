@@ -150,7 +150,7 @@ for idx, pidx in zip(range(2, 6), range(2, 9, 2)):
                      xy=[0.95, 0.90], xycoords="axes fraction", ha="right", va="top", color="#d53e4f")
 
     # Set range
-    ax_diff.set_xlim(-0.3, 1.7)
+    ax_diff.set_xlim(-0.4, 1.6)
     ax_diff.set_ylim(-0.2, 1.8)
     ax_hist.set_xlim(erange)
 
