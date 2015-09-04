@@ -122,7 +122,7 @@ class DataBase:
         dummy = np.ascontiguousarray(grid_data).view(np.dtype((np.void, grid_data.dtype.itemsize * grid_data.shape[1])))
         _, idx = np.unique(dummy, return_index=True)
 
-        return grid_data[idx].T
+        return grid_data[np.sort(idx)].T
 
     # ----------------------------------------------------------------------
     def rotate(self):
@@ -302,8 +302,6 @@ class DataBase:
         # Here we loop over color combinations since this is faster
         i = 0
         for sc, cc in comb:
-
-            print(sc.features_names)
 
             # Type assertion to not raise editor warning
             assert isinstance(sc, DataBase)
