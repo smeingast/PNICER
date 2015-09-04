@@ -164,7 +164,7 @@ class DataBase:
         :return: All combinations from input features
         """
 
-        all_c = [item for sublist in [combinations(range(self.n_features), p) for p in range(2, self.n_features + 1)]
+        all_c = [item for sublist in [combinations(range(self.n_features), p) for p in range(1, self.n_features + 1)]
                  for item in sublist]
 
         combination_instances = []
@@ -267,10 +267,11 @@ class DataBase:
         assert self.n_features == 1 & control.n_features == 1, "Only one feature allowed for this method"
 
         # Get mean and std of control field
-        cf_mean, var = weighted_avg(values=control.features[0], weights=control.features_err[0])
+        cf_mean, cf_var = weighted_avg(values=control.features[0], weights=control.features_err[0])
 
         # Calculate extinctions
         ext = (self.features[0] - cf_mean) / self.extvec.extvec[0]
+        var = np.full_like(ext, fill_value=cf_var)
 
         return ext, var
 
@@ -287,8 +288,8 @@ class DataBase:
         :return: Extinction instance with the calcualted extinction and error
         """
 
-        # Check instances
-        assert control.__class__ != self.__class__, "instance and control class do not match"
+        # Instance assertion
+        assert self.__class__ == control.__class__, "instance and control class do not match"
 
         # We loop over all combinations
         all_ext, all_var, names = [], [], []
@@ -297,9 +298,14 @@ class DataBase:
         i = 0
         for sc, cc in comb:
 
+            # Type assertion to not raise editor warning
             assert isinstance(sc, DataBase)
-            # Run PNICER for current combination
-            ext, var = sc._pnicer_multivariate(control=cc, sampling=sampling, kernel=kernel)
+
+            # Depending on number of features, choose algorithm
+            if sc.n_features == 1:
+                ext, var = sc._pnicer_univariate(control=cc)
+            else:
+                ext, var = sc._pnicer_multivariate(control=cc, sampling=sampling, kernel=kernel)
 
             # Append data
             all_ext.append(ext)
@@ -782,6 +788,8 @@ class Magnitudes(DataBase):
         :return: Extinction instance with the calculated extinction and error
         """
         if use_color:
+            # To create a color, we need at least two features
+            assert self.n_features >= 2, "To use colors, at least two features are required"
             comb = zip(self.color_combinations(), control.color_combinations())
         else:
             comb = zip(self.all_combinations(), control.all_combinations())
