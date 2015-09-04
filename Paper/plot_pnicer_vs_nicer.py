@@ -55,7 +55,7 @@ control_error = [control_dummy[n][::skip] for n in errors_names]
 erange = [-1, 1]
 res, sampling = 0.05, 4
 grid_kde = np.arange(start=1.1*erange[0], stop=1.1*erange[1],
-                     step=res/sampling, dtype=np.double)[:, np.newaxis]
+                     step=res/sampling, dtype=np.double)
 
 # ----------------------------------------------------------------------
 # Define color color data
@@ -96,18 +96,8 @@ for idx, pidx in zip(range(2, 6), range(2, 9, 2)):
                          lon=control_glon, lat=control_glat, names=features_names[0:idx])
 
     # Get NICER and PNICER extinction
-    if idx == 2:
-        use_color = False
-    else:
-        use_color = True
-    pnicer = control.pnicer(control=control, sampling=2, kernel="epanechnikov", use_color=use_color).extinction
-    # Here we require at least two colors for anything after the first iteration
-    if idx == 2:
-        n_features = 2
-    else:
-        n_features = 3
-    """Watch out! If I use only magnitudes for PNICER, I have to set n_features to 2 always!"""
-    nicer = control.nicer(control=control, n_features=n_features).extinction
+    pnicer = control.pnicer(control=control, sampling=2, kernel="epanechnikov", use_color=True).extinction
+    nicer = control.nicer(control=control).extinction
 
     # Get average extinction within box for each source
     avg_pnicer = point_average(xdata=xdata, ydata=ydata, zdata=pnicer, xsize=xsize, ysize=ysize)
@@ -127,8 +117,12 @@ for idx, pidx in zip(range(2, 6), range(2, 9, 2)):
         cbar.set_label("$\Delta A_K$ (PNICER - NICER)", labelpad=-50)
 
     # Filter NaNs
-    pnicer = pnicer[np.isfinite(pnicer)][:, np.newaxis]
-    nicer = nicer[np.isfinite(nicer)][:, np.newaxis]
+    pnicer = pnicer[np.isfinite(pnicer)]
+    nicer = nicer[np.isfinite(nicer)]
+
+    # Additional filter
+    pnicer = pnicer[np.abs(pnicer) < 10]
+    nicer = nicer[np.abs(nicer) < 10]
 
     # Do KDE
     pnicer_hist = mp_kde(grid=grid_kde, data=pnicer, bandwidth=res, sampling=sampling,

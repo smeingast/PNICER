@@ -268,7 +268,10 @@ class DataBase:
         assert self.n_features == 1 & control.n_features == 1, "Only one feature allowed for this method"
 
         # Get mean and std of control field
+        # TODO: Variance of extinction should also include measurement errors
+        # TODO: Average or weighted average
         cf_mean, cf_var = weighted_avg(values=control.features[0], weights=control.features_err[0])
+        # cf_mean, cf_var = np.nanmean(control.features[0]), np.nanvar(control.features[0])
 
         # Calculate extinctions
         ext = (self.features[0] - cf_mean) / self.extvec.extvec[0]
@@ -871,7 +874,7 @@ class Magnitudes(DataBase):
         # Now we have to mask the large variance data again
         var[~np.isfinite(ext)] = np.nan
 
-        if n_features > 1:
+        if n_features is not None:
             mask = np.where(np.sum(np.vstack(self.features_masks), axis=0, dtype=int) < n_features)[0]
             ext[mask] = var[mask] = np.nan
 
