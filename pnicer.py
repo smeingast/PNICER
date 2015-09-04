@@ -291,7 +291,7 @@ class DataBase:
         assert self.__class__ == control.__class__, "instance and control class do not match"
 
         # We loop over all combinations
-        all_ext, all_var, names = [], [], []
+        all_ext, all_var, all_n, names = [], [], [], []
 
         # Here we loop over color combinations since this is faster
         i = 0
@@ -309,6 +309,7 @@ class DataBase:
             # Append data
             all_ext.append(ext)
             all_var.append(var)
+            all_n.append(sc.n_features)
             names.append("(" + ",".join(sc.features_names) + ")")
             i += 1
 
@@ -320,10 +321,19 @@ class DataBase:
         self._combination_names = names
         self._n_combinations = i
 
+        # calculate weighted average
+        # weight = np.array(all_n)[:, None]**2 / all_var
+        # ext = np.nansum(all_ext * weight, axis=0) / np.nansum(weight, axis=0)
+        # var = np.nansum(all_var * weight**2, axis=0) / np.nansum(weight, axis=0)**2
+
         # Chose extinction as minimum error across all combinations
         all_var[~np.isfinite(all_var)] = 100 * np.nanmax(all_var)
-        ext = all_ext[np.argmin(all_var, axis=0), np.arange(self.n_data)]
-        var = all_var[np.argmin(all_var, axis=0), np.arange(self.n_data)]
+
+        # Penalize low order data
+        weight = all_var / np.array(all_n)[:, None]
+
+        ext = all_ext[np.argmin(weight, axis=0), np.arange(self.n_data)]
+        var = all_var[np.argmin(weight, axis=0), np.arange(self.n_data)]
         # Make error cut
         ext[var > 10] = var[var > 10] = np.nan
 
@@ -841,6 +851,8 @@ class Magnitudes(DataBase):
         ext = b[0, :] * (scolors[0, :] - color_0[0])
         for i in range(1, self.n_features - 1):
             ext += b[i, :] * (scolors[i] - color_0[i])
+
+        print(b.shape)
 
         # Calculate variance (has to be done in loop due to RAM issues!)
         first = np.array([np.dot(cov.data[idx, :, :], b.data[:, idx]) for idx in range(self.n_data)])

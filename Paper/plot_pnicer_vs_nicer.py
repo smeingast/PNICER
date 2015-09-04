@@ -96,6 +96,7 @@ for idx, pidx in zip(range(2, 6), range(2, 9, 2)):
                          lon=control_glon, lat=control_glat, names=features_names[0:idx])
 
     # Get NICER and PNICER extinction
+    # TODO: Too many univariate values get selected due to low errors. If I increase the errors, the std gets smaller
     pnicer = control.pnicer(control=control, sampling=2, kernel="epanechnikov", use_color=True).extinction
     nicer = control.nicer(control=control).extinction
 
