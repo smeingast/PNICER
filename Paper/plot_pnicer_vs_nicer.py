@@ -27,7 +27,7 @@ cmap = brewer2mpl.get_map('RdYlBu', 'Diverging', number=11, reverse=True).get_mp
 
 # ----------------------------------------------------------------------
 # Load data
-skip = 1
+skip = 10
 science_dummy = fits.open(science_path)[1].data
 control_dummy = fits.open(control_path)[1].data
 

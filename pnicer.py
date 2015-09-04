@@ -276,7 +276,7 @@ class DataBase:
         return ext, var
 
     # ----------------------------------------------------------------------
-    def _pnicer_combinations(self, control, comb, sampling, kernel):
+    def _pnicer_combinations(self, db, control, comb, sampling, kernel):
         """
         PNICER base implementation for combinations. Basically calls the pnicer_single implementation for all
         combinations. The outpur extinction is then the one with the smallest error from all combinations
@@ -338,7 +338,7 @@ class DataBase:
         ext[var > 10] = var[var > 10] = np.nan
 
         # Return
-        return Extinction(db=self, extinction=ext, variance=var)
+        return Extinction(db=db, extinction=ext, variance=var)
 
     # ----------------------------------------------------------------------
     def build_wcs_grid(self, frame, pixsize=10./60):
@@ -778,10 +778,12 @@ class Magnitudes(DataBase):
             # To create a color, we need at least two features
             assert self.n_features >= 2, "To use colors, at least two features are required"
             comb = zip(self.color_combinations(), control.color_combinations())
+            db = self.mag2color()
         else:
             comb = zip(self.all_combinations(idxstart=2), control.all_combinations(idxstart=2))
+            db = self
 
-        return self._pnicer_combinations(control=control, comb=comb, sampling=sampling, kernel=kernel)
+        return self._pnicer_combinations(control=control, db=db, comb=comb, sampling=sampling, kernel=kernel)
 
     # ----------------------------------------------------------------------
     # NICER implementation
@@ -852,8 +854,6 @@ class Magnitudes(DataBase):
         for i in range(1, self.n_features - 1):
             ext += b[i, :] * (scolors[i] - color_0[i])
 
-        print(b.shape)
-
         # Calculate variance (has to be done in loop due to RAM issues!)
         first = np.array([np.dot(cov.data[idx, :, :], b.data[:, idx]) for idx in range(self.n_data)])
         var = np.array([np.dot(b.data[:, idx], first[idx, :]) for idx in range(self.n_data)])
@@ -897,7 +897,7 @@ class Colors(DataBase):
         """
 
         comb = zip(self.all_combinations(idxstart=1), control.all_combinations(idxstart=1))
-        return self._pnicer_combinations(control=control, comb=comb, sampling=sampling, kernel=kernel)
+        return self._pnicer_combinations(control=control, db=self, comb=comb, sampling=sampling, kernel=kernel)
 
 
 # ----------------------------------------------------------------------
