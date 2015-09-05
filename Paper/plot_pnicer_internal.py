@@ -32,14 +32,15 @@ herschel_wcs = wcs.WCS(fits.open(extinction_herschel_path)[0].header)
 
 # ----------------------------------------------------------------------
 # Load catalog data
+skip = 10
 science_dummy = fits.open(science_path)[1].data
 control_dummy = fits.open(control_path)[1].data
 
-science_glon = science_dummy["GLON"]
-science_glat = science_dummy["GLAT"]
+science_glon = science_dummy["GLON"][::skip]
+science_glat = science_dummy["GLAT"][::skip]
 
-control_glon = control_dummy["GLON"]
-control_glat = control_dummy["GLAT"]
+control_glon = control_dummy["GLON"][::skip//2]
+control_glat = control_dummy["GLAT"][::skip//2]
 
 features_names = ["J", "H", "Ks", "IRAC1", "IRAC2"]
 errors_names = ["J_err", "H_err", "Ks_err", "IRAC1_err", "IRAC2_err"]
@@ -48,12 +49,12 @@ features_extinction = [2.5, 1.55, 1.0, 0.636, 0.54]
 n_features = 5
 
 # Photometry
-science_data = [science_dummy[n] for n in features_names[:n_features]]
-control_data = [control_dummy[n] for n in features_names[:n_features]]
+science_data = [science_dummy[n][::skip] for n in features_names[:n_features]]
+control_data = [control_dummy[n][::skip//2] for n in features_names[:n_features]]
 
 # Measurement errors
-science_error = [science_dummy[n] for n in errors_names[:n_features]]
-control_error = [control_dummy[n] for n in errors_names[:n_features]]
+science_error = [science_dummy[n][::skip] for n in errors_names[:n_features]]
+control_error = [control_dummy[n][::skip//2] for n in errors_names[:n_features]]
 features_extinction = features_extinction[:n_features]
 features_names = features_names[:n_features]
 
@@ -61,15 +62,23 @@ features_names = features_names[:n_features]
 # ----------------------------------------------------------------------
 # Initialize data
 science = Magnitudes(mag=science_data, err=science_error, extvec=features_extinction,
-                     lon=science_glon, lat=science_glat, names=features_names).mag2color()
+                     lon=science_glon, lat=science_glat, names=features_names)
+control = Magnitudes(mag=control_data, err=control_error, extvec=features_extinction,
+                     lon=control_glon, lat=control_glat, names=features_names)
 
 
 # ----------------------------------------------------------------------
 # Plot spatial source density gain
-# science.plot_spatial_kde_gain(frame="galactic", pixsize=1/60, path=results_path + "source_gain_kde.pdf",
-#                               kernel="gaussian", skip=1, cmap=cmap, contour=[herschel_data, herschel_wcs])
+science.mag2color().plot_spatial_kde_gain(frame="galactic", pixsize=1/60, path=results_path + "source_gain_kde.pdf",
+                                          kernel="gaussian", skip=1, cmap=cmap, contour=[herschel_data, herschel_wcs])
 
 
 # ----------------------------------------------------------------------
-# Scatter plot of combinations
-science.plot_combinations_kde(path=results_path + "combinations_kde.pdf", grid_bw=0.05, cmap=cmap)
+# KDE plot of combinations
+# science.mag2color().plot_combinations_kde(path=results_path + "combinations_kde.pdf", grid_bw=0.05, cmap=cmap)
+
+
+# ----------------------------------------------------------------------
+science_color = science.mag2color()
+science_color.pnicer(control=control.mag2color(), sampling=2, kernel="epanechnikov")
+science_color.plot_kde_extinction_combinations()
