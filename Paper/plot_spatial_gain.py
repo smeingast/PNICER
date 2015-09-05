@@ -15,6 +15,7 @@ from matplotlib.pyplot import GridSpec
 from matplotlib.ticker import MultipleLocator
 import warnings
 
+
 # ----------------------------------------------------------------------
 # Change defaults
 matplotlib.rcParams.update({'font.size': 13})
@@ -204,11 +205,11 @@ with warnings.catch_warnings():
     im_tot = ax_tot.imshow((dens_tot / dens_j_h - 1) * 100, origin="lower", interpolation="nearest",
                            cmap=cmap1, vmin=-140, vmax=140)
     ax_hk.imshow((dens_h_k / dens_j_h - 1) * 100, origin="lower", interpolation="nearest",
-                 cmap=cmap1, vmin=-1.4, vmax=1.4)
+                 cmap=cmap1, vmin=-140, vmax=140)
     im_ki1 = ax_ki1.imshow((dens_ki1 / dens_h_k - 1) * 100, origin="lower", interpolation="nearest",
                            cmap=cmap2, vmin=-50, vmax=50)
     ax_i1i2.imshow((dens_i1i2 / dens_ki1 - 1) * 100, origin="lower", interpolation="nearest",
-                   cmap=cmap2, vmin=-0.5, vmax=0.5)
+                   cmap=cmap2, vmin=-50, vmax=50)
 
 
 # ----------------------------------------------------------------------

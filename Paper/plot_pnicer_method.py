@@ -7,6 +7,7 @@ __author__ = 'Stefan Meingast'
 # Import stuff
 import brewer2mpl
 import numpy as np
+# import matplotlib
 import matplotlib.pyplot as plt
 
 from pnicer import Magnitudes, mp_kde
@@ -16,13 +17,18 @@ from matplotlib.ticker import MultipleLocator
 
 
 # ----------------------------------------------------------------------
+# Change defaults
+# matplotlib.rcParams.update({'font.size': 16})
+
+
+# ----------------------------------------------------------------------
 # Define file paths
 science_path = "/Users/Antares/Dropbox/Data/Orion/VISION/Catalog/VISION_+_Spitzer_s.fits"
 control_path = "/Users/Antares/Dropbox/Data/Orion/VISION/Catalog/VISION_CF+_Spitzer_s.fits"
 results_path = "/Users/Antares/Dropbox/Projects/PNICER/Paper/Results/"
 
 # Load colormap
-cmap = brewer2mpl.get_map('Blues', 'Sequential', number=9, reverse=False).get_mpl_colormap(N=100, gamma=0.5)
+# cmap = brewer2mpl.get_map('Blues', 'Sequential', number=9, reverse=False).get_mpl_colormap(N=100, gamma=0.5)
 
 
 # ----------------------------------------------------------------------
@@ -95,7 +101,7 @@ for i2, i1 in idx_combinations:
 
 # ----------------------------------------------------------------------
 # Create figure
-fig = plt.figure(figsize=[20, 10])
+fig = plt.figure(figsize=[16, 8])
 gs_cf = GridSpec(ncols=2, nrows=2, bottom=0.05, top=0.95, left=0.05, right=0.50, hspace=0, wspace=0)
 gs_pd = GridSpec(ncols=2, nrows=7, bottom=0.05, top=0.95, left=0.55, right=0.95, hspace=0, wspace=0)
 
@@ -169,9 +175,11 @@ for ax_cn, idx, cidx in zip(ax_cn_all, range(3), idx_combinations):
     if idx == 2:
         ax_cn.axes.yaxis.set_ticklabels([])
         ax_cn.set_xlabel("$K_S - IRAC_{3.4} \/ (\mathrm{mag})$")
-        ax_cn.legend(scatterpoints=2, bbox_to_anchor=(1, 1.18), frameon=False)
-        ax_cn.annotate("S1", xy=[0.57, 1.16], xycoords="axes fraction", ha="center", va="bottom", color=colors[0])
-        ax_cn.annotate("S2", xy=[0.635, 1.16], xycoords="axes fraction", ha="center", va="bottom", color=colors[1])
+        ax_cn.legend(scatterpoints=2, bbox_to_anchor=(1, 1.22), frameon=False)
+        ax_cn.annotate("S1", xy=[0.465, 1.175], xycoords="axes fraction", ha="center", va="bottom",
+                       color=colors[0], size=13, weight="bold")
+        ax_cn.annotate("S2", xy=[0.545, 1.175], xycoords="axes fraction", ha="center", va="bottom",
+                       color=colors[1], size=13, weight="bold")
 
 
 # ----------------------------------------------------------------------
@@ -255,7 +263,7 @@ for idx in range(14):
             lw=3, color=colors[idx % 2], zorder=1)
 
     # Set limits
-    ax.set_xlim(-1, 3)
+    ax.set_xlim(-0.9, 3)
     ax.set_ylim(0, 0.1)
 
     # Plot vertical line at mean probability
@@ -268,7 +276,7 @@ for idx in range(14):
         ha, hx = "right", 0.95
     ax.annotate(str(np.around(science_colors._ext_combinations.ravel()[idx], 2)) + "$\pm$" + \
                 str(np.around(np.sqrt(science_colors._var_combinations.ravel())[idx], 2)),
-                xy=[hx, 0.9],
+                xy=[hx, 0.9], bbox=dict(boxstyle="round", fc="1", ec="1"),
                 xycoords="axes fraction", ha=ha, va="top")
 
     # Annotate combinations
@@ -292,6 +300,7 @@ for idx in range(14):
         ax.axes.xaxis.set_ticklabels([])
 
     # Ticker
+    ax.xaxis.set_major_locator(MultipleLocator(0.5))
     ax.xaxis.set_minor_locator(MultipleLocator(0.1))
     ax.yaxis.set_major_locator(MultipleLocator(0.05))
     ax.yaxis.set_minor_locator(MultipleLocator(0.01))
@@ -308,4 +317,4 @@ for idx in range(14):
                     size=14, weight="bold", color=colors[1])
 
 # Save figure
-plt.savefig(results_path + "method.png", bbox_inches="tight")
+plt.savefig(results_path + "pnicer_method.png", bbox_inches="tight")
