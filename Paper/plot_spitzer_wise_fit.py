@@ -43,7 +43,7 @@ def get_sign(val):
 
 # ----------------------------------------------------------------------
 # Define colormap
-my_rgbs =["#fc9272", "#fb6a4a", "#ef3b2c", "#cb181d", "#a50f15", "#67000d"]
+my_rgbs = ["#fc9272", "#fb6a4a", "#ef3b2c", "#cb181d", "#a50f15", "#67000d"]
 cmap = colors.ListedColormap(my_rgbs, name='my_name')
 
 
