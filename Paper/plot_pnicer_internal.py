@@ -20,7 +20,8 @@ extinction_herschel_path = "/Users/Antares/Dropbox/Data/Orion/Other/Orion_Planck
 
 # ----------------------------------------------------------------------
 # Load colorbrewer colormap
-cmap = brewer2mpl.get_map('RdBu', 'Diverging', number=5, reverse=False).get_mpl_colormap(N=20, gamma=1)
+# cmap = brewer2mpl.get_map("RdBu", "Diverging", number=5, reverse=False).get_mpl_colormap(N=20, gamma=1)
+cmap = brewer2mpl.get_map("Blues", "Sequential", number=9, reverse=False).get_mpl_colormap(N=100, gamma=0.8)
 
 
 # ----------------------------------------------------------------------
@@ -60,7 +61,7 @@ features_names = features_names[:n_features]
 # ----------------------------------------------------------------------
 # Initialize data
 science = Magnitudes(mag=science_data, err=science_error, extvec=features_extinction,
-                     lon=science_glon, lat=science_glat, names=features_names)
+                     lon=science_glon, lat=science_glat, names=features_names).mag2color()
 
 
 # ----------------------------------------------------------------------
@@ -71,4 +72,4 @@ science = Magnitudes(mag=science_data, err=science_error, extvec=features_extinc
 
 # ----------------------------------------------------------------------
 # Scatter plot of combinations
-science.plot_combinations_scatter()
+science.plot_combinations_kde(path=results_path + "combinations_kde.pdf", grid_bw=0.05, cmap=cmap)

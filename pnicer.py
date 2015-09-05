@@ -435,7 +435,8 @@ class DataBase:
             plt.savefig(path, bbox_inches='tight')
         plt.close()
 
-    def plot_combinations_kde(self, path=None, ax_size=None, grid_bw=0.1, kernel="epanechnikov"):
+    def plot_combinations_kde(self, path=None, ax_size=None, grid_bw=0.1, kernel="epanechnikov", cmap="gist_heat_r"):
+        # TODO: This could be broken
         """
         KDE for all 2D combinations of features
         :param path: file path if it should be saved. e.g. "/path/to/image.png"
@@ -445,6 +446,7 @@ class DataBase:
         :return:
         """
 
+        # Set defaults
         if ax_size is None:
             ax_size = [3, 3]
 
@@ -468,13 +470,21 @@ class DataBase:
             dens = mp_kde(grid=xgrid, data=data, bandwidth=grid_bw*2, shape=x.shape, kernel=kernel)
 
             # Show result
-            ax.imshow(np.sqrt(dens.T), origin="lower", interpolation="nearest", extent=[l, h, l, h], cmap="gist_heat_r")
+            ax.imshow(np.sqrt(dens.T), origin="lower", interpolation="nearest", extent=[l, h, l, h], cmap=cmap)
+
+            # Modify labels
+            if idx[0] == 0:
+                xticks = ax.xaxis.get_major_ticks()
+                xticks[-1].set_visible(False)
+            if idx[1] == np.max(idx):
+                yticks = ax.yaxis.get_major_ticks()
+                yticks[-1].set_visible(False)
 
             # Axis labels
             if ax.get_position().x0 < 0.11:
-                ax.set_ylabel(self.features_names[idx[0]])
+                ax.set_ylabel("$"+self.features_names[idx[0]]+"$")
             if ax.get_position().y0 < 0.11:
-                ax.set_xlabel(self.features_names[idx[1]])
+                ax.set_xlabel("$"+self.features_names[idx[1]]+"$")
 
         # Save or show figure
         if path is None:
@@ -539,7 +549,8 @@ class DataBase:
             plt.savefig(path, bbox_inches="tight")
         plt.close()
 
-    def plot_spatial_kde_gain(self, frame, pixsize=10/60, sampling=2, contour=None, path=None, kernel="epanechnikov", skip=1,
+    def plot_spatial_kde_gain(self, frame, pixsize=10/60, sampling=2, contour=None, path=None, kernel="epanechnikov",
+                              skip=1,
                               cmap=None):
         # TODO: I guess I should move this to a separate plot file. It's too complex to work for all input data ever.
         """
@@ -656,6 +667,7 @@ class DataBase:
                 lon.set_ticklabel_position("")
 
         # For VISION
+        # TODO: Remove again
         for a, d in zip(ax, dens):
             a.set_xlim(0.1 * d.shape[1], d.shape[1] - 0.1 * d.shape[1])
             a.set_ylim(0.1 * d.shape[0], d.shape[0] - 0.1 * d.shape[0])
