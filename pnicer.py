@@ -394,11 +394,12 @@ class DataBase:
     # ----------------------------------------------------------------------
     # Plotting methods
 
-    def plot_combinations_scatter(self, path=None, ax_size=None, **kwargs):
+    def plot_combinations_scatter(self, path=None, ax_size=None, skip=1, **kwargs):
         """
         2D Scatter plot of combinations
         :param path: file path if it should be saved. e.g. "/path/to/image.png"
         :param ax_size: Size of individual axis
+        :param skip: Skip n source for faster testing
         :param kwargs: Additional scatter plot arguments
         :return:
         """
@@ -412,7 +413,7 @@ class DataBase:
         # Get 2D combination indices
         for idx, ax in zip(combinations(range(self.n_features), 2), axes):
 
-            ax.scatter(self.features[idx[1]][::10], self.features[idx[0]][::10], lw=0, s=5, alpha=0.1, **kwargs)
+            ax.scatter(self.features[idx[1]][::skip], self.features[idx[0]][::skip], lw=0, s=5, alpha=0.1, **kwargs)
 
             # We need a square grid!
             l, h = np.min([x[0] for x in self.plotrange]), np.max([x[1] for x in self.plotrange])
@@ -538,8 +539,9 @@ class DataBase:
             plt.savefig(path, bbox_inches="tight")
         plt.close()
 
-    def plot_spatial_kde_gain(self, frame, pixsize=10/60, contour=None, path=None, kernel="epanechnikov", skip=1,
+    def plot_spatial_kde_gain(self, frame, pixsize=10/60, sampling=2, contour=None, path=None, kernel="epanechnikov", skip=1,
                               cmap=None):
+        # TODO: I guess I should move this to a separate plot file. It's too complex to work for all input data ever.
         """
         Plot source densities for features
         :param frame: "equatorial" or "galactic"
@@ -593,8 +595,8 @@ class DataBase:
             # Get density
             xgrid = np.vstack([lon_grid.ravel(), lat_grid.ravel()]).T
             data = np.vstack([self.lon[self.features_masks[idx]][::skip], self.lat[self.features_masks[idx]][::skip]]).T
-            dens.append(mp_kde(grid=xgrid, data=data, bandwidth=pixsize*2, shape=lon_grid.shape, kernel=kernel,
-                               absolute=True, sampling=2))
+            dens.append(mp_kde(grid=xgrid, data=data, bandwidth=pixsize*sampling, shape=lon_grid.shape, kernel=kernel,
+                               absolute=True, sampling=sampling))
 
             # Mask threshold
             dens[-1][dens[-1] < 1] = np.nan
@@ -657,10 +659,18 @@ class DataBase:
         for a, d in zip(ax, dens):
             a.set_xlim(0.1 * d.shape[1], d.shape[1] - 0.1 * d.shape[1])
             a.set_ylim(0.1 * d.shape[0], d.shape[0] - 0.1 * d.shape[0])
-
         # Set new scaling
         im[0].norm.vmin, im[0].norm.vmax = -1.5, 1.5
         im[1].norm.vmin, im[1].norm.vmax = -1.5, 1.5
+
+        fig.delaxes(cax)
+        cax1 = fig.add_axes([0.0505, 0.91, 0.414, 0.02])
+        cax2 = fig.add_axes([0.4855, 0.91, 0.414, 0.02])
+        cbar1 = plt.colorbar(im[0], cax=cax1, ticks=MultipleLocator(0.3), orientation="horizontal")
+        cbar2 = plt.colorbar(im[2], cax=cax2, ticks=MultipleLocator(0.1), orientation="horizontal")
+        for cb in [cbar1, cbar2]:
+            cb.ax.xaxis.set_ticks_position("top")
+            cb.set_label("Relative source density gain", labelpad=-40)
 
         # Save or show figure
         if path is None:

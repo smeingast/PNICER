@@ -12,7 +12,7 @@ from pnicer import Magnitudes
 
 # ----------------------------------------------------------------------
 # Define file paths
-science_path = "/Users/Antares/Dropbox/Data/Orion/VISION/Catalog/VISION_+_Spitzer_s.fits"
+science_path = "/Users/Antares/Dropbox/Data/Orion/VISION/Catalog/VISION_+_Spitzer_s_noYSO.fits"
 control_path = "/Users/Antares/Dropbox/Data/Orion/VISION/Catalog/VISION_CF+_Spitzer_s.fits"
 results_path = "/Users/Antares/Dropbox/Projects/PNICER/Paper/Results/"
 extinction_herschel_path = "/Users/Antares/Dropbox/Data/Orion/Other/Orion_Planck_Herschel_fit_wcs_AK_OriA.fits"
@@ -60,11 +60,15 @@ features_names = features_names[:n_features]
 # ----------------------------------------------------------------------
 # Initialize data
 science = Magnitudes(mag=science_data, err=science_error, extvec=features_extinction,
-                     lon=science_glon, lat=science_glat, names=features_names).mag2color()
+                     lon=science_glon, lat=science_glat, names=features_names)
 
 
 # ----------------------------------------------------------------------
 # Plot spatial source density gain
-science.plot_spatial_kde_gain(frame="galactic", pixsize=5/60, path=results_path + "source_gain_kde.pdf",
-                              kernel="epanechnikov", skip=5, cmap=cmap) #, contour=[herschel_data, herschel_wcs])
+# science.plot_spatial_kde_gain(frame="galactic", pixsize=1/60, path=results_path + "source_gain_kde.pdf",
+#                               kernel="gaussian", skip=1, cmap=cmap, contour=[herschel_data, herschel_wcs])
 
+
+# ----------------------------------------------------------------------
+# Scatter plot of combinations
+science.plot_combinations_scatter()
