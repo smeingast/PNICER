@@ -115,9 +115,11 @@ cax = plt.subplot(grid[2])
 
 x_fit = np.linspace(3, 19, 2)
 
+# c1 = np.sqrt(irac1err[i1w1_filter] ** 2 + wise1_err[i1w1_filter] ** 2)
+c1 = (irac1err[i1w1_filter] + wise1_err[i1w1_filter]) / 2
 s = ax0.scatter(wise1[i1w1_filter], irac1[i1w1_filter],
-                c=np.sqrt(irac1err[i1w1_filter] ** 2 + wise1_err[i1w1_filter] ** 2), s=5,
-                alpha=0.7, lw=0, cmap=cmap, vmin=0, vmax=0.3)
+                c=c1, s=5,
+                alpha=0.7, lw=0, cmap=cmap, vmin=0, vmax=0.2)
 ax0.plot(x_fit, fit[0].beta[0] * x_fit + fit[0].beta[1], '-k', lw=2, ls="--")
 ax0.set_xlabel("$WISE_{3.4} \/ \mathrm{(mag)}$")
 ax0.set_ylabel("$IRAC_{3.6/4.5} \/ \mathrm{(mag)}$")
@@ -127,9 +129,11 @@ ax0.annotate("$IRAC_{3.6}$ = " + str(np.around(fit[0].beta[0], 3)) + r"$\times$ 
              get_sign(fit[0].beta[1]) + " " + str(np.abs(np.around(fit[0].beta[1], 3))),
              xy=(0.05, 0.97), xycoords="axes fraction", ha="left", va="top", size=13)
 
+# c2 = np.sqrt(irac2err[i2w2_filter] ** 2 + wise2_err[i2w2_filter] ** 2)
+c2 = (irac2err[i2w2_filter] + wise2_err[i2w2_filter]) / 2
 ax1.scatter(wise2[i2w2_filter], irac2[i2w2_filter],
-            c=np.sqrt(irac2err[i2w2_filter] ** 2 + wise2_err[i2w2_filter] ** 2), s=5,
-            alpha=0.7, lw=0, cmap=cmap, vmin=0, vmax=0.3)
+            c=c2, s=5,
+            alpha=0.7, lw=0, cmap=cmap, vmin=0, vmax=0.2)
 
 ax1.plot(x_fit, fit[1].beta[0] * x_fit + fit[1].beta[1], '-k', lw=2, ls="--")
 ax1.set_xlabel("$WISE_{4.6} \/ \mathrm{(mag)}$")
@@ -162,13 +166,13 @@ for ax in [ax0, ax1]:
 
 # Add colorbar
 cb = plt.colorbar(cax=cax, mappable=s)
-cb.set_label('Combined error (mag)')
-cb.ax.minorticks_on()
+cb.set_label("Mean error (mag)")
+# cb.ax.minorticks_on()
 
 # Set alpha to 1
 cb.set_alpha(1)
 cb.draw_all()
-cb.set_ticks(MultipleLocator(0.1))
+cb.set_ticks(MultipleLocator(0.05))
 
 plt.savefig("/Users/Antares/Dropbox/Projects/PNICER/Paper/Results/spitzer_wise_fit.png", bbox_inches="tight", dpi=300)
 

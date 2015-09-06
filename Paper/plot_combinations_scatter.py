@@ -155,8 +155,8 @@ for i, p, c in zip(range(len(dens_sc)), pidx, combinations(range(4), 2)):
         ax.set_aspect(1)
 
         # Limits
-        ax.set_xlim(-0.6, 2.4)
-        ax.set_ylim(-0.3, 2.7)
+        ax.set_xlim(-0.6, 2.3)
+        ax.set_ylim(-0.3, 2.6)
 
         # Ticks
         ax.xaxis.set_major_locator(MultipleLocator(1))

@@ -1,7 +1,5 @@
 from __future__ import absolute_import, division, print_function
 
-__author__ = 'Stefan Meingast'
-
 
 # ----------------------------------------------------------------------
 # Import stuff

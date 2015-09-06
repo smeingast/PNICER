@@ -333,6 +333,7 @@ class DataBase:
         all_var[~np.isfinite(all_var)] = 100 * np.nanmax(all_var)
 
         # Penalize low order data
+        # TODO: I guess I don't need that!
         weight = all_var / np.array(all_n)[:, None]
 
         ext = all_ext[np.argmin(weight, axis=0), np.arange(self.n_data)]
