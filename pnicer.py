@@ -1408,7 +1408,7 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric
                                np.cos(np.radians(xdata - xgrid))))
 
     # There must be at least three sources within one bandwidth which have extinction data
-    if np.sum(np.isfinite(ext[dis < bandwidth / 2])) < 3:
+    if np.sum(np.isfinite(ext[dis < bandwidth])) < 3:
         return np.nan, np.nan, 0
 
     # Now we truncate the data to the truncation scale (i.e. a circular patch on the sky)

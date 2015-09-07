@@ -23,7 +23,7 @@ emap_herschel_path = "/Users/Antares/Dropbox/Data/Orion/Other/Orion_Planck_Hersc
 # Load data
 skip = 1
 cskip = 1
-n_features = 5
+n_features = 4
 
 science_dummy = fits.open(science_path)[1].data
 control_dummy = fits.open(control_path)[1].data
