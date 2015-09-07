@@ -1137,11 +1137,11 @@ class Extinction:
         self.features_dered = [f - self.extinction * v for f, v in zip(self.db.features, self.db.extvec.extvec)]
 
     # ----------------------------------------------------------------------
-    def build_map(self, bandwidth, method="median", sampling=2, nicest=False):
+    def build_map(self, bandwidth, metric="median", sampling=2, nicest=False):
         """
         Method to build an extinction map
         :param bandwidth: Resolution of map
-        :param method: Method to be used. e.g. "median", "gaussian", "epanechnikov", "uniform", "triangular"
+        :param metric: Metric to be used. e.g. "median", "gaussian", "epanechnikov", "uniform", "triangular"
         :param sampling: Sampling of data. i.e. how many pixels per bandwidth
         :param nicest: whether or not to adjust weights with NICEST correction factor
         :return: ExtinctionMap instance
@@ -1160,7 +1160,7 @@ class Extinction:
             mp = pool.starmap(get_extinction_pixel,
                               zip(grid_lon.ravel(), grid_lat.ravel(), repeat(self.db.lon),
                                   repeat(self.db.lat), repeat(self.extinction), repeat(self.variance),
-                                  repeat(bandwidth), repeat(method), repeat(nicest)))
+                                  repeat(bandwidth), repeat(metric), repeat(nicest)))
 
         # Unpack results
         map_ext, map_var, map_num = list(zip(*mp))
@@ -1171,7 +1171,7 @@ class Extinction:
         map_num = np.array(map_num).reshape(grid_lon.shape)
 
         # Return extinction map instance
-        return ExtinctionMap(ext=map_ext, var=map_var, num=map_num, header=grid_header, metric=method)
+        return ExtinctionMap(ext=map_ext, var=map_var, num=map_num, header=grid_header, metric=metric)
 
     # ----------------------------------------------------------------------
     def save_fits(self, path):
