@@ -1137,22 +1137,30 @@ class Extinction:
         self.features_dered = [f - self.extinction * v for f, v in zip(self.db.features, self.db.extvec.extvec)]
 
     # ----------------------------------------------------------------------
-    def build_map(self, bandwidth, metric="median", sampling=2, nicest=False):
+    def build_map(self, bandwidth, metric="median", sampling=2, nicest=False, use_fwhm=False):
         """
         Method to build an extinction map
         :param bandwidth: Resolution of map
         :param metric: Metric to be used. e.g. "median", "gaussian", "epanechnikov", "uniform", "triangular"
         :param sampling: Sampling of data. i.e. how many pixels per bandwidth
         :param nicest: whether or not to adjust weights with NICEST correction factor
+        :param use_fwhm: If set, the bandwidth parameter represents the gaussian FWHM instead of its standard deviation
         :return: ExtinctionMap instance
         """
 
         # Sampling must be an integer
         assert isinstance(sampling, int), "sampling must be an integer"
 
+        # Determine pixel size
+        pixsize = bandwidth / sampling
+
+        # In case of a gaussian, we can use the fwhm instead
+        if use_fwhm:
+            assert metric == "gaussian", "FWHM only valid for gaussian kernel"
+            bandwidth /= 2 * np.sqrt(2 * np.log(2))
+
         # First let's get a grid
-        # TODO: Sampling?? -> How many pixels per bandwidth or something else? Like 2x sampling = 1 pix/ bandwidth?
-        grid_header, grid_lon, grid_lat = self.db.build_wcs_grid(frame="galactic", pixsize=bandwidth / sampling)
+        grid_header, grid_lon, grid_lat = self.db.build_wcs_grid(frame="galactic", pixsize=pixsize)
 
         # Run extinction mapping for each pixel
         with Pool() as pool:
@@ -1389,7 +1397,7 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric
     if (metric == "average") | (metric == "median"):
         trunc = 1
     else:
-        trunc = 3
+        trunc = 5
 
     # Truncate input data to a more managable size
     index = (xdata > xgrid - trunc * bandwidth) & (xdata < xgrid + trunc * bandwidth) & \
