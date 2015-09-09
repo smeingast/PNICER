@@ -73,21 +73,18 @@ control_color = control.mag2color()
 # ----------------------------------------------------------------------
 # Get NICER and PNICER extinctions
 # ext_pnicer = science_color.pnicer(control=control_color)
-# ext_pnicer = science.pnicer(control=control, add_colors=True)
+ext_pnicer = science.pnicer(control=control, add_colors=True)
 ext_nicer = science.nicer(control=control)
 
 
 # ----------------------------------------------------------------------
 # Build extinction maps
 bandwidth, metric, sampling, nicest, fwhm = 2/60, "gaussian", 2, False, True
-# map1 = ext_pnicer.build_map(bandwidth=bandwidth, metric=metric, sampling=sampling, nicest=nicest, use_fwhm=fwhm)
+map1 = ext_pnicer.build_map(bandwidth=bandwidth, metric=metric, sampling=sampling, nicest=nicest, use_fwhm=fwhm)
+map1.save_fits(path="/Users/Antares/Desktop/pnicer.fits")
 map2 = ext_nicer.build_map(bandwidth=bandwidth, metric=metric, sampling=sampling, nicest=nicest, use_fwhm=fwhm)
-
-
-# ----------------------------------------------------------------------
-# Save maps
-# map1.save_fits(path="/Users/Antares/Desktop/pnicer.fits")
 map2.save_fits(path="/Users/Antares/Desktop/nicer.fits")
+
 
 exit()
 # ----------------------------------------------------------------------

@@ -874,6 +874,7 @@ class Magnitudes(DataBase):
     # ----------------------------------------------------------------------
     # NICER implementation
     def nicer(self, control, n_features=None):
+        # TODO: There is a  bug in NICER where I get weird extinction if I have e.g. two IRAC NANs
         """
         NICER routine as descibed in Lombardi & Alves 2001. Generalized for arbitrary input magnitudes
         :param control: control field instance to calculate intrinsic colors
@@ -900,18 +901,21 @@ class Magnitudes(DataBase):
         # Get intrisic color of control field
         color_0 = [np.nanmean(control.features[l] - control.features[l+1]) for l in range(control.n_features - 1)]
 
+        # Replace NaN errors with a large number
+        errors = []
+        for e in self.features_err:
+            a = e.copy()
+            a[~np.isfinite(a)] = 1000
+            errors.append(a)
+
         # Calculate covariance matrix of errors in the science field
         cov_er = np.zeros([self.n_data, self.n_features - 1, self.n_features - 1])
         for i in range(self.n_features - 1):
             # Diagonal
-            cov_er[:, i, i] = self.features_err[i]**2 + self.features_err[i+1] ** 2
-
+            cov_er[:, i, i] = errors[i]**2 + errors[i+1]**2
             # Other entries
             if i > 0:
-                cov_er[:, i, i-1] = cov_er[:, i-1, i] = -self.features_err[i] ** 2
-
-        # Set NaNs to large covariance!
-        cov_er[~np.isfinite(cov_er)] = 1E10
+                cov_er[:, i, i-1] = cov_er[:, i-1, i] = -errors[i]**2
 
         # Total covariance matrix
         cov = cov_cf + cov_er
@@ -923,7 +927,7 @@ class Magnitudes(DataBase):
         upper = np.dot(cov_inv, k)
         b = upper.T / np.dot(k, upper.T)
 
-        # Get colors and set finite value for NaNs (will be downweighted by b!)
+        # Get colors
         scolors = np.array([self.features[l] - self.features[l+1] for l in range(self.n_features - 1)])
 
         # Get those with no good color value at all
@@ -938,7 +942,7 @@ class Magnitudes(DataBase):
         # Equation 13 in the NICER paper
         ext = b[0, :] * (scolors[0, :] - color_0[0])
         for i in range(1, self.n_features - 1):
-            ext += b[i, :] * (scolors[i] - color_0[i])
+            ext += b[i, :] * (scolors[i, :] - color_0[i])
 
         # Calculate variance (has to be done in loop due to RAM issues!)
         first = np.array([np.dot(cov.data[idx, :, :], b.data[:, idx]) for idx in range(self.n_data)])
@@ -1416,7 +1420,7 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric
                                np.cos(np.radians(xdata - xgrid))))
 
     # There must be at least three sources within one bandwidth which have extinction data
-    if np.sum(np.isfinite(ext[dis < bandwidth])) < 3:
+    if np.sum(np.isfinite(ext[dis < bandwidth])) < 1:
         return np.nan, np.nan, 0
 
     # Now we truncate the data to the truncation scale (i.e. a circular patch on the sky)
