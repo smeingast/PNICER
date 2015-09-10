@@ -160,7 +160,7 @@ for fidx, hidx in zip(range(2, 6), range(2, 9, 2)):
         ax_hist_err.legend(loc="upper center", bbox_to_anchor=(0.5, 1.11), ncol=2, frameon=False)
 
     # Annotate mean and std
-    ax_hist_ext.annotate("{:0.0e}".format(np.nanmean(nicer_ext)) + "$\pm$" + "{:0.2f}".format(np.nanstd(pnicer_ext)),
+    ax_hist_ext.annotate("{:0.0e}".format(np.nanmean(pnicer_ext)) + "$\pm$" + "{:0.2f}".format(np.nanstd(pnicer_ext)),
                          xy=[0.05, 0.95], xycoords="axes fraction", ha="left", va="top", color="#3288bd")
     ax_hist_ext.annotate("{:0.0e}".format(np.nanmean(nicer_ext)) + "$\pm$" + "{:0.2f}".format(np.nanstd(nicer_ext)),
                          xy=[0.05, 0.90], xycoords="axes fraction", ha="left", va="top", color="#d53e4f")
