@@ -239,19 +239,28 @@ class DataBase:
         _, indices = nbrs.kneighbors(np.vstack(science_rot.features)[1:, :].T)
         indices = indices[:, 0]
 
+        # Inverse rotation of grid to get intrinsic features
+        intrinsic = self.extvec.rotmatrix_inv.dot(np.vstack([grid_mean[indices], grid_data[:, indices]]))
+        if isinstance(self, Magnitudes):
+            color0 = np.array([intrinsic[i] - intrinsic[i+1] for i in range(self.n_features - 1)])
+        else:
+            color0 = intrinsic
+
         # Now we have the instrisic colors for each vector and indices for all sources.
         # It's time to calculate the extinction. :)
         ext = (science_rot.features[0] - grid_mean[indices]) / self.extvec.extinction_norm
         var = grid_var[indices]
 
         # Lastly we put all the extinction measurements back into a full array
-        out = np.full(self.n_data, fill_value=np.nan, dtype=float)
-        outvar = np.full(self.n_data, fill_value=np.nan, dtype=float)
+        out_ext = np.full(self.n_data, fill_value=np.nan, dtype=float)
+        out_var = np.full(self.n_data, fill_value=np.nan, dtype=float)
+        out_col = np.full([len(color0), self.n_data], fill_value=np.nan, dtype=float)
 
         # Output data for all sources
-        out[self.combined_mask], outvar[self.combined_mask] = ext, var
+        out_ext[self.combined_mask], out_var[self.combined_mask] = ext, var
+        out_col[:, self.combined_mask] = color0
 
-        return out, outvar
+        return out_ext, out_var, out_col
 
     # ----------------------------------------------------------------------
     def _pnicer_univariate(self, control):
@@ -272,8 +281,10 @@ class DataBase:
         # Calculate extinctions
         ext = (self.features[0] - cf_mean) / self.extvec.extvec[0]
         var = (self.features_err[0]**2 + cf_var) / self.extvec.extvec[0]**2
+        color0 = np.full_like(ext, fill_value=cf_mean)
+        color0[~np.isfinite(ext)] = np.nan
 
-        return ext, var
+        return ext, var, color0[np.newaxis, :]
 
     # ----------------------------------------------------------------------
     def _pnicer_combinations(self, control, comb, sampling, kernel):
@@ -287,25 +298,35 @@ class DataBase:
         :return: Extinction instance with the calcualted extinction and error
         """
 
-        # Instance assertion
+        # Instance assertions
         assert self.__class__ == control.__class__, "instance and control class do not match"
+        assert (isinstance(self, Magnitudes) | isinstance(self, Colors))
 
         # We loop over all combinations
-        all_ext, all_var, all_n, names = [], [], [], []
+        all_ext, all_var, all_n, all_color0, names = [], [], [], [], []
+
+        # Create intrinsic color dictionary
+        color0_dict = {k: [] for k in self.colors_names}
 
         # Here we loop over color combinations since this is faster
         i = 0
         for sc, cc in comb:
 
-            # print(sc.features_names)
             # Type assertion to not raise editor warning
-            assert isinstance(sc, DataBase)
+            assert (isinstance(sc, Magnitudes) | isinstance(sc, Colors))
 
             # Depending on number of features, choose algorithm
             if sc.n_features == 1:
-                ext, var = sc._pnicer_univariate(control=cc)
+                ext, var, color0 = sc._pnicer_univariate(control=cc)
             else:
-                ext, var = sc._pnicer_multivariate(control=cc, sampling=sampling, kernel=kernel)
+                ext, var, color0 = sc._pnicer_multivariate(control=cc, sampling=sampling, kernel=kernel)
+
+            # Put the intrinsic color into the dictionary
+            for c, cidx in zip(sc.colors_names, range(len(sc.colors_names))):
+                try:
+                    color0_dict[c].append(color0[cidx])
+                except KeyError:
+                    pass
 
             # Append data
             all_ext.append(ext)
@@ -313,6 +334,17 @@ class DataBase:
             all_n.append(sc.n_features)
             names.append("(" + ",".join(sc.features_names) + ")")
             i += 1
+
+        # Loop through color0_dict and calculate average
+        for key, value in color0_dict.items():
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                color0_dict[key] = np.nanmean(np.array(value), axis=0)
+
+        # Get final list of intrinsic colors while forcing the original order
+        self._color0 = []
+        for key in self.colors_names:
+            self._color0.append(color0_dict[key])
 
         # Convert to arrays and save combination data
         all_ext = np.array(all_ext)
@@ -342,7 +374,7 @@ class DataBase:
         ext[var > 10] = var[var > 10] = np.nan
 
         # Return
-        return Extinction(db=self, extinction=ext, variance=var)
+        return Extinction(db=self, extinction=ext, variance=var, color0=self._color0)
 
     # ----------------------------------------------------------------------
     def build_wcs_grid(self, frame, pixsize=10./60):
@@ -811,6 +843,8 @@ class Magnitudes(DataBase):
 
         # Call parent
         super(Magnitudes, self).__init__(mag=mag, err=err, extvec=extvec, lon=lon, lat=lat, names=names)
+        self.colors_names = [self.features_names[k - 1] + "-" + self.features_names[k]
+                             for k in range(1, self.n_features)]
 
     # ----------------------------------------------------------------------
     def mag2color(self):
@@ -827,11 +861,10 @@ class Magnitudes(DataBase):
                         for k in range(1, self.n_features)]
 
         # Color names
-        colors_names = [self.features_names[k - 1] + "-" + self.features_names[k] for k in range(1, self.n_features)]
         color_extvec = [self.extvec.extvec[k - 1] - self.extvec.extvec[k] for k in range(1, self.n_features)]
 
         return Colors(mag=colors, err=colors_error, extvec=color_extvec,
-                      lon=self.lon, lat=self.lat, names=colors_names)
+                      lon=self.lon, lat=self.lat, names=self.colors_names)
 
     # ----------------------------------------------------------------------
     # Method to get all color combinations
@@ -951,15 +984,16 @@ class Magnitudes(DataBase):
         var[~np.isfinite(ext)] = np.nan
 
         # Generate intrinsic source color list
-        rcolor_0 = np.repeat(color_0, self.n_data).reshape([len(color_0), self.n_data])
-        rcolor_0[:, ~np.isfinite(ext)] = np.nan
+        # TODO: Test color_0 parameter
+        color_0 = np.repeat(color_0, self.n_data).reshape([len(color_0), self.n_data])
+        color_0[:, ~np.isfinite(ext)] = np.nan
 
         if n_features is not None:
             mask = np.where(np.sum(np.vstack(self.features_masks), axis=0, dtype=int) < n_features)[0]
-            ext[mask] = var[mask] = rcolor_0[:, mask] = np.nan
+            ext[mask] = var[mask] = color_0[:, mask] = np.nan
 
         # ...and return :)
-        return Extinction(db=self, extinction=ext.data, variance=var, intrinsic=rcolor_0)
+        return Extinction(db=self, extinction=ext.data, variance=var, color0=color_0)
 
 
 # ----------------------------------------------------------------------
@@ -979,6 +1013,7 @@ class Colors(DataBase):
         :return:
         """
         super(Colors, self).__init__(mag=mag, err=err, extvec=extvec, lon=lon, lat=lat, names=names)
+        self.colors_names = self.features_names
 
     # ----------------------------------------------------------------------
     def pnicer(self, control, sampling=2, kernel="epanechnikov"):
@@ -1084,6 +1119,20 @@ class ExtinctionVector:
         return self._rotmatrix
 
     # ----------------------------------------------------------------------
+    # Inverted rotation matrix
+    _rotmatrix_inv = None
+
+    @property
+    def rotmatrix_inv(self):
+
+        # Check if already determined
+        if self._rotmatrix_inv is not None:
+            return self._rotmatrix_inv
+
+        self._rotmatrix_inv = self.rotmatrix.T
+        return self._rotmatrix_inv
+
+    # ----------------------------------------------------------------------
     _extinction_rot = None
 
     @property
@@ -1119,13 +1168,13 @@ class ExtinctionVector:
 # ----------------------------------------------------------------------
 class Extinction:
 
-    def __init__(self, db, extinction, variance=None, intrinsic=None):
+    def __init__(self, db, extinction, variance=None, color0=None):
         """
         Class for extinction measurements
         :param db: Base class from which the extinction was derived
         :param extinction: extinction measurements
         :param variance: extinction variance
-        :param intrinsic: Intrisic feature set for each source
+        :param color0: Intrisic color set for each source
         """
 
         # Check if db is really a DataBase instance
@@ -1136,9 +1185,9 @@ class Extinction:
         self.variance = variance
         if self.variance is None:
             self.variance = np.zeros_like(extinction)
-        self.intrinsic = intrinsic
-        if self.intrinsic is None:
-            self.intrinsic = np.zeros_like(extinction)
+        self.color0 = color0
+        if self.color0 is None:
+            self.color0 = np.zeros_like(extinction)
 
         # extinction and variance must have same length
         if len(self.extinction) != len(self.variance):

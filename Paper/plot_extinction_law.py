@@ -42,6 +42,7 @@ control_glat = control_dummy["GLAT"]
 features_names = ["J", "H", "Ks", "IRAC1", "IRAC2"]
 errors_names = ["J_err", "H_err", "Ks_err", "IRAC1_err", "IRAC2_err"]
 features_extinction = [2.5, 1.55, 1.0, 0.636, 0.54]
+# features_extinction = [2.8, 1.6, 1.0, 0.636, 0.54]
 
 # Photometry
 science_data = [science_dummy[n][::skip] for n in features_names]
@@ -76,6 +77,7 @@ for idx, pidx in zip(data_index, plot_index):
     # Construct combined masks
     smask = np.prod([np.isfinite(science_data[x]) for x in idx], axis=0, dtype=bool)
     cmask = np.prod([np.isfinite(control_data[x]) for x in idx], axis=0, dtype=bool)
+
     sglon, sglat = science_glon[smask], science_glat[smask]
 
     # Get data
@@ -96,23 +98,25 @@ for idx, pidx in zip(data_index, plot_index):
     cnames = science.mag2color().features_names
     name_y, name_x = cnames[0], cnames[-1]
 
-    # get slope
+    # get slope in color space
     dummy = science.mag2color().extvec.extvec
     slope = dummy[0] / dummy[-1]
 
-    print(name_x, name_y, pidx)
-    print(dummy[-1], dummy[0])
+    # print(name_x, name_y, pidx)
+    # print(dummy[-1], dummy[0])
 
     # Calculate extinction
-    # pnicer = science.mag2color().pnicer(control=control.mag2color())
-    # ext = pnicer.extinction
-    nicer = science.nicer(control=control)
-    ext = nicer.extinction
-    col0 = nicer.intrinsic
-    # pnicer.save_fits(path="/Users/Antares/Desktop/test.fits")
+    # pnicer = science.pnicer(control=control, add_colors=True)
+    pnicer = science.mag2color().pnicer(control=control.mag2color())
+    ext = pnicer.extinction
+    col0 = [pnicer.color0[0], pnicer.color0[-1]]
+    # nicer = science.nicer(control=control)
+    # ext = nicer.extinction
+    # col0 = [nicer.color0[0], nicer.color0[-1]]
+    # nicer.save_fits(path="/Users/Antares/Desktop/test.fits")
 
     # Get average colors in extinction bins
-    step = 0.3
+    step = 0.2
     c1, c2, ak = [], [], []
     colors = science.mag2color().features
     for e in np.arange(-1, 15.01, step=step):
@@ -121,14 +125,14 @@ for idx, pidx in zip(data_index, plot_index):
             warnings.simplefilter("ignore")
             fil = (ext >= e) & (ext < e + step)
 
-            # We require at least 10 sources
-            if np.sum(fil) < 10:
+            # We require at least 3 sources
+            if np.sum(fil) < 3:
                 c1.append(np.nan)
                 c2.append(np.nan)
             else:
                 # Get color averages
-                c1.append(np.nanmean(colors[-1][fil] - col0[-1][fil]))
-                c2.append(np.nanmean(colors[0][fil] - col0[0][fil]))
+                c1.append(np.nanmedian(colors[-1][fil] - col0[-1][fil]))
+                c2.append(np.nanmedian(colors[0][fil] - col0[0][fil]))
             # Append extinction
             ak.append(e)
 
