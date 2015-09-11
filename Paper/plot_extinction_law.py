@@ -1,6 +1,7 @@
 # ----------------------------------------------------------------------
 # Import stuff
 import warnings
+import brewer2mpl
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -15,11 +16,14 @@ from matplotlib.ticker import MultipleLocator
 science_path = "/Users/Antares/Dropbox/Data/Orion/VISION/Catalog/VISION_+_Spitzer_s_noYSO.fits"
 control_path = "/Users/Antares/Dropbox/Data/Orion/VISION/Catalog/VISION_CF+_Spitzer_s.fits"
 
+# Load colormap
+cmap = brewer2mpl.get_map("YlOrRd", "Sequential", number=9, reverse=False).get_mpl_colormap(N=10, gamma=0.7)
+
 
 # ----------------------------------------------------------------------
 # Helper function
-def get_distance(slope, intercept, x0, y0):
-    return np.abs(slope * x0 - y0 + intercept) / np.sqrt(slope**2 + 1)
+def get_distance(sl, inter, x0, y0):
+    return np.abs(sl * x0 - y0 + inter) / np.sqrt(slope**2 + 1)
 
 
 # ----------------------------------------------------------------------
@@ -28,132 +32,181 @@ skip = 1
 science_dummy = fits.open(science_path)[1].data
 control_dummy = fits.open(control_path)[1].data
 
+# Coordinates
 science_glon = science_dummy["GLON"][::skip]
 science_glat = science_dummy["GLAT"][::skip]
-
 control_glon = control_dummy["GLON"]
 control_glat = control_dummy["GLAT"]
 
-
+# Definitions
 features_names = ["J", "H", "Ks", "IRAC1", "IRAC2"]
 errors_names = ["J_err", "H_err", "Ks_err", "IRAC1_err", "IRAC2_err"]
+features_extinction = [2.5, 1.55, 1.0, 0.636, 0.54]
 
 # Photometry
 science_data = [science_dummy[n][::skip] for n in features_names]
 science_error = [science_dummy[n][::skip] for n in errors_names]
-
-
 control_data = [control_dummy[n] for n in features_names]
 control_error = [control_dummy[n] for n in errors_names]
-# features_extinction = features_extinction
-features_names = features_names
 
 
 # ----------------------------------------------------------------------
-# Filter only those with all 5 detections
-com = np.isfinite(science_data[0]) & np.isfinite(science_data[1]) & np.isfinite(science_data[2]) & \
-    np.isfinite(science_data[3]) & np.isfinite(science_data[4])
-
-science_data = [s[com] for s in science_data]
-science_error = [e[com] for e in science_error]
-science_glon = science_glon[com]
-science_glat = science_glat[com]
-
-
-# ----------------------------------------------------------------------
-# Grid for extinctions
-# [2.5, 1.55, 1.0, 0.636, 0.54]
-j_range = np.arange(start=2.25, stop=2.35, step=0.02)
-h_range = np.arange(start=1.40, stop=1.5, step=0.02)
-i1_range = np.arange(start=0.65, stop=0.75, step=0.02)
-i2_range = np.arange(start=0.55, stop=0.65, step=0.02)
-
-# Create grid of parameters
-jr, hr, i1r, i2r = np.meshgrid(j_range, h_range, i1_range, i2_range)
-print(jr.size)
-
+# Define source filters
+fil_jh_sc = np.isfinite(science_data[0]) & np.isfinite(science_data[1])
+fil_hks_sc = np.isfinite(science_data[1]) & np.isfinite(science_data[2])
+fil_ksi1_sc = np.isfinite(science_data[2]) & np.isfinite(science_data[3])
+fil_i1i2_sc = np.isfinite(science_data[3]) & np.isfinite(science_data[4])
+fil_all_sc = [fil_jh_sc, fil_hks_sc, fil_ksi1_sc, fil_i1i2_sc]
+fil_jh_cf = np.isfinite(control_data[0]) & np.isfinite(control_data[1])
+fil_hks_cf = np.isfinite(control_data[1]) & np.isfinite(control_data[2])
+fil_ksi1_cf = np.isfinite(control_data[2]) & np.isfinite(control_data[3])
+fil_i1i2_cf = np.isfinite(control_data[3]) & np.isfinite(control_data[4])
+fil_all_cf = [fil_jh_cf, fil_hks_cf, fil_ksi1_cf, fil_i1i2_cf]
 
 # ----------------------------------------------------------------------
-# Define function to get squared sum of orthogonal distances
-def get_square_sum(j, h, i1, i2):
+# Create figure
+fig = plt.figure(figsize=[10, 10])
+grid = GridSpec(ncols=3, nrows=3, bottom=0.05, top=0.90, left=0.05, right=0.95, hspace=0, wspace=0)
+cax = fig.add_axes([0.05, 0.91, 0.3, 0.02])
+
+plot_index = [8, 7, 6, 4, 3, 0]
+data_index = [[0, 1, 2], [0, 1, 2, 3], [0, 1, 3, 4], [1, 2, 3], [1, 2, 3, 4], [2, 3, 4]]
+for idx, pidx in zip(data_index, plot_index):
+
+    # Construct combined masks
+    smask = np.prod([np.isfinite(science_data[x]) for x in idx], axis=0, dtype=bool)
+    cmask = np.prod([np.isfinite(control_data[x]) for x in idx], axis=0, dtype=bool)
+    sglon, sglat = science_glon[smask], science_glat[smask]
+
+    # Get data
+    sdata = [science_data[x][smask] for x in idx]
+    serror = [science_error[x][smask] for x in idx]
+    cdata = [control_data[x][cmask] for x in idx]
+    cerror = [control_error[x][cmask] for x in idx]
+
+    # Get extinction and feature names
+    fext = [features_extinction[x] for x in idx]
+    fnames = [features_names[x] for x in idx]
 
     # Initialize data
-    science = Magnitudes(mag=science_data, err=science_error, extvec=[j, h, 1, i1, i2],
-                         lon=science_glon, lat=science_glat, names=features_names)
-    control = Magnitudes(mag=control_data, err=control_error, extvec=[j, h, 1, i1, i2],
-                         lon=control_glon, lat=control_glat, names=features_names)
+    science = Magnitudes(mag=sdata, err=serror, extvec=fext, names=fnames, lon=sglon, lat=sglat)
+    control = Magnitudes(mag=cdata, err=cerror, extvec=fext, names=fnames)
 
-    # Get slopes
-    slopes = science.mag2color().extvec.extvec
+    # Get feature names
+    cnames = science.mag2color().features_names
+    name_y, name_x = cnames[0], cnames[-1]
 
-    # If there is a 0 in the color excess, return NaN
-    if 0 in slopes:
-        return np.nan, np.array([j, h, 1, i1, i2])
+    # get slope
+    dummy = science.mag2color().extvec.extvec
+    slope = dummy[0] / dummy[-1]
 
-    # Get extinction
-    # ext = science.pnicer(control=control,add_colors=True).extinction
-    ext = science.nicer(control=control).extinction
+    print(name_x, name_y, pidx)
+    print(dummy[-1], dummy[0])
+
+    # Calculate extinction
+    # pnicer = science.mag2color().pnicer(control=control.mag2color())
+    # ext = pnicer.extinction
+    nicer = science.nicer(control=control)
+    ext = nicer.extinction
+    col0 = nicer.intrinsic
+    # pnicer.save_fits(path="/Users/Antares/Desktop/test.fits")
 
     # Get average colors in extinction bins
     step = 0.3
-    jh, hks, ksi1, i1i2 = [], [], [], []
-    for ak in np.arange(-1, 15.01, step=step):
+    c1, c2, ak = [], [], []
+    colors = science.mag2color().features
+    for e in np.arange(-1, 15.01, step=step):
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            fil = (ext >= ak) & (ext < ak + step)
+            fil = (ext >= e) & (ext < e + step)
 
-            jh_avg = np.nanmean(science.features[0][fil] - science.features[1][fil])
-            hk_avg = np.nanmean(science.features[1][fil] - science.features[2][fil])
-            ksi1_avg = np.nanmean(science.features[2][fil] - science.features[3][fil])
-            i1i2_avg = np.nanmean(science.features[3][fil] - science.features[4][fil])
+            # We require at least 10 sources
+            if np.sum(fil) < 10:
+                c1.append(np.nan)
+                c2.append(np.nan)
+            else:
+                # Get color averages
+                c1.append(np.nanmean(colors[-1][fil] - col0[-1][fil]))
+                c2.append(np.nanmean(colors[0][fil] - col0[0][fil]))
+            # Append extinction
+            ak.append(e)
 
-            jh.append(jh_avg)
-            hks.append(hk_avg)
-            ksi1.append(ksi1_avg)
-            i1i2.append(i1i2_avg)
+    # Add subplot
+    ax = plt.subplot(grid[pidx])
 
-    # Determine orthogonal distance
-    dis_hks_jh = get_distance(slope=slopes[0]/slopes[1], intercept=0, x0=np.array(hks), y0=np.array(jh))
-    dis_ksi1_jh = get_distance(slope=slopes[0]/slopes[2], intercept=0, x0=np.array(ksi1), y0=np.array(jh))
-    dis_ksi1_hks = get_distance(slope=slopes[1]/slopes[2], intercept=0, x0=np.array(ksi1), y0=np.array(hks))
-    dis_i1i2_jh = get_distance(slope=slopes[0]/slopes[3], intercept=0, x0=np.array(i1i2), y0=np.array(jh))
-    dis_i1i2_hks = get_distance(slope=slopes[1]/slopes[3], intercept=0, x0=np.array(i1i2), y0=np.array(hks))
-    dis_i1i2_ksi1 = get_distance(slope=slopes[2]/slopes[3], intercept=0, x0=np.array(i1i2), y0=np.array(ksi1))
+    # Plot
+    im = ax.scatter(c1, c2, lw=1, s=40, alpha=1, c=ak, cmap=cmap, vmin=0, vmax=5)
+    x = np.arange(-1, 8, 0.5)
+    ax.plot(x, slope * x, color="black", lw=2, linestyle="dashed")
 
-    # Calculate squared sum
-    square_sum = np.nansum([dis_hks_jh**2, dis_ksi1_jh**2, dis_ksi1_hks**2,
-                            dis_i1i2_jh**2, dis_i1i2_hks**2, dis_i1i2_ksi1**2])
+    # Add colorbar
+    if pidx == 0:
+        cbar = plt.colorbar(im, cax=cax, ticks=MultipleLocator(1), label="$A_K$", orientation="horizontal")
+        cbar.ax.xaxis.set_ticks_position("top")
+        cbar.set_label("$A_K$ (mag)", labelpad=-50)
+        cbar.ax.minorticks_on()
 
-    print(square_sum, np.array([j, h, 1, i1, i2]))
-    return square_sum, np.array([j, h, 1, i1, i2])
+    # Limits
+    ax.set_xlim(-0.5, 2.5)
+    ax.set_ylim(-0.5, 4)
+
+    # Ticker
+    ax.xaxis.set_major_locator(MultipleLocator(1))
+    ax.xaxis.set_minor_locator(MultipleLocator(0.2))
+    ax.yaxis.set_major_locator(MultipleLocator(1))
+    ax.yaxis.set_minor_locator(MultipleLocator(0.2))
+
+    # Remove labels
+    if pidx < 6:
+        ax.axes.xaxis.set_ticklabels([])
+
+    if pidx in [4, 7, 8]:
+        ax.axes.yaxis.set_ticklabels([])
+
+    # set labels
+    if pidx == 8:
+        ax.set_xlabel("$E_{H-K_S}$")
+    if pidx == 7:
+        ax.set_xlabel("$E_{K_S - [3.6]}$")
+    if pidx == 6:
+        ax.set_xlabel("$E_{[3.6] - [4.5]}$")
+        ax.set_ylabel("$E_{J-H}$")
+    if pidx == 3:
+        ax.set_ylabel("$E_{H-K_S}$")
+    if pidx == 0:
+        ax.set_ylabel("$E_{K_S - [3.6]}$")
+
+    # plt.show()
+    # exit()
+
+# Save
+plt.savefig("/Users/Antares/Dropbox/Projects/PNICER/Paper/Results/extinction_law.pdf", bbox_inches="tight")
+exit()
+
+# ----------------------------------------------------------------------
+# Filter only those with all 5 detections
+# com = np.isfinite(science_data[0]) & np.isfinite(science_data[1]) & np.isfinite(science_data[2]) & \
+#     np.isfinite(science_data[3]) & np.isfinite(science_data[4])
+#
+#
+#
+# science_glon = science_glon[com]
+# science_glat = science_glat[com]
 
 
 # ----------------------------------------------------------------------
-# Run on grid
-# from multiprocessing import Pool
-# with Pool(4) as pool:
-#     dis = pool.starmap(get_square_sum, zip(jr.ravel(), hr.ravel(), i1r.ravel(), i2r.ravel()))
-# # Unpack results
-# dis, fext = zip(*dis)
-# # Get best feature extinction combination
-# features_extinction = fext[np.nanargmin(dis)]
-
-features_extinction = [2.5, 1.55, 1.0, 0.636, 0.54]
-# get_square_sum(2.5, 1.55, 0.636, 0.54)
-# print(features_extinction)
-
-# ----------------------------------------------------------------------
-# Initialize data with best combination
-science = Magnitudes(mag=science_data, err=science_error, extvec=features_extinction,
-                     lon=science_glon, lat=science_glat, names=features_names)
-control = Magnitudes(mag=control_data, err=control_error, extvec=features_extinction,
-                     lon=control_glon, lat=control_glat, names=features_names)
-
-
+# Initialize data for all combinations
+sdata = [s[fil_jh_sc & fil_hks_sc] for s in science_data]
+error = [e[fil_jh_sc & fil_hks_sc] for e in science_error]
+science = Magnitudes(mag=data, err=error, extvec=features_extinction, names=features_names)
+control = Magnitudes(mag=control_data, err=control_error, extvec=features_extinction, names=features_names)
 # Get extinction
-# ext = science.pnicer(control=control,add_colors=True).extinction
+# ext = science.pnicer(control=control, add_colors=True).extinction
 ext = science.nicer(control=control).extinction
+
+exit()
+
 
 # Get average colors in extinction bins
 step = 0.3
@@ -173,7 +226,6 @@ for ak in np.arange(-1, 15.01, step=step):
         hks.append(hk_avg)
         ksi1.append(ksi1_avg)
         i1i2.append(i1i2_avg)
-
 
 # Get slopes
 slopes = science.mag2color().extvec.extvec
@@ -236,6 +288,3 @@ for idx in range(len(ax_all)):
     if idx in [2, 4, 5]:
         ax_all[idx].axes.yaxis.set_ticklabels([])
 
-
-# Save
-plt.savefig("/Users/Antares/Dropbox/Projects/PNICER/Paper/Results/extinction_law.pdf", bbox_inches="tight")

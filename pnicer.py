@@ -950,12 +950,16 @@ class Magnitudes(DataBase):
         # Now we have to mask the large variance data again
         var[~np.isfinite(ext)] = np.nan
 
+        # Generate intrinsic source color list
+        rcolor_0 = np.repeat(color_0, self.n_data).reshape([len(color_0), self.n_data])
+        rcolor_0[:, ~np.isfinite(ext)] = np.nan
+
         if n_features is not None:
             mask = np.where(np.sum(np.vstack(self.features_masks), axis=0, dtype=int) < n_features)[0]
-            ext[mask] = var[mask] = np.nan
+            ext[mask] = var[mask] = rcolor_0[:, mask] = np.nan
 
         # ...and return :)
-        return Extinction(db=self, extinction=ext.data, variance=var)
+        return Extinction(db=self, extinction=ext.data, variance=var, intrinsic=rcolor_0)
 
 
 # ----------------------------------------------------------------------
@@ -1115,12 +1119,13 @@ class ExtinctionVector:
 # ----------------------------------------------------------------------
 class Extinction:
 
-    def __init__(self, db, extinction, variance=None):
+    def __init__(self, db, extinction, variance=None, intrinsic=None):
         """
         Class for extinction measurements
         :param db: Base class from which the extinction was derived
         :param extinction: extinction measurements
         :param variance: extinction variance
+        :param intrinsic: Intrisic feature set for each source
         """
 
         # Check if db is really a DataBase instance
@@ -1131,6 +1136,9 @@ class Extinction:
         self.variance = variance
         if self.variance is None:
             self.variance = np.zeros_like(extinction)
+        self.intrinsic = intrinsic
+        if self.intrinsic is None:
+            self.intrinsic = np.zeros_like(extinction)
 
         # extinction and variance must have same length
         if len(self.extinction) != len(self.variance):

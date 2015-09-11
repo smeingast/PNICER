@@ -43,3 +43,16 @@ science_error = [science_dummy[n][::skip] for n in errors_names]
 control_data = [control_dummy[n] for n in features_names]
 control_error = [control_dummy[n] for n in errors_names]
 
+
+# ----------------------------------------------------------------------
+# Initialize data with best combination
+science = Magnitudes(mag=science_data, err=science_error, extvec=features_extinction,
+                     lon=science_glon, lat=science_glat, names=features_names)
+control = Magnitudes(mag=control_data, err=control_error, extvec=features_extinction,
+                     lon=control_glon, lat=control_glat, names=features_names)
+
+
+# ----------------------------------------------------------------------
+#
+def get_covar(xi, yi):
+    return np.nansum((xi - np.mean(xi) * (yi - np.mean(yi)))) / len(xi)
