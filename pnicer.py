@@ -307,6 +307,7 @@ class DataBase:
 
         # Create intrinsic color dictionary
         color0_dict = {k: [] for k in self.colors_names}
+        color0_weig = {k: [] for k in self.colors_names}
 
         # Here we loop over color combinations since this is faster
         i = 0
@@ -325,6 +326,7 @@ class DataBase:
             for c, cidx in zip(sc.colors_names, range(len(sc.colors_names))):
                 try:
                     color0_dict[c].append(color0[cidx])
+                    color0_weig[c].append(sc.n_features**2)
                 except KeyError:
                     pass
 
@@ -336,10 +338,14 @@ class DataBase:
             i += 1
 
         # Loop through color0_dict and calculate average
-        for key, value in color0_dict.items():
+        for key in color0_dict.keys():
+            # Get weighted average
+            values = np.ma.masked_invalid(np.array(color0_dict[key]))
+            color0_dict[key] = np.ma.average(values, axis=0, weights=color0_weig[key]).data
+            # Optionally with a median
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                color0_dict[key] = np.nanmean(np.array(value), axis=0)
+                # color0_dict[key] = np.nanmedian(np.array(color0_dict[key]), axis=0)
 
         # Get final list of intrinsic colors while forcing the original order
         self._color0 = []

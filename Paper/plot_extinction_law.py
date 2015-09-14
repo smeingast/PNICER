@@ -182,6 +182,7 @@ for idx, pidx in zip(data_index, plot_index):
         ax.set_ylabel("$E_{K_S - [3.6]}$")
 
     # plt.show()
+    print()
     # exit()
 
 # Save
