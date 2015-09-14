@@ -23,7 +23,7 @@ emap_herschel_path = "/Users/Antares/Dropbox/Data/Orion/Other/Orion_Planck_Hersc
 # Load data
 skip = 1
 cskip = 1
-n_features = 5
+n_features = 3
 
 science_dummy = fits.open(science_path)[1].data
 control_dummy = fits.open(control_path)[1].data
@@ -66,24 +66,24 @@ science = Magnitudes(mag=science_data, err=science_error, extvec=features_extinc
 control = Magnitudes(mag=control_data, err=control_error, extvec=features_extinction,
                      lon=control_glon, lat=control_glat, names=features_names)
 
-science_color = science.mag2color()
-print(science_color.extvec.extvec)
-exit()
-control_color = control.mag2color()
+# science_color = science.mag2color()
+# control_color = control.mag2color()
 
 
 # ----------------------------------------------------------------------
 # Get NICER and PNICER extinctions
 # ext_pnicer = science_color.pnicer(control=control_color)
 ext_pnicer = science.pnicer(control=control, add_colors=True)
-ext_pnicer.save_fits(path="/Users/Antares/Desktop/pnicer_table.fits")
 ext_nicer = science.nicer(control=control)
-ext_nicer.save_fits(path="/Users/Antares/Desktop/nicer_table.fits")
+
+# Save extinction data
+# ext_pnicer.save_fits(path="/Users/Antares/Desktop/pnicer_table.fits")
+# ext_nicer.save_fits(path="/Users/Antares/Desktop/nicer_table.fits")
 
 
 # ----------------------------------------------------------------------
 # Build extinction maps
-bandwidth, metric, sampling, nicest, fwhm = 2/60, "gaussian", 2, False, True
+bandwidth, metric, sampling, nicest, fwhm = 2/60, "gaussian", 2, True, True
 map1 = ext_pnicer.build_map(bandwidth=bandwidth, metric=metric, sampling=sampling, nicest=nicest, use_fwhm=fwhm)
 map1.save_fits(path="/Users/Antares/Desktop/pnicer_map.fits")
 map2 = ext_nicer.build_map(bandwidth=bandwidth, metric=metric, sampling=sampling, nicest=nicest, use_fwhm=fwhm)

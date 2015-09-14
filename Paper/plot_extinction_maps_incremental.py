@@ -32,7 +32,7 @@ irac1_coverage_header = fits.open(irac1_coverage_path)[0].header
 
 # ----------------------------------------------------------------------
 # Load data
-skip = 10
+skip = 1
 
 # Set feature parameters
 features_names = ["J", "H", "Ks", "IRAC1", "IRAC2"]
@@ -54,15 +54,14 @@ control_glat = control_dummy["GLAT"][::skip]
 def build_map(in_ext, out_name, irac1contour=False):
     """
     Function to build incremental extinction map plots
-    :param in_ext:
-    :param out_name: Output plot path
-    :return:
+    :param in_ext: Input extinction vector
+    :param out_name: Output plot figure name
+    :param irac1contour: Whether the IRAC1 coverage should be drawn as contour
     """
 
     # Set map parameters
-    bandwidth, metric, sampling, nicest, fwhm = 10/60, "epanechnikov", 2, False, False
+    bandwidth, metric, sampling, nicest, fwhm = 5/60, "epanechnikov", 2, False, False
 
-    # ----------------------------------------------------------------------
     # Loop over number of features and get extinction map
     nicer, pnicer = [], []
     for n_features in range(3, 6):
@@ -94,7 +93,6 @@ def build_map(in_ext, out_name, irac1contour=False):
         pnicer.append(ext_pnicer.build_map(bandwidth=bandwidth, metric=metric,
                                            sampling=sampling, nicest=nicest, use_fwhm=fwhm))
 
-    # ----------------------------------------------------------------------
     # Create figure
     fig = plt.figure(figsize=[14, 4])
     grid = GridSpec(ncols=2, nrows=2, bottom=0.05, top=0.95, left=0.05, right=0.9, hspace=0.05, wspace=0)
@@ -156,15 +154,18 @@ def build_map(in_ext, out_name, irac1contour=False):
         lat.display_minor_ticks(True)
         lat.set_minor_frequency(2)
 
-    # ----------------------------------------------------------------------
+        # Annotate
+        # ax.annotate("test", xy=(0.04, 0.9), xycoords="axes fraction", ha="left", va="top")
+
     # Save figure
     plt.savefig(results_path + out_name, bbox_inches="tight")
 
 
 # ----------------------------------------------------------------------
 # Build baseline map
-build_map(in_ext=[2.5, 1.55, 1.0, 0.636, 0.54], out_name="extinction_maps_incremental.pdf")
+build_map(in_ext=[2.5, 1.55, 1.0, 0.636, 0.54], out_name="extinction_maps_incremental.pdf", irac1contour=True)
 exit()
+
 
 # ----------------------------------------------------------------------
 # Build incremental maps
@@ -172,9 +173,7 @@ i1, i2 = np.arange(0.2, 0.8, 0.1), np.arange(0.2, 0.8, 0.1)
 i1, i2 = np.meshgrid(i1, i2)
 extinction = [[2.5, 1.55, 1.0, a, b] for a, b in zip(i1.ravel(), i2.ravel())]
 
-a, b = 1, 1
-oa, ob = a, b
 for ext in extinction:
 
     outname = "extinction_maps_incremental_" + "-".join([str(x) for x in ext]) + ".pdf"
-    a, b = build_map(in_ext=ext, out_name=outname)
+    build_map(in_ext=ext, out_name=outname)

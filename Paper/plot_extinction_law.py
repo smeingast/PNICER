@@ -202,8 +202,9 @@ control_error = [control_dummy[n] for n in errors_names]
 science = Magnitudes(mag=science_data, err=science_error, extvec=features_extinction, names=features_names)
 control = Magnitudes(mag=control_data, err=control_error, extvec=features_extinction, names=features_names)
 # Get extinction
+ext = science.pnicer(control=control, add_colors=True)
 # ext = science.mag2color().pnicer(control=control.mag2color())
-ext = science.nicer(control=control)
+# ext = science.nicer(control=control)
 
 
 # Get average colors in extinction bins
