@@ -162,9 +162,14 @@ def build_map(in_ext, out_name, irac1contour=False):
 
 
 # ----------------------------------------------------------------------
-# Build baseline map
-# build_map(in_ext=[2.55, 1.55, 1.0, 0.56, 0.43], out_name="extinction_maps_incremental.pdf", irac1contour=True)
-# exit()
+# Build baseline maps
+# Indebetouw
+# build_map(in_ext=[2.5, 1.55, 1.0, 0.56, 0.43], out_name="extinction_maps_incremental.pdf", irac1contour=True)
+# Flaherty
+# build_map(in_ext=[2.5, 1.55, 1.0, 0.636, 0.54], out_name="extinction_maps_incremental.pdf", irac1contour=True)
+# My LINES
+build_map(in_ext=[2.49, 1.55, 1.0, 0.63, 0.53], out_name="extinction_maps_incremental.pdf", irac1contour=True)
+exit()
 
 # ----------------------------------------------------------------------
 # Build incremental maps

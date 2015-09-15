@@ -8,6 +8,7 @@ from astropy.io import fits
 from pnicer import Magnitudes
 from matplotlib.pyplot import GridSpec
 from matplotlib.ticker import MultipleLocator
+from MyFunctions import point_density
 
 
 # ----------------------------------------------------------------------
@@ -59,9 +60,13 @@ ahr = (1.4, 1.7)
 a1r = (0.5, 0.7)
 a2r = (0.3, 0.6)
 
+# Define baseline extinction
+a_hk = 1.55
+
 
 # ----------------------------------------------------------------------
 # Make pre-selection of data
+ext = science_color.pnicer(control=control_color).extinction
 for data in [science_color, control_color]:
     # Define filter
     with warnings.catch_warnings():
@@ -74,19 +79,21 @@ for data in [science_color, control_color]:
               (data.features[0] + 1 < (ajr[1] - ahr[1]) / (a1r[1] - a2r[1]) * (data.features[3] + 0.2)) & \
               (np.nanmax(np.array(data.features_err), axis=0) < 0.1)
 
+        # Test no filtering
         # fil = data.combined_mask
 
     if data == science_color:
-        sfil = fil.copy()
+        sfil = fil & (ext > 0.1)
+        # sfil = fil.copy()
     else:
         cfil = fil.copy()
 
 
 # ----------------------------------------------------------------------
 # Plot pre-selection of data
-fig1 = plt.figure(figsize=[20, 10])
-grid1 = GridSpec(ncols=3, nrows=3, bottom=0.05, top=0.95, left=0.05, right=0.45, hspace=0.01, wspace=0.01)
-grid2 = GridSpec(ncols=3, nrows=3, bottom=0.05, top=0.95, left=0.50, right=0.90, hspace=0.01, wspace=0.01)
+fig1 = plt.figure(figsize=[17, 7.55])
+grid1 = GridSpec(ncols=3, nrows=3, bottom=0.05, top=0.95, left=0.05, right=0.45, hspace=0, wspace=0)
+grid2 = GridSpec(ncols=3, nrows=3, bottom=0.05, top=0.95, left=0.50, right=0.90, hspace=0, wspace=0)
 
 plot_index = [8, 7, 6, 4, 3, 0]
 data_index = [[1, 0], [2, 0], [3, 0], [2, 1], [3, 1], [3, 2]]
@@ -114,6 +121,9 @@ for (idx1, idx2), pidx in zip(data_index, plot_index):
         # limits
         ax.set_xlim(-0.5, 3)
         ax.set_ylim(-0.5, 3)
+
+        # Force aspect ratio
+        # ax.set_aspect(1)
 
         # Ticker
         ax.xaxis.set_major_locator(MultipleLocator(1))
@@ -198,31 +208,21 @@ plot_index = [0, 1, 2]
 data_index = [[1, 2, 2, 0], [1, 2, 2, 3], [1, 2, 2, 4]]
 for (idx1, idx2, idx3, idx4), pidx in zip(data_index, plot_index):
 
-    # Add subplot
-    ax = plt.subplot(grid[pidx])
-
-    # Plot
-    ax.scatter(science.features[idx1][sfil] - science.features[idx2][sfil],
-               science.features[idx3][sfil] - science.features[idx4][sfil], lw=0, s=5, alpha=.1)
-
-    # Limits
-    ax.set_xlim(-0.5, 3.5)
-    ax.set_ylim(-0.5, 3.5)
+    # Get shortcut for data
+    xdata = science.features[idx1][sfil] - science.features[idx2][sfil]
+    ydata = science.features[idx3][sfil] - science.features[idx4][sfil]
 
     # Get ordinary least squares slope
-    beta_ols = get_beta_ols(xj=science.features[idx1][sfil] - science.features[idx2][sfil],
-                            yj=science.features[idx3][sfil] - science.features[idx4][sfil])
+    beta_ols = get_beta_ols(xj=xdata, yj=ydata)
 
     # Get BCES slope
-    beta_bces = get_beta_bces(x_sc=science.features[idx1][sfil] - science.features[idx2][sfil],
-                              y_sc=science.features[idx3][sfil] - science.features[idx4][sfil],
+    beta_bces = get_beta_bces(x_sc=xdata, y_sc=ydata,
                               cov_err_sc=-np.mean(science.features_err[idx2][sfil])**2,
                               var_err_sc=np.mean(science.features_err[idx1][sfil])**2 +
                               np.mean(science.features_err[idx2][sfil])**2)
 
     # Get LINES slope
-    beta_lines = get_beta_lines(x_sc=science.features[idx1][sfil] - science.features[idx2][sfil],
-                                y_sc=science.features[idx3][sfil] - science.features[idx4][sfil],
+    beta_lines = get_beta_lines(x_sc=xdata, y_sc=ydata,
                                 x_cf=control.features[idx1][cfil] - control.features[idx2][cfil],
                                 y_cf=control.features[idx3][cfil] - control.features[idx4][cfil],
                                 cov_err_sc=-np.mean(science.features_err[idx2][sfil])**2,
@@ -232,11 +232,54 @@ for (idx1, idx2, idx3, idx4), pidx in zip(data_index, plot_index):
                                 var_err_cf=np.mean(control.features_err[idx1][cfil])**2 +
                                 np.mean(control.features_err[idx2][cfil])**2)
 
+    # Get slopes
+    slope_ols = 1 - beta_ols * (a_hk - 1)
+    slope_bces = 1 - beta_bces * (a_hk - 1)
+    slope_lines = 1 - beta_lines * (a_hk - 1)
+
+    # Print results
     print(science.features_names[idx4])
-    print("OLS:", 1 - beta_ols * 0.55)
-    print("BCES:", 1 - beta_bces * 0.55)
-    print("LINES:", 1 - beta_lines * 0.55)
+    print("OLS:", 1 - beta_ols * (a_hk - 1))
+    print("BCES:", 1 - beta_bces * (a_hk - 1))
+    print("LINES:", 1 - beta_lines * (a_hk - 1))
     print()
 
+    # Add subplot
+    ax = plt.subplot(grid[pidx])
+
+    # Get point density
+    dens = point_density(xdata=xdata, ydata=ydata, xsize=0.1, ysize=0.1)
+
+    # Plot data
+    ax.scatter(xdata, ydata, lw=0, s=2, alpha=1, c=dens)
+
+    # Plot slope
+    ax.plot(np.arange(-1, 5, 1), beta_lines * np.arange(-1, 5, 1), color="black", lw=2, linestyle="dashed")
+
+    # Limits
+    ax.set_xlim(-0.5, 3.5)
+    if pidx > 0:
+        ax.set_ylim(-0.5, 3.5)
+    else:
+        ax.set_ylim(-3.5, 0.5)
+
+    # Labels
+    # if pidx > 1:
+    #     ax.axes.yaxis.set_ticklabels([])
+    if pidx == 0:
+        ax.set_ylabel("$K_S - \lambda$")
+    ax.set_xlabel("$H - K_S$")
+
+    # Ticker
+    ax.xaxis.set_major_locator(MultipleLocator(1))
+    ax.xaxis.set_minor_locator(MultipleLocator(0.2))
+    ax.yaxis.set_major_locator(MultipleLocator(1))
+    ax.yaxis.set_minor_locator(MultipleLocator(0.2))
+
+    # Force aspect ratio
+    ax.set_aspect(1)
+
+
+# Save figure
 plt.savefig(results_path + "extinction_law_sources_fit.png", bbox_inches="tight")
 plt.close()
