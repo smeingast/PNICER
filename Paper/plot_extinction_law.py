@@ -22,8 +22,8 @@ cmap = brewer2mpl.get_map("YlOrRd", "Sequential", number=9, reverse=False).get_m
 
 # ----------------------------------------------------------------------
 # Helper function
-def get_distance(sl, inter, x0, y0):
-    return np.abs(sl * x0 - y0 + inter) / np.sqrt(sl**2 + 1)
+# def get_distance(sl, inter, x0, y0):
+#     return np.abs(sl * x0 - y0 + inter) / np.sqrt(sl**2 + 1)
 
 
 # ----------------------------------------------------------------------
@@ -202,8 +202,8 @@ control_error = [control_dummy[n] for n in errors_names]
 science = Magnitudes(mag=science_data, err=science_error, extvec=features_extinction, names=features_names)
 control = Magnitudes(mag=control_data, err=control_error, extvec=features_extinction, names=features_names)
 # Get extinction
-ext = science.pnicer(control=control, add_colors=True)
-# ext = science.mag2color().pnicer(control=control.mag2color())
+# ext = science.pnicer(control=control, add_colors=True)
+ext = science.mag2color().pnicer(control=control.mag2color())
 # ext = science.nicer(control=control)
 
 

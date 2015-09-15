@@ -163,17 +163,20 @@ def build_map(in_ext, out_name, irac1contour=False):
 
 # ----------------------------------------------------------------------
 # Build baseline map
-build_map(in_ext=[2.5, 1.55, 1.0, 0.636, 0.54], out_name="extinction_maps_incremental.pdf", irac1contour=True)
-exit()
-
+# build_map(in_ext=[2.55, 1.55, 1.0, 0.56, 0.43], out_name="extinction_maps_incremental.pdf", irac1contour=True)
+# exit()
 
 # ----------------------------------------------------------------------
 # Build incremental maps
-i1, i2 = np.arange(0.2, 0.8, 0.1), np.arange(0.2, 0.8, 0.1)
-i1, i2 = np.meshgrid(i1, i2)
+i1, i2 = np.meshgrid(np.arange(0.50, 0.63, 0.06), np.arange(0.35, 0.52, 0.08))
+# print(i1)
+# print()
+# print(i2)
+# print()
+# exit()
 extinction = [[2.5, 1.55, 1.0, a, b] for a, b in zip(i1.ravel(), i2.ravel())]
 
 for ext in extinction:
 
     outname = "extinction_maps_incremental_" + "-".join([str(x) for x in ext]) + ".pdf"
-    build_map(in_ext=ext, out_name=outname)
+    build_map(in_ext=ext, out_name=outname, irac1contour=True)
