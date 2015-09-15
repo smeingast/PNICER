@@ -165,6 +165,12 @@ def get_beta_ols(xj, yj):
     return get_covar(xi=xj, yi=yj) / np.var(xj)
 
 
+def get_beta_bces(x_sc, y_sc, cov_err_sc, var_err_sc):
+    upper = get_covar(x_sc, y_sc) - cov_err_sc
+    lower = np.var(x_sc) - var_err_sc
+    return upper / lower
+
+
 def get_beta_lines(x_sc, y_sc, x_cf, y_cf, cov_err_sc, cov_err_cf, var_err_sc, var_err_cf):
     """
     Get slope of distribution with LINES
@@ -190,7 +196,6 @@ grid = GridSpec(ncols=3, nrows=1, bottom=0.05, top=0.95, left=0.05, right=0.95, 
 
 plot_index = [0, 1, 2]
 data_index = [[1, 2, 2, 0], [1, 2, 2, 3], [1, 2, 2, 4]]
-
 for (idx1, idx2, idx3, idx4), pidx in zip(data_index, plot_index):
 
     # Add subplot
@@ -208,6 +213,13 @@ for (idx1, idx2, idx3, idx4), pidx in zip(data_index, plot_index):
     beta_ols = get_beta_ols(xj=science.features[idx1][sfil] - science.features[idx2][sfil],
                             yj=science.features[idx3][sfil] - science.features[idx4][sfil])
 
+    # Get BCES slope
+    beta_bces = get_beta_bces(x_sc=science.features[idx1][sfil] - science.features[idx2][sfil],
+                              y_sc=science.features[idx3][sfil] - science.features[idx4][sfil],
+                              cov_err_sc=-np.mean(science.features_err[idx2][sfil])**2,
+                              var_err_sc=np.mean(science.features_err[idx1][sfil])**2 +
+                              np.mean(science.features_err[idx2][sfil])**2)
+
     # Get LINES slope
     beta_lines = get_beta_lines(x_sc=science.features[idx1][sfil] - science.features[idx2][sfil],
                                 y_sc=science.features[idx3][sfil] - science.features[idx4][sfil],
@@ -222,6 +234,7 @@ for (idx1, idx2, idx3, idx4), pidx in zip(data_index, plot_index):
 
     print(science.features_names[idx4])
     print("OLS:", 1 - beta_ols * 0.55)
+    print("BCES:", 1 - beta_bces * 0.55)
     print("LINES:", 1 - beta_lines * 0.55)
     print()
 
