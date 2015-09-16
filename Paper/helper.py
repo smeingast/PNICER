@@ -6,6 +6,51 @@ __author__ = 'Stefan Meingast'
 # Import stuff
 import numpy as np
 
+from astropy.io import fits
+from pnicer import Magnitudes
+
+
+# ----------------------------------------------------------------------
+# PNICER initialization functions
+def pnicer_ini(skip_science, skip_control, n_features=5, color=False):
+
+    # Define file paths
+    science_path = "/Users/Antares/Dropbox/Data/Orion/VISION/Catalog/VISION_+_Spitzer_s_noYSO.fits"
+    control_path = "/Users/Antares/Dropbox/Data/Orion/VISION/Catalog/VISION_CF+_Spitzer_s.fits"
+
+    # Load data
+    science_dummy = fits.open(science_path)[1].data
+    control_dummy = fits.open(control_path)[1].data
+
+    # Coordinates
+    science_glon = science_dummy["GLON"][::skip_science]
+    science_glat = science_dummy["GLAT"][::skip_science]
+    control_glon = control_dummy["GLON"][::skip_control]
+    control_glat = control_dummy["GLAT"][::skip_control]
+
+    # Definitions
+    features_names = ["J", "H", "Ks", "IRAC1", "IRAC2"]
+    errors_names = ["J_err", "H_err", "Ks_err", "IRAC1_err", "IRAC2_err"]
+    features_extinction = [2.5, 1.55, 1.0, 0.636, 0.54]
+
+    # Photometry
+    science_data = [science_dummy[n][::skip_science] for n in features_names[:n_features]]
+    science_error = [science_dummy[n][::skip_science] for n in errors_names[:n_features]]
+    control_data = [control_dummy[n][::skip_control] for n in features_names[:n_features]]
+    control_error = [control_dummy[n][::skip_control] for n in errors_names[:n_features]]
+
+    # Initialize data with PNICER
+    science = Magnitudes(mag=science_data, err=science_error, extvec=features_extinction,
+                         lon=science_glon, lat=science_glat, names=features_names)
+    control = Magnitudes(mag=control_data, err=control_error, extvec=features_extinction,
+                         lon=control_glon, lat=control_glat, names=features_names)
+
+    if color:
+        science = science.mag2color()
+        control = control.mag2color()
+
+    return science, control
+
 
 # ----------------------------------------------------------------------
 # Define helper functions for slope determination
