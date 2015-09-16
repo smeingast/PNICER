@@ -14,6 +14,9 @@ from pnicer import Magnitudes
 # PNICER initialization functions
 def pnicer_ini(skip_science, skip_control, n_features=5, color=False):
 
+    # Type assertion
+    assert isinstance(skip_science, int) & isinstance(skip_control, int) & isinstance(n_features, int)
+
     # Define file paths
     science_path = "/Users/Antares/Dropbox/Data/Orion/VISION/Catalog/VISION_+_Spitzer_s_noYSO.fits"
     control_path = "/Users/Antares/Dropbox/Data/Orion/VISION/Catalog/VISION_CF+_Spitzer_s.fits"
