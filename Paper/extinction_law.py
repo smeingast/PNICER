@@ -1,6 +1,7 @@
 # ----------------------------------------------------------------------
 # Import stuff
 import warnings
+import brewer2mpl
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -16,6 +17,11 @@ from MyFunctions import point_density
 science_path = "/Users/Antares/Dropbox/Data/Orion/VISION/Catalog/VISION_+_Spitzer_s_noYSO.fits"
 control_path = "/Users/Antares/Dropbox/Data/Orion/VISION/Catalog/VISION_CF+_Spitzer_s.fits"
 results_path = "/Users/Antares/Dropbox/Projects/PNICER/Paper/Results/"
+
+
+# ----------------------------------------------------------------------
+# Load colorbrewer colormap
+cmap = brewer2mpl.get_map("YlGnBu", "Sequential", number=9, reverse=True).get_mpl_colormap(N=11, gamma=1)
 
 
 # ----------------------------------------------------------------------
@@ -82,11 +88,11 @@ for data in [science_color, control_color]:
         # Test no filtering
         # fil = data.combined_mask
 
-    if data == science_color:
-        sfil = fil & (ext > 0.1)
-        # sfil = fil.copy()
-    else:
-        cfil = fil.copy()
+        if data == science_color:
+            sfil = fil & (ext > 0.1)
+            # sfil = fil.copy()
+        else:
+            cfil = fil.copy()
 
 
 # ----------------------------------------------------------------------
@@ -149,7 +155,7 @@ for (idx1, idx2), pidx in zip(data_index, plot_index):
             ax.set_ylabel("$K_S - [3.6]$")
 
 # Save figure
-plt.savefig(results_path + "extinction_law_sources.png", bbox_inches="tight")
+plt.savefig(results_path + "extinction_law_sources.png", bbox_inches="tight", dpi=300)
 plt.close()
 
 
@@ -251,7 +257,7 @@ for (idx1, idx2, idx3, idx4), pidx in zip(data_index, plot_index):
     dens = point_density(xdata=xdata, ydata=ydata, xsize=0.1, ysize=0.1)
 
     # Plot data
-    ax.scatter(xdata, ydata, lw=0, s=2, alpha=1, c=dens)
+    ax.scatter(xdata, ydata, lw=0, s=2, alpha=1, c=dens, cmap=cmap)
 
     # Plot slope
     ax.plot(np.arange(-1, 5, 1), beta_lines * np.arange(-1, 5, 1), color="black", lw=2, linestyle="dashed")
@@ -281,5 +287,5 @@ for (idx1, idx2, idx3, idx4), pidx in zip(data_index, plot_index):
 
 
 # Save figure
-plt.savefig(results_path + "extinction_law_sources_fit.png", bbox_inches="tight")
+plt.savefig(results_path + "extinction_law_sources_fit.png", bbox_inches="tight", dpi=300)
 plt.close()
