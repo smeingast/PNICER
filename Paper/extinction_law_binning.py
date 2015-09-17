@@ -295,4 +295,4 @@ for idx in range(len(ax_all)):
 
 
 # Save
-plt.savefig("/Users/Antares/Dropbox/Projects/PNICER/Paper/Results/extinction_law.pdf", bbox_inches="tight")
+plt.savefig("/Users/Antares/Dropbox/Projects/PNICER/Paper/Results/extinction_law_binning.pdf", bbox_inches="tight")

@@ -123,7 +123,7 @@ for (idx1, idx2), pidx in zip(data_index, plot_index):
             ax.set_ylabel("$K_S - [3.6]$")
 
 # Save figure
-plt.savefig(results_path + "extinction_law_sources.png", bbox_inches="tight", dpi=300)
+plt.savefig(results_path + "extinction_law_linfit.png", bbox_inches="tight", dpi=300)
 plt.close()
 
 
@@ -209,5 +209,5 @@ for (idx1, idx2, idx3, idx4), pidx in zip(data_index, plot_index):
 
 
 # Save figure
-plt.savefig(results_path + "extinction_law_sources_fit.png", bbox_inches="tight", dpi=300)
+plt.savefig(results_path + "extinction_law_linfit_fit.png", bbox_inches="tight", dpi=300)
 plt.close()
