@@ -5,18 +5,14 @@ import brewer2mpl
 import numpy as np
 import matplotlib.pyplot as plt
 
-from astropy.io import fits
-from pnicer import Magnitudes
 from matplotlib.pyplot import GridSpec
 from matplotlib.ticker import MultipleLocator
 from MyFunctions import point_density
-from helper import get_beta_ols, get_beta_bces, get_beta_lines
+from helper import get_beta_ols, get_beta_bces, get_beta_lines, pnicer_ini
 
 
 # ----------------------------------------------------------------------
 # Define file paths
-science_path = "/Users/Antares/Dropbox/Data/Orion/VISION/Catalog/VISION_+_Spitzer_s_noYSO.fits"
-control_path = "/Users/Antares/Dropbox/Data/Orion/VISION/Catalog/VISION_CF+_Spitzer_s.fits"
 results_path = "/Users/Antares/Dropbox/Projects/PNICER/Paper/Results/"
 
 
@@ -26,38 +22,9 @@ cmap = brewer2mpl.get_map("YlGnBu", "Sequential", number=9, reverse=True).get_mp
 
 
 # ----------------------------------------------------------------------
-# Load data
-skip = 1
-science_dummy = fits.open(science_path)[1].data
-control_dummy = fits.open(control_path)[1].data
-
-# Coordinates
-science_glon = science_dummy["GLON"][::skip]
-science_glat = science_dummy["GLAT"][::skip]
-control_glon = control_dummy["GLON"][::skip]
-control_glat = control_dummy["GLAT"][::skip]
-
-# Definitions
-features_names = ["J", "H", "Ks", "IRAC1", "IRAC2"]
-errors_names = ["J_err", "H_err", "Ks_err", "IRAC1_err", "IRAC2_err"]
-features_extinction = [2.5, 1.55, 1.0, 0.636, 0.54]
-
-# Photometry
-science_data = [science_dummy[n][::skip] for n in features_names]
-science_error = [science_dummy[n][::skip] for n in errors_names]
-control_data = [control_dummy[n][::skip] for n in features_names]
-control_error = [control_dummy[n][::skip] for n in errors_names]
-
-
-# ----------------------------------------------------------------------
-# Initialize data with PNICER
-science = Magnitudes(mag=science_data, err=science_error, extvec=features_extinction,
-                     lon=science_glon, lat=science_glat, names=features_names)
-control = Magnitudes(mag=control_data, err=control_error, extvec=features_extinction,
-                     lon=control_glon, lat=control_glat, names=features_names)
-
-science_color = science.mag2color()
-control_color = control.mag2color()
+# Intialize PNICER
+science, control = pnicer_ini(skip_science=1, skip_control=1, n_features=5, color=False)
+science_color, control_color = science.mag2color(), control.mag2color()
 
 
 # ----------------------------------------------------------------------
@@ -178,20 +145,20 @@ for (idx1, idx2, idx3, idx4), pidx in zip(data_index, plot_index):
 
     # Get BCES slope
     beta_bces = get_beta_bces(x_sc=xdata, y_sc=ydata,
-                              cov_err_sc=-np.mean(science.features_err[idx2][sfil])**2,
-                              var_err_sc=np.mean(science.features_err[idx1][sfil])**2 +
-                              np.mean(science.features_err[idx2][sfil])**2)
+                              cov_err_sc=-np.mean(science.features_err[idx2][sfil]) ** 2,
+                              var_err_sc=np.mean(science.features_err[idx1][sfil]) ** 2 +
+                              np.mean(science.features_err[idx2][sfil]) ** 2)
 
     # Get LINES slope
     beta_lines = get_beta_lines(x_sc=xdata, y_sc=ydata,
                                 x_cf=control.features[idx1][cfil] - control.features[idx2][cfil],
                                 y_cf=control.features[idx3][cfil] - control.features[idx4][cfil],
-                                cov_err_sc=-np.mean(science.features_err[idx2][sfil])**2,
-                                cov_err_cf=-np.mean(control.features_err[idx2][cfil])**2,
-                                var_err_sc=np.mean(science.features_err[idx1][sfil])**2 +
-                                np.mean(science.features_err[idx2][sfil])**2,
-                                var_err_cf=np.mean(control.features_err[idx1][cfil])**2 +
-                                np.mean(control.features_err[idx2][cfil])**2)
+                                cov_err_sc=-np.mean(science.features_err[idx2][sfil]) ** 2,
+                                cov_err_cf=-np.mean(control.features_err[idx2][cfil]) ** 2,
+                                var_err_sc=np.mean(science.features_err[idx1][sfil]) ** 2 +
+                                np.mean(science.features_err[idx2][sfil]) ** 2,
+                                var_err_cf=np.mean(control.features_err[idx1][cfil]) ** 2 +
+                                np.mean(control.features_err[idx2][cfil]) ** 2)
 
     # Get slopes
     slope_ols = 1 - beta_ols * (a_hk - 1)
