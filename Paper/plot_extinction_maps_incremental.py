@@ -168,7 +168,7 @@ def build_map(in_ext, out_name, irac1contour=False):
 # Flaherty
 # build_map(in_ext=[2.5, 1.55, 1.0, 0.636, 0.54], out_name="extinction_maps_incremental.pdf", irac1contour=True)
 # My LINES
-build_map(in_ext=[2.49, 1.55, 1.0, 0.63, 0.53], out_name="extinction_maps_incremental.pdf", irac1contour=True)
+build_map(in_ext=[2.47, 1.55, 1.0, 0.63, 0.54], out_name="extinction_maps_incremental.pdf", irac1contour=True)
 exit()
 
 # ----------------------------------------------------------------------

@@ -32,6 +32,8 @@ science_color, control_color = science.mag2color(), control.mag2color()
 # Additionally load galaxy classifier
 class_sex_science = fits.open(science_path)[1].data["class_sex"]
 class_sex_control = fits.open(control_path)[1].data["class_sex"]
+class_cog_science = fits.open(science_path)[1].data["class_cog"]
+class_cog_control = fits.open(control_path)[1].data["class_cog"]
 
 
 # ----------------------------------------------------------------------
@@ -42,17 +44,17 @@ for d in [science.dict, control.dict]:
     # Define filter
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        fil = (d["J"] > 0) & (d["H"] > 0) & (d["Ks"] > 0) & (d["IRAC1"] < 15) & (d["IRAC2"] > 0) & \
-              (d["IRAC1_err"] < 0.1)
+        fil = (d["J"] > 0) & (d["H"] > 0) & (d["Ks"] < 16) & (d["IRAC1"] > 0) & (d["IRAC2"] > 0) & \
+              (d["IRAC1_err"] < 0.1) & (d["Ks_err"] < 0.1)
 
         # Test no filtering
         # fil = data.combined_mask
 
         if d == science.dict:
-            sfil = fil & (ext > 0.3) & (class_sex_science > 0.8)
+            sfil = fil & (ext > 0.3) & (class_sex_science > 0.8) & (class_cog_science == 1)
             # sfil = fil.copy()
         else:
-            cfil = fil.copy() & (class_sex_control > 0.8)
+            cfil = fil.copy() & (class_sex_control > 0.8) & (class_cog_control == 1)
 
 
 # # ----------------------------------------------------------------------
