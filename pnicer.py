@@ -378,10 +378,10 @@ class DataBase:
 
         # Penalize low order data
         # TODO: I guess I don't need that!
-        weight = all_var / np.array(all_n)[:, None]
+        # weight = all_var / np.array(all_n)[:, None]
 
-        ext = all_ext[np.argmin(weight, axis=0), np.arange(self.n_data)]
-        var = all_var[np.argmin(weight, axis=0), np.arange(self.n_data)]
+        ext = all_ext[np.argmin(all_var, axis=0), np.arange(self.n_data)]
+        var = all_var[np.argmin(all_var, axis=0), np.arange(self.n_data)]
         # Make error cut
         ext[var > 10] = var[var > 10] = np.nan
 

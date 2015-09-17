@@ -44,7 +44,7 @@ for d in [science.dict, control.dict]:
     # Define filter
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        fil = (d["J"] > 0) & (d["H"] > 0) & (d["Ks"] < 16) & (d["IRAC1"] > 0) & (d["IRAC2"] > 0) & \
+        fil = (d["J"] > 0) & (d["H"] > 0) & (d["Ks"] < 15) & (d["IRAC1"] > 0) & (d["IRAC2"] > 0) & \
               (d["IRAC1_err"] < 0.1) & (d["Ks_err"] < 0.1)
 
         # Test no filtering
@@ -57,67 +57,67 @@ for d in [science.dict, control.dict]:
             cfil = fil.copy() & (class_sex_control > 0.8) & (class_cog_control == 1)
 
 
-# # ----------------------------------------------------------------------
-# # Plot pre-selection of data
-# fig1 = plt.figure(figsize=[17, 7.55])
-# grid1 = GridSpec(ncols=3, nrows=3, bottom=0.05, top=0.95, left=0.05, right=0.45, hspace=0, wspace=0)
-# grid2 = GridSpec(ncols=3, nrows=3, bottom=0.05, top=0.95, left=0.50, right=0.90, hspace=0, wspace=0)
-#
-# plot_index = [8, 7, 6, 4, 3, 0]
-# data_index = [[1, 0], [2, 0], [3, 0], [2, 1], [3, 1], [3, 2]]
-# for (idx1, idx2), pidx in zip(data_index, plot_index):
-#
-#     ax1 = plt.subplot(grid1[pidx])
-#     ax2 = plt.subplot(grid2[pidx])
-#
-#     # Plot all data for science field
-#     ax1.scatter(science_color.features[idx1], science_color.features[idx2], lw=0, s=5, color="red", alpha=0.01)
-#     # Plot filtered data for science field
-#     ax1.scatter(science_color.features[idx1][sfil], science_color.features[idx2][sfil],
-#                 lw=0, s=5, color="blue", alpha=0.1)
-#
-#     # Plot all data for control field
-#     ax2.scatter(control_color.features[idx1], control_color.features[idx2], lw=0, s=5, color="red", alpha=0.01)
-#     # Plot filtered data for control field
-#     ax2.scatter(control_color.features[idx1][cfil], control_color.features[idx2][cfil],
-#                 lw=0, s=5, color="blue", alpha=0.1)
-#
-#     # Adjust axes
-#     for ax in [ax1, ax2]:
-#
-#         # limits
-#         ax.set_xlim(-0.5, 3)
-#         ax.set_ylim(-0.5, 3)
-#
-#         # Force aspect ratio
-#         # ax.set_aspect(1)
-#
-#         # Ticker
-#         ax.xaxis.set_major_locator(MultipleLocator(1))
-#         ax.xaxis.set_minor_locator(MultipleLocator(0.2))
-#         ax.yaxis.set_major_locator(MultipleLocator(1))
-#         ax.yaxis.set_minor_locator(MultipleLocator(0.2))
-#         # Remove labels
-#         if pidx < 6:
-#             ax.axes.xaxis.set_ticklabels([])
-#         if pidx in [4, 7, 8]:
-#             ax.axes.yaxis.set_ticklabels([])
-#         # set labels
-#         if pidx == 8:
-#             ax.set_xlabel("$H-K_S$")
-#         if pidx == 7:
-#             ax.set_xlabel("$K_S - [3.6]$")
-#         if pidx == 6:
-#             ax.set_xlabel("$[3.6] - [4.5]$")
-#             ax.set_ylabel("$J-H$")
-#         if pidx == 3:
-#             ax.set_ylabel("$H-K_S$")
-#         if pidx == 0:
-#             ax.set_ylabel("$K_S - [3.6]$")
-#
-# # Save figure
-# plt.savefig(results_path + "extinction_law_linfit_sources.png", bbox_inches="tight", dpi=300)
-# plt.close()
+# ----------------------------------------------------------------------
+# Plot pre-selection of data
+fig1 = plt.figure(figsize=[17, 7.55])
+grid1 = GridSpec(ncols=3, nrows=3, bottom=0.05, top=0.95, left=0.05, right=0.45, hspace=0, wspace=0)
+grid2 = GridSpec(ncols=3, nrows=3, bottom=0.05, top=0.95, left=0.50, right=0.90, hspace=0, wspace=0)
+
+plot_index = [8, 7, 6, 4, 3, 0]
+data_index = [[1, 0], [2, 0], [3, 0], [2, 1], [3, 1], [3, 2]]
+for (idx1, idx2), pidx in zip(data_index, plot_index):
+
+    ax1 = plt.subplot(grid1[pidx])
+    ax2 = plt.subplot(grid2[pidx])
+
+    # Plot all data for science field
+    ax1.scatter(science_color.features[idx1], science_color.features[idx2], lw=0, s=5, color="red", alpha=0.01)
+    # Plot filtered data for science field
+    ax1.scatter(science_color.features[idx1][sfil], science_color.features[idx2][sfil],
+                lw=0, s=5, color="blue", alpha=0.1)
+
+    # Plot all data for control field
+    ax2.scatter(control_color.features[idx1], control_color.features[idx2], lw=0, s=5, color="red", alpha=0.01)
+    # Plot filtered data for control field
+    ax2.scatter(control_color.features[idx1][cfil], control_color.features[idx2][cfil],
+                lw=0, s=5, color="blue", alpha=0.1)
+
+    # Adjust axes
+    for ax in [ax1, ax2]:
+
+        # limits
+        ax.set_xlim(-0.5, 3)
+        ax.set_ylim(-0.5, 3)
+
+        # Force aspect ratio
+        # ax.set_aspect(1)
+
+        # Ticker
+        ax.xaxis.set_major_locator(MultipleLocator(1))
+        ax.xaxis.set_minor_locator(MultipleLocator(0.2))
+        ax.yaxis.set_major_locator(MultipleLocator(1))
+        ax.yaxis.set_minor_locator(MultipleLocator(0.2))
+        # Remove labels
+        if pidx < 6:
+            ax.axes.xaxis.set_ticklabels([])
+        if pidx in [4, 7, 8]:
+            ax.axes.yaxis.set_ticklabels([])
+        # set labels
+        if pidx == 8:
+            ax.set_xlabel("$H-K_S$")
+        if pidx == 7:
+            ax.set_xlabel("$K_S - [3.6]$")
+        if pidx == 6:
+            ax.set_xlabel("$[3.6] - [4.5]$")
+            ax.set_ylabel("$J-H$")
+        if pidx == 3:
+            ax.set_ylabel("$H-K_S$")
+        if pidx == 0:
+            ax.set_ylabel("$K_S - [3.6]$")
+
+# Save figure
+plt.savefig(results_path + "extinction_law_linfit_sources.png", bbox_inches="tight", dpi=300)
+plt.close()
 
 
 # ----------------------------------------------------------------------

@@ -3,16 +3,21 @@
 import wcsaxes
 import warnings
 import brewer2mpl
-# import numpy as np
 import matplotlib.pyplot as plt
 
-from astropy.io import fits
 from itertools import repeat
 from multiprocessing import Pool
 from matplotlib.pyplot import GridSpec
 from matplotlib.ticker import MultipleLocator
 from MyFunctions import distance_on_unit_sphere
 from helper import *
+
+
+# ----------------------------------------------------------------------
+# Define file paths
+science_path = "/Users/Antares/Dropbox/Data/Orion/VISION/Catalog/VISION_+_Spitzer_s_noYSO.fits"
+control_path = "/Users/Antares/Dropbox/Data/Orion/VISION/Catalog/VISION_CF+_Spitzer_s.fits"
+results_path = "/Users/Antares/Dropbox/Projects/PNICER/Paper/Results/"
 
 
 # ----------------------------------------------------------------------
@@ -27,47 +32,46 @@ cmap2 = brewer2mpl.get_map("YlGnBu", "Sequential", number=9, reverse=True).get_m
 science, control = pnicer_ini(skip_science=1, skip_control=1, n_features=5, color=False)
 science_color, control_color = science.mag2color(), control.mag2color()
 
+# Additionally load galaxy classifier
+class_sex_science = fits.open(science_path)[1].data["class_sex"]
+class_sex_control = fits.open(control_path)[1].data["class_sex"]
+class_cog_science = fits.open(science_path)[1].data["class_cog"]
+class_cog_control = fits.open(control_path)[1].data["class_cog"]
+
 
 # ----------------------------------------------------------------------
 # Get grid
-pixsize = 2 / 60
+pixsize = 5 / 60
 header, all_glon, all_glat = science.build_wcs_grid(frame="galactic", pixsize=pixsize)
 grid_shape = all_glat.shape
 glon_range, glat_range = all_glon.ravel(), all_glat.ravel()
 
 
 # ----------------------------------------------------------------------
-# Initial guess for extinction
+# Make pre-selection of data
 pnicer = science_color.pnicer(control=control_color)
 ext = pnicer.extinction
-emap = pnicer.build_map(bandwidth=pixsize * 2, metric="epanechnikov")
+# ext = np.full_like(science.features[0], fill_value=1.0)
+for d in [science.dict, control.dict]:
+    # Define filter
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        fil = (d["J"] > 0) & (d["H"] > 0) & (d["Ks"] < 16) & (d["IRAC1"] > 0) & (d["IRAC2"] > 0) & \
+              (d["IRAC1_err"] < 0.1) & (d["Ks_err"] < 0.1)
+
+        # Test no filtering
+        # fil = data.combined_mask
+
+        if d == science.dict:
+            fil_science = fil & (ext > 0.3) & (class_sex_science > 0.8) & (class_cog_science == 1)
+            # sfil = fil.copy()
+        else:
+            fil_control = fil.copy() & (class_sex_control > 0.8) & (class_cog_control == 1)
 
 
 # ----------------------------------------------------------------------
-# Define parameter range for filtering
-ajr = (2.4, 2.7)
-ahr = (1.4, 1.7)
-a1r = (0.5, 0.7)
-a2r = (0.3, 0.6)
-
-# Define filter
-for data in [science_color, control_color]:
-    # Define base photometric filter common to science and control field
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        fil = (data.features[0] + 1 < (ajr[0] - ahr[0]) / (ahr[0] - 1) * (data.features[1] + 0.7)) & \
-              (data.features[0] + 1 > (ajr[1] - ahr[1]) / (ahr[1] - 1) * (data.features[1] + 0.7)) & \
-              (data.features[0] + 1 > (ajr[0] - ahr[0]) / (1 - a1r[0]) * (data.features[2] + 0.5)) & \
-              (data.features[0] + 1 < (ajr[1] - ahr[1]) / (1 - a1r[1]) * (data.features[2] + 0.5)) & \
-              (data.features[0] + 1 > (ajr[0] - ahr[0]) / (a1r[0] - a2r[0]) * (data.features[3] + 0.2)) & \
-              (data.features[0] + 1 < (ajr[1] - ahr[1]) / (a1r[1] - a2r[1]) * (data.features[3] + 0.2)) & \
-              (np.nanmax(np.array(data.features_err), axis=0) < 0.1)
-
-        if data == science_color:
-            # sfil = fil.copy() & (dis < maxdis)
-            fil_science = fil & (ext > 0.1)
-        else:
-            fil_control = fil.copy()
+# Build preliminary extinction map
+emap = pnicer.build_map(bandwidth=pixsize * 2, metric="epanechnikov")
 
 
 # ----------------------------------------------------------------------
@@ -116,7 +120,6 @@ def get_slope(glon_pix, glat_pix, glon_all, glat_all, maxdis):
 
     # Just return for J band
     return beta_lines, n
-
 
 
 if __name__ == "__main__":
@@ -172,5 +175,4 @@ for ax in [ax0, ax1, ax2]:
                colors="black")
 
 # Save figure
-results_path = "/Users/Antares/Dropbox/Projects/PNICER/Paper/Results/"
 plt.savefig(results_path + "extinction_law_spatial.pdf", bbox_inches="tight", dpi=300)
