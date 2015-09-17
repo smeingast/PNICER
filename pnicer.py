@@ -51,6 +51,12 @@ class DataBase:
         if self.features_names is None:
             self.features_names = ["Mag" + str(idx + 1) for idx in range(self.n_features)]
 
+        # Add data dictionary
+        self.dict = {}
+        for i in range(self.n_features):
+            self.dict[self.features_names[i]] = self.features[i]
+            self.dict[self.features_names[i] + "_err"] = self.features_err[i]
+
         # ----------------------------------------------------------------------
         # Do some input checks
 
