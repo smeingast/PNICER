@@ -1015,6 +1015,7 @@ class Magnitudes(DataBase):
 
         # Some assertions
         assert (isinstance(base_index, tuple)) & (len(base_index) == 2), " base_index must be tuple with two entries"
+        assert method in ["OLS", "BCES", "LINES"], "method not supported"
         if control is not None:
             assert isinstance(control, Magnitudes), "control must be magnitude instance"
             assert control.n_features == self.n_features, "input and control features do not match"
@@ -1043,12 +1044,14 @@ class Magnitudes(DataBase):
                               np.mean(self.features_err[base_index[1]][smask]) ** 2
             cov_err_science = -np.mean(self.features_err[base_index[1]][smask]) ** 2
 
+            # For BCES method
             if method == "BCES":
                 upper = get_covar(xdata_science, ydata_science) - cov_err_science
                 lower = np.var(xdata_science) - var_err_science
                 beta.append(upper / lower)
                 continue
 
+            # For LINES method
             if method == "LINES":
                 # We need a control field
                 assert control, "control field instance not set"
@@ -1068,11 +1071,6 @@ class Magnitudes(DataBase):
                 continue
 
         return beta
-        # If an ordinary least squares (OLS) fit should be performed
-        # if method == "OLS":
-        #     get_covar(xi=xj, yi=yj) / np.var(xj)
-
-        pass
 
 
 # ----------------------------------------------------------------------
