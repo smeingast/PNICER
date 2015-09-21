@@ -71,7 +71,7 @@ class DataBase:
         assert self.n_features > 0, "There must be at least two features!"
 
         # All input lists must have equal length
-        assert len(set([len(l) for l in [self.features, self.features_err, self.features_names]])) == 1,\
+        assert len(set([len(l) for l in [self.features, self.features_err, self.features_names]])) == 1, \
             "Input lists must have equal length"
 
         # Input data must also have the same size
@@ -248,7 +248,7 @@ class DataBase:
         # Inverse rotation of grid to get intrinsic features
         intrinsic = self.extvec.rotmatrix_inv.dot(np.vstack([grid_mean[indices], grid_data[:, indices]]))
         if isinstance(self, Magnitudes):
-            color0 = np.array([intrinsic[i] - intrinsic[i+1] for i in range(self.n_features - 1)])
+            color0 = np.array([intrinsic[i] - intrinsic[i + 1] for i in range(self.n_features - 1)])
         else:
             color0 = intrinsic
 
@@ -286,7 +286,7 @@ class DataBase:
 
         # Calculate extinctions
         ext = (self.features[0] - cf_mean) / self.extvec.extvec[0]
-        var = (self.features_err[0]**2 + cf_var) / self.extvec.extvec[0]**2
+        var = (self.features_err[0] ** 2 + cf_var) / self.extvec.extvec[0] ** 2
         color0 = np.full_like(ext, fill_value=cf_mean)
         color0[~np.isfinite(ext)] = np.nan
 
@@ -332,7 +332,7 @@ class DataBase:
             for c, cidx in zip(sc.colors_names, range(len(sc.colors_names))):
                 try:
                     color0_dict[c].append(color0[cidx])
-                    color0_weig[c].append(sc.n_features**2)
+                    color0_weig[c].append(sc.n_features ** 2)
                 except KeyError:
                     pass
 
@@ -389,7 +389,7 @@ class DataBase:
         return Extinction(db=self, extinction=ext, variance=var, color0=self._color0)
 
     # ----------------------------------------------------------------------
-    def build_wcs_grid(self, frame, pixsize=10./60):
+    def build_wcs_grid(self, frame, pixsize=10. / 60):
         """
         Method to build a WCS grid with a valid projection given a pixel scale
         :param frame: "equatorial" or "galactic"
@@ -512,7 +512,7 @@ class DataBase:
             # Get density
             data = np.vstack([self.features[idx[0]][mask], self.features[idx[1]][mask]]).T
             xgrid = np.vstack([x.ravel(), y.ravel()]).T
-            dens = mp_kde(grid=xgrid, data=data, bandwidth=grid_bw*2, shape=x.shape, kernel=kernel)
+            dens = mp_kde(grid=xgrid, data=data, bandwidth=grid_bw * 2, shape=x.shape, kernel=kernel)
 
             # Show result
             ax.imshow(np.sqrt(dens.T), origin="lower", interpolation="nearest", extent=[l, h, l, h], cmap=cmap)
@@ -527,9 +527,9 @@ class DataBase:
 
             # Axis labels
             if ax.get_position().x0 < 0.11:
-                ax.set_ylabel("$"+self.features_names[idx[0]]+"$")
+                ax.set_ylabel("$" + self.features_names[idx[0]] + "$")
             if ax.get_position().y0 < 0.11:
-                ax.set_xlabel("$"+self.features_names[idx[1]]+"$")
+                ax.set_xlabel("$" + self.features_names[idx[1]] + "$")
 
         # Save or show figure
         if path is None:
@@ -538,7 +538,7 @@ class DataBase:
             plt.savefig(path, bbox_inches="tight")
         plt.close()
 
-    def plot_spatial_kde(self, frame, pixsize=10/60, path=None, kernel="epanechnikov", skip=1):
+    def plot_spatial_kde(self, frame, pixsize=10 / 60, path=None, kernel="epanechnikov", skip=1):
         """
         Plot source densities for features
         :param frame: "equatorial" or "galactic"
@@ -576,7 +576,7 @@ class DataBase:
             # Get density
             xgrid = np.vstack([lon_grid.ravel(), lat_grid.ravel()]).T
             data = np.vstack([self.lon[self.features_masks[idx]][::skip], self.lat[self.features_masks[idx]][::skip]]).T
-            dens = mp_kde(grid=xgrid, data=data, bandwidth=pixsize*2, shape=lon_grid.shape, kernel=kernel)
+            dens = mp_kde(grid=xgrid, data=data, bandwidth=pixsize * 2, shape=lon_grid.shape, kernel=kernel)
 
             # Norm and save scale
             if idx == 0:
@@ -594,7 +594,7 @@ class DataBase:
             plt.savefig(path, bbox_inches="tight")
         plt.close()
 
-    def plot_spatial_kde_gain(self, frame, pixsize=10/60, sampling=2, contour=None, path=None, kernel="epanechnikov",
+    def plot_spatial_kde_gain(self, frame, pixsize=10 / 60, sampling=2, contour=None, path=None, kernel="epanechnikov",
                               skip=1,
                               cmap=None):
         # TODO: I guess I should move this to a separate plot file. It's too complex to work for all input data ever.
@@ -651,7 +651,7 @@ class DataBase:
             # Get density
             xgrid = np.vstack([lon_grid.ravel(), lat_grid.ravel()]).T
             data = np.vstack([self.lon[self.features_masks[idx]][::skip], self.lat[self.features_masks[idx]][::skip]]).T
-            dens.append(mp_kde(grid=xgrid, data=data, bandwidth=pixsize*sampling, shape=lon_grid.shape, kernel=kernel,
+            dens.append(mp_kde(grid=xgrid, data=data, bandwidth=pixsize * sampling, shape=lon_grid.shape, kernel=kernel,
                                absolute=True, sampling=sampling))
 
             # Mask threshold
@@ -661,7 +661,7 @@ class DataBase:
             if idx == 0:
                 ax.append(plt.subplot(grid[0], projection=wcsaxes.WCS(header=header)))
                 data = np.vstack([self.lon[::skip], self.lat[::skip]]).T
-                dens_tot = mp_kde(grid=xgrid, data=data, bandwidth=pixsize*2, shape=lon_grid.shape, kernel=kernel,
+                dens_tot = mp_kde(grid=xgrid, data=data, bandwidth=pixsize * 2, shape=lon_grid.shape, kernel=kernel,
                                   absolute=True, sampling=2)
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
@@ -676,7 +676,7 @@ class DataBase:
                 with warnings.catch_warnings():
                     # Ignore NaN and 0 division warnings
                     warnings.simplefilter("ignore")
-                    im.append(ax[-1].imshow(dens[idx] / dens[idx-1] - 1, origin="lower", interpolation="nearest",
+                    im.append(ax[-1].imshow(dens[idx] / dens[idx - 1] - 1, origin="lower", interpolation="nearest",
                                             cmap=cmap, vmin=-0.5, vmax=0.5))
 
                     plt.colorbar(im[-1], cax=cax, ticks=MultipleLocator(0.1), label="Relative source density gain")
@@ -776,7 +776,7 @@ class DataBase:
             # noinspection PyTypeChecker
             ext = ext[np.isfinite(ext)]
             if bandwidth is None:
-                bandwidth = np.float(3.5 * np.std(ext) / np.power(np.sqrt(len(ext)), 1/3)) / 2
+                bandwidth = np.float(3.5 * np.std(ext) / np.power(np.sqrt(len(ext)), 1 / 3)) / 2
             grid_ext = np.arange(np.floor(ax1_range[0]), np.ceil(ax1_range[1]), bandwidth / sampling)
             dens_ext = mp_kde(grid=grid_ext, data=ext, bandwidth=bandwidth, shape=None,
                               kernel="epanechnikov", absolute=True, sampling=sampling)
@@ -786,7 +786,7 @@ class DataBase:
             # noinspection PyTypeChecker
             exterr = exterr[np.isfinite(exterr)]
             if bandwidth is None:
-                bandwidth = np.float(3.5 * np.std(exterr) / np.power(np.sqrt(len(exterr)), 1/3)) / 2
+                bandwidth = np.float(3.5 * np.std(exterr) / np.power(np.sqrt(len(exterr)), 1 / 3)) / 2
             grid_exterr = np.arange(np.floor(ax2_range[0]), np.ceil(ax2_range[1]), bandwidth / sampling)
             dens_exterr = mp_kde(grid=grid_exterr, data=exterr[np.isfinite(exterr)], bandwidth=bandwidth, shape=None,
                                  kernel="epanechnikov", absolute=True, sampling=sampling)
@@ -841,7 +841,6 @@ class DataBase:
 # ----------------------------------------------------------------------
 # Magnitudes class
 class Magnitudes(DataBase):
-
     def __init__(self, mag, err, extvec, lon=None, lat=None, names=None):
         """
         Main class for users. Includes PNICER and NICER
@@ -928,7 +927,7 @@ class Magnitudes(DataBase):
         """
 
         # Some assertions
-        assert self.__class__ == control.__class__,  "control and instance class do not match"
+        assert self.__class__ == control.__class__, "control and instance class do not match"
         assert self.n_features == control.n_features, "Number of features in the control instance must match input"
 
         # Features to be required can only be as much as input features
@@ -940,11 +939,11 @@ class Magnitudes(DataBase):
         k = [x - y for x, y in zip(self.extvec.extvec[:-1], self.extvec.extvec[1:])]
 
         # Calculate covariance matrix of control field
-        cov_cf = np.ma.cov([np.ma.masked_invalid(control.features[l]) - np.ma.masked_invalid(control.features[l+1])
+        cov_cf = np.ma.cov([np.ma.masked_invalid(control.features[l]) - np.ma.masked_invalid(control.features[l + 1])
                             for l in range(self.n_features - 1)])
 
         # Get intrisic color of control field
-        color_0 = [np.nanmean(control.features[l] - control.features[l+1]) for l in range(control.n_features - 1)]
+        color_0 = [np.nanmean(control.features[l] - control.features[l + 1]) for l in range(control.n_features - 1)]
 
         # Replace NaN errors with a large number
         errors = []
@@ -957,10 +956,10 @@ class Magnitudes(DataBase):
         cov_er = np.zeros([self.n_data, self.n_features - 1, self.n_features - 1])
         for i in range(self.n_features - 1):
             # Diagonal
-            cov_er[:, i, i] = errors[i]**2 + errors[i+1]**2
+            cov_er[:, i, i] = errors[i] ** 2 + errors[i + 1] ** 2
             # Other entries
             if i > 0:
-                cov_er[:, i, i-1] = cov_er[:, i-1, i] = -errors[i]**2
+                cov_er[:, i, i - 1] = cov_er[:, i - 1, i] = -errors[i] ** 2
 
         # Total covariance matrix
         cov = cov_cf + cov_er
@@ -973,7 +972,7 @@ class Magnitudes(DataBase):
         b = upper.T / np.dot(k, upper.T)
 
         # Get colors
-        scolors = np.array([self.features[l] - self.features[l+1] for l in range(self.n_features - 1)])
+        scolors = np.array([self.features[l] - self.features[l + 1] for l in range(self.n_features - 1)])
 
         # Get those with no good color value at all
         bad_color = np.all(np.isnan(scolors), axis=0)
@@ -1007,12 +1006,79 @@ class Magnitudes(DataBase):
         # ...and return :)
         return Extinction(db=self, extinction=ext.data, variance=var, color0=color_0)
 
+    def get_extinction_law(self, base_index, method="LINES", control=None):
+        """
+        Implementation to fit CCDs for calculation of extinction law
+        :param base_index: Tuple of two indices which form the base of the determination (x axis of the plots...)
+        :return:
+        """
+
+        # Some assertions
+        assert (isinstance(base_index, tuple)) & (len(base_index) == 2), " base_index must be tuple with two entries"
+        if control is not None:
+            assert isinstance(control, Magnitudes), "control must be magnitude instance"
+            assert control.n_features == self.n_features, "input and control features do not match"
+
+        # Determine the fit indices
+        fit_index = list(set(range(self.n_features)) - set(base_index))
+
+        # Now we loop over all indices to fit
+        beta = []
+        for fidx in fit_index:
+
+            # Create common filter for all current filters
+            smask = np.prod(np.vstack([self.features_masks[i] for i in base_index + (fidx,)]), axis=0, dtype=bool)
+
+            # Shortcut for data
+            xdata_science = self.features[base_index[0]][smask] - self.features[base_index[1]][smask]
+            ydata_science = self.features[base_index[1]][smask] - self.features[fidx][smask]
+
+            # If standard OLS should be done
+            if method == "OLS":
+                beta.append(get_covar(xi=xdata_science, yi=ydata_science) / np.var(xdata_science))
+                continue
+
+            # Determine (Co-)variance terms of errors for science field
+            var_err_science = np.mean(self.features_err[base_index[0]][smask]) ** 2 + \
+                              np.mean(self.features_err[base_index[1]][smask]) ** 2
+            cov_err_science = -np.mean(self.features_err[base_index[1]][smask]) ** 2
+
+            if method == "BCES":
+                upper = get_covar(xdata_science, ydata_science) - cov_err_science
+                lower = np.var(xdata_science) - var_err_science
+                beta.append(upper / lower)
+                continue
+
+            if method == "LINES":
+                # We need a control field
+                assert control, "control field instance not set"
+                cmask = np.prod(np.vstack([control.features_masks[i] for i in base_index + (fidx,)]), axis=0,
+                                dtype=bool)
+                xdata_control = control.features[base_index[0]][cmask] - control.features[base_index[1]][cmask]
+                ydata_control = control.features[base_index[1]][cmask] - control.features[fidx][cmask]
+
+                var_err_control = np.mean(control.features_err[base_index[0]][cmask]) ** 2 + \
+                                  np.mean(control.features_err[base_index[1]][cmask]) ** 2
+                cov_err_control = -np.mean(control.features_err[base_index[1]][cmask]) ** 2
+
+                upper = get_covar(xdata_science, ydata_science) - get_covar(xdata_control, ydata_control) - \
+                        cov_err_science + cov_err_control
+                lower = np.var(xdata_science) - var_err_science - np.var(xdata_control) + var_err_control
+                beta.append(upper / lower)
+                continue
+
+        return beta
+        # If an ordinary least squares (OLS) fit should be performed
+        # if method == "OLS":
+        #     get_covar(xi=xj, yi=yj) / np.var(xj)
+
+        pass
+
 
 # ----------------------------------------------------------------------
 # ----------------------------------------------------------------------
 # Colors class
 class Colors(DataBase):
-
     def __init__(self, mag, err, extvec, lon=None, lat=None, names=None):
         """
         Basically the same as magnitudes. PNICER implementation does not allow to convert to colors.
@@ -1044,7 +1110,6 @@ class Colors(DataBase):
 # ----------------------------------------------------------------------
 # ----------------------------------------------------------------------
 class ExtinctionVector:
-
     def __init__(self, extvec):
         """
         Class for extinction vector components
@@ -1093,13 +1158,13 @@ class ExtinctionVector:
         for n in range(n_dimensions - 1):
             # Calculate rotation angle of current component
             if n == 0:
-                rot_angle = np.arctan(vector[n+1] / vector[0])
+                rot_angle = np.arctan(vector[n + 1] / vector[0])
             else:
-                rot_angle = np.arctan(vector_rot[n+1] / vector_rot[0])
+                rot_angle = np.arctan(vector_rot[n + 1] / vector_rot[0])
             # Following the german Wikipedia... :)
-            v = np.outer(uv[0], uv[0]) + np.outer(uv[n+1], uv[n+1])
-            w = np.outer(uv[0], uv[n+1]) - np.outer(uv[n+1], uv[0])
-            rotmatrices.append((np.cos(rot_angle)-1) * v + np.sin(rot_angle) * w + np.identity(n_dimensions))
+            v = np.outer(uv[0], uv[0]) + np.outer(uv[n + 1], uv[n + 1])
+            w = np.outer(uv[0], uv[n + 1]) - np.outer(uv[n + 1], uv[0])
+            rotmatrices.append((np.cos(rot_angle) - 1) * v + np.sin(rot_angle) * w + np.identity(n_dimensions))
             # Rotate reddening vector
             if n == 0:
                 vector_rot = rotmatrices[-1].dot(vector)
@@ -1179,7 +1244,6 @@ class ExtinctionVector:
 # ----------------------------------------------------------------------
 # ----------------------------------------------------------------------
 class Extinction:
-
     def __init__(self, db, extinction, variance=None, color0=None):
         """
         Class for extinction measurements
@@ -1280,7 +1344,6 @@ class Extinction:
 # ----------------------------------------------------------------------
 # ----------------------------------------------------------------------
 class ExtinctionMap:
-
     def __init__(self, ext, var, num, header, metric):
         """
         Extinction map class
@@ -1515,9 +1578,9 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric
     elif metric == "triangular":
         weights = 1 - np.abs(dis / bandwidth)
     elif metric == "gaussian":
-        weights = np.exp(-0.5 * (dis / bandwidth)**2)
+        weights = np.exp(-0.5 * (dis / bandwidth) ** 2)
     elif metric == "epanechnikov":
-        weights = 1 - (dis / bandwidth)**2
+        weights = 1 - (dis / bandwidth) ** 2
     else:
         raise TypeError("metric not implemented")
 
@@ -1528,7 +1591,7 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric
     # TODO: This needs to be generalised
     slope, k_lambda = 0.33, 1
     if nicest:
-        weights *= 10**(slope * k_lambda * ext)
+        weights *= 10 ** (slope * k_lambda * ext)
 
     # Mask weights with no extinction
     weights[~np.isfinite(ext)] = np.nan
@@ -1540,7 +1603,7 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         pixel_ext = np.nansum(weights * ext) / np.nansum(weights)
-        pixel_var = np.nansum(weights**2 * var) / np.nansum(weights)**2
+        pixel_var = np.nansum(weights ** 2 * var) / np.nansum(weights) ** 2
 
     # Return
     if nicest:
@@ -1616,5 +1679,15 @@ def weighted_avg(values, weights):
 
     average = np.nansum(values * weights) / np.nansum(weights)
     # noinspection PyTypeChecker
-    variance = np.nansum((values - average)**2 * weights) / np.nansum(weights)
+    variance = np.nansum((values - average) ** 2 * weights) / np.nansum(weights)
     return average, variance
+
+
+def get_covar(xi, yi):
+    """
+    Calculate sample covariance (can not contain NaNs!)
+    :param xi: x data
+    :param yi: y data
+    :return: sample covariance
+    """
+    return np.sum((xi - np.mean(xi)) * (yi - np.mean(yi))) / len(xi)

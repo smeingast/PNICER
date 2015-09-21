@@ -12,7 +12,7 @@ from pnicer import Magnitudes
 
 # ----------------------------------------------------------------------
 # PNICER initialization functions
-def pnicer_ini(skip_science, skip_control, n_features=5, color=False):
+def pnicer_ini(skip_science, skip_control, n_features=5, color=False, sfil=None, cfil=None):
 
     # Type assertion
     assert isinstance(skip_science, int) & isinstance(skip_control, int) & isinstance(n_features, int)
@@ -25,11 +25,16 @@ def pnicer_ini(skip_science, skip_control, n_features=5, color=False):
     science_dummy = fits.open(science_path)[1].data
     control_dummy = fits.open(control_path)[1].data
 
+    if sfil is None:
+        sfil = np.arange(len(science_dummy["GLON"]))
+    if cfil is None:
+        cfil = np.arange(len(control_dummy["GLON"]))
+
     # Coordinates
-    science_glon = science_dummy["GLON"][::skip_science]
-    science_glat = science_dummy["GLAT"][::skip_science]
-    control_glon = control_dummy["GLON"][::skip_control]
-    control_glat = control_dummy["GLAT"][::skip_control]
+    science_glon = science_dummy["GLON"][sfil][::skip_science]
+    science_glat = science_dummy["GLAT"][sfil][::skip_science]
+    control_glon = control_dummy["GLON"][cfil][::skip_control]
+    control_glat = control_dummy["GLAT"][cfil][::skip_control]
 
     # Definitions
     features_names = ["J", "H", "Ks", "IRAC1", "IRAC2"]
@@ -37,10 +42,10 @@ def pnicer_ini(skip_science, skip_control, n_features=5, color=False):
     features_extinction = [2.5, 1.55, 1.0, 0.636, 0.54]
 
     # Photometry
-    science_data = [science_dummy[n][::skip_science] for n in features_names[:n_features]]
-    science_error = [science_dummy[n][::skip_science] for n in errors_names[:n_features]]
-    control_data = [control_dummy[n][::skip_control] for n in features_names[:n_features]]
-    control_error = [control_dummy[n][::skip_control] for n in errors_names[:n_features]]
+    science_data = [science_dummy[n][sfil][::skip_science] for n in features_names[:n_features]]
+    science_error = [science_dummy[n][sfil][::skip_science] for n in errors_names[:n_features]]
+    control_data = [control_dummy[n][cfil][::skip_control] for n in features_names[:n_features]]
+    control_error = [control_dummy[n][cfil][::skip_control] for n in errors_names[:n_features]]
 
     # Initialize data with PNICER
     science = Magnitudes(mag=science_data, err=science_error, extvec=features_extinction,

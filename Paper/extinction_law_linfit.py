@@ -58,6 +58,27 @@ for d in [science.dict, control.dict]:
 
 
 # ----------------------------------------------------------------------
+# Re-initialize with filtered data
+# noinspection PyUnboundLocalVariable
+science, control = pnicer_ini(skip_science=1, skip_control=1, n_features=5, color=False, sfil=sfil, cfil=cfil)
+science_color, control_color = science.mag2color(), control.mag2color()
+
+# Additionally load galaxy classifier
+class_sex_science = fits.open(science_path)[1].data["class_sex"]
+class_sex_control = fits.open(control_path)[1].data["class_sex"]
+class_cog_science = fits.open(science_path)[1].data["class_cog"]
+class_cog_control = fits.open(control_path)[1].data["class_cog"]
+
+
+
+
+a = science.get_extinction_law(base_index=(1, 2), method="LINES", control=control)
+print(a)
+exit()
+
+
+
+# ----------------------------------------------------------------------
 # Plot pre-selection of data
 fig1 = plt.figure(figsize=[17, 7.55])
 grid1 = GridSpec(ncols=3, nrows=3, bottom=0.05, top=0.95, left=0.05, right=0.45, hspace=0, wspace=0)
