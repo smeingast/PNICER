@@ -72,8 +72,9 @@ class_cog_control = fits.open(control_path)[1].data["class_cog"]
 
 # ----------------------------------------------------------------------
 # Get slopes of CCDs
-a = science.get_extinction_law(base_index=(1, 2), method="LINES", control=control)
-
+a = science.get_extinction_law(base_index=(1, 2), method="OLS", control=control)
+print(a)
+exit()
 
 # ----------------------------------------------------------------------
 # Plot pre-selection of data

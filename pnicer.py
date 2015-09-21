@@ -1020,11 +1020,23 @@ class Magnitudes(DataBase):
             assert isinstance(control, Magnitudes), "control must be magnitude instance"
             assert control.n_features == self.n_features, "input and control features do not match"
 
+        # Define functions for different methods
+        def get_beta_ols(xj, yj):
+            return get_covar(xi=xj, yi=yj) / np.var(xj)
+
+        def get_beta_bces(xj, yj, cov_err, var_err):
+            return (get_covar(xj, yj) - cov_err) / (np.var(xj) - var_err)
+
+        def get_beta_lines(xj_sc, yj_sc, xj_cf, yj_cf, cov_err_sc, var_err_sc, cov_err_cf, var_err_cf):
+            upper = get_covar(xj_sc, yj_sc) - get_covar(xj_cf, yj_cf) - cov_err_sc + cov_err_cf
+            lower = np.var(xj_sc) - var_err_sc - np.var(xj_cf) + var_err_cf
+            return upper / lower
+
         # Determine the fit indices
         fit_index = list(set(range(self.n_features)) - set(base_index))
 
         # Now we loop over all indices to fit
-        beta = []
+        beta, beta_err = [], []
         for fidx in fit_index:
 
             # Create common filter for all current filters
@@ -1036,7 +1048,16 @@ class Magnitudes(DataBase):
 
             # If standard OLS should be done
             if method == "OLS":
-                beta.append(get_covar(xi=xdata_science, yi=ydata_science) / np.var(xdata_science))
+                beta.append(get_beta_ols(xj=xdata_science, yj=ydata_science))
+
+                # Do the same for random splits to get errors
+                sbeta_i = []
+                for _ in range(1000):
+                    ridx = np.random.permutation(len(xdata_science))
+                    sbeta_i.append(np.std([get_beta_ols(xj=xdata_science[ridx[0::2]], yj=ydata_science[ridx[0::2]]),
+                                           get_beta_ols(xj=xdata_science[ridx[1::2]], yj=ydata_science[ridx[1::2]])]))
+
+                beta_err.append(np.sum(sbeta_i) / (np.sqrt(2) * 1000))
                 continue
 
             # Determine (Co-)variance terms of errors for science field
@@ -1046,14 +1067,33 @@ class Magnitudes(DataBase):
 
             # For BCES method
             if method == "BCES":
-                upper = get_covar(xdata_science, ydata_science) - cov_err_science
-                lower = np.var(xdata_science) - var_err_science
-                beta.append(upper / lower)
+                beta.append(get_beta_bces(xj=xdata_science, yj=ydata_science,
+                                          cov_err=cov_err_science, var_err=var_err_science))
+
+                # Now for a thousand randomly split subsets
+                sbeta_i = []
+                for _ in range(1000):
+                    ridx = np.random.permutation(len(xdata_science))
+                    vesc1 = np.mean(self.features_err[base_index[0]][smask][ridx[0::2]]) ** 2 + \
+                            np.mean(self.features_err[base_index[1]][smask][ridx[0::2]]) ** 2
+                    vesc2 = np.mean(self.features_err[base_index[0]][smask][ridx[1::2]]) ** 2 + \
+                            np.mean(self.features_err[base_index[1]][smask][ridx[1::2]]) ** 2
+                    cesc1 = -np.mean(self.features_err[base_index[1]][smask][ridx[0::2]]) ** 2
+                    cesc2 = -np.mean(self.features_err[base_index[1]][smask][ridx[1::2]]) ** 2
+
+                    beta1 = get_beta_bces(xj=xdata_science[ridx[0::2]], yj=ydata_science[ridx[0::2]],
+                                          var_err=vesc1, cov_err=cesc1)
+                    beta2 = get_beta_bces(xj=xdata_science[ridx[1::2]], yj=ydata_science[ridx[1::2]],
+                                          var_err=vesc2, cov_err=cesc2)
+
+                    sbeta_i.append(np.std([beta1, beta2]))
+                beta_err.append(np.sum(sbeta_i) / (np.sqrt(2) * 1000))
                 continue
 
             # For LINES method
             if method == "LINES":
-                # We need a control field
+
+                # We need a control field for this method
                 assert control, "control field instance not set"
                 cmask = np.prod(np.vstack([control.features_masks[i] for i in base_index + (fidx,)]), axis=0,
                                 dtype=bool)
@@ -1064,13 +1104,43 @@ class Magnitudes(DataBase):
                                   np.mean(control.features_err[base_index[1]][cmask]) ** 2
                 cov_err_control = -np.mean(control.features_err[base_index[1]][cmask]) ** 2
 
-                upper = get_covar(xdata_science, ydata_science) - get_covar(xdata_control, ydata_control) - \
-                        cov_err_science + cov_err_control
-                lower = np.var(xdata_science) - var_err_science - np.var(xdata_control) + var_err_control
-                beta.append(upper / lower)
+                # Get slope
+                beta.append(get_beta_lines(xj_sc=xdata_science, yj_sc=ydata_science,
+                                           xj_cf=xdata_control, yj_cf=ydata_control,
+                                           cov_err_sc=cov_err_science, cov_err_cf=cov_err_control,
+                                           var_err_sc=var_err_science, var_err_cf=var_err_control))
+
+                # Now for a thousand randomly split subsets
+                sbeta_i = []
+                for _ in range(1000):
+                    ridx_sc = np.random.permutation(len(xdata_science))
+                    ridx_cf = np.random.permutation(len(xdata_control))
+
+                    vesc1 = np.mean(self.features_err[base_index[0]][smask][ridx_sc[0::2]]) ** 2 + \
+                            np.mean(self.features_err[base_index[1]][smask][ridx_sc[0::2]]) ** 2
+                    vesc2 = np.mean(self.features_err[base_index[0]][smask][ridx_sc[1::2]]) ** 2 + \
+                            np.mean(self.features_err[base_index[1]][smask][ridx_sc[1::2]]) ** 2
+                    cesc1 = -np.mean(self.features_err[base_index[1]][smask][ridx_sc[0::2]]) ** 2
+                    cesc2 = -np.mean(self.features_err[base_index[1]][smask][ridx_sc[1::2]]) ** 2
+
+                    vecf1 = np.mean(control.features_err[base_index[0]][cmask][ridx_cf[0::2]]) ** 2 + \
+                            np.mean(control.features_err[base_index[1]][cmask][ridx_cf[0::2]]) ** 2
+                    vecf2 = np.mean(control.features_err[base_index[0]][cmask][ridx_cf[1::2]]) ** 2 + \
+                            np.mean(control.features_err[base_index[1]][cmask][ridx_cf[1::2]]) ** 2
+                    cecf1 = -np.mean(control.features_err[base_index[1]][cmask][ridx_cf[0::2]]) ** 2
+                    cecf2 = -np.mean(control.features_err[base_index[1]][cmask][ridx_cf[1::2]]) ** 2
+
+                    beta1 = get_beta_lines(xj_sc=xdata_science[ridx_sc[0::2]], yj_sc=ydata_science[ridx_sc[0::2]],
+                                           xj_cf=xdata_control[ridx_cf[0::2]], yj_cf=ydata_control[ridx_cf[0::2]],
+                                           cov_err_sc=cesc1, cov_err_cf=cecf1, var_err_sc=vesc1, var_err_cf=vecf1)
+                    beta2 = get_beta_lines(xj_sc=xdata_science[ridx_sc[1::2]], yj_sc=ydata_science[ridx_sc[1::2]],
+                                           xj_cf=xdata_control[ridx_cf[1::2]], yj_cf=ydata_control[ridx_cf[1::2]],
+                                           cov_err_sc=cesc2, cov_err_cf=cecf2, var_err_sc=vesc2, var_err_cf=vecf2)
+                    sbeta_i.append(np.std([beta1, beta2]))
+                beta_err.append(np.sum(sbeta_i) / (np.sqrt(2) * 1000))
                 continue
 
-        return fit_index, beta
+        return fit_index, beta, beta_err
 
 
 # ----------------------------------------------------------------------
