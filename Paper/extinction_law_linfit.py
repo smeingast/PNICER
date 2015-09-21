@@ -26,8 +26,8 @@ cmap = brewer2mpl.get_map("YlGnBu", "Sequential", number=9, reverse=True).get_mp
 
 # ----------------------------------------------------------------------
 # Intialize PNICER
-science, control = pnicer_ini(skip_science=1, skip_control=1, n_features=5, color=False)
-science_color, control_color = science.mag2color(), control.mag2color()
+science_all, control_all = pnicer_ini(skip_science=1, skip_control=1, n_features=5, color=False)
+science_color_all, control_color_all = science_all.mag2color(), control_all.mag2color()
 
 # Additionally load galaxy classifier
 class_sex_science = fits.open(science_path)[1].data["class_sex"]
@@ -38,9 +38,9 @@ class_cog_control = fits.open(control_path)[1].data["class_cog"]
 
 # ----------------------------------------------------------------------
 # Make pre-selection of data
-ext = science_color.pnicer(control=control_color).extinction
+ext = science_color_all.pnicer(control=control_color_all).extinction
 # ext = np.full_like(science.features[0], fill_value=1.0)
-for d in [science.dict, control.dict]:
+for d in [science_all.dict, control_all.dict]:
     # Define filter
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -50,7 +50,7 @@ for d in [science.dict, control.dict]:
         # Test no filtering
         # fil = data.combined_mask
 
-        if d == science.dict:
+        if d == science_all.dict:
             sfil = fil & (ext > 0.3) & (class_sex_science > 0.8) & (class_cog_science == 1)
             # sfil = fil.copy()
         else:
@@ -70,12 +70,9 @@ class_cog_science = fits.open(science_path)[1].data["class_cog"]
 class_cog_control = fits.open(control_path)[1].data["class_cog"]
 
 
-
-
+# ----------------------------------------------------------------------
+# Get slopes of CCDs
 a = science.get_extinction_law(base_index=(1, 2), method="LINES", control=control)
-print(a)
-exit()
-
 
 
 # ----------------------------------------------------------------------
@@ -88,20 +85,25 @@ plot_index = [8, 7, 6, 4, 3, 0]
 data_index = [[1, 0], [2, 0], [3, 0], [2, 1], [3, 1], [3, 2]]
 for (idx1, idx2), pidx in zip(data_index, plot_index):
 
+    # Add axes
     ax1 = plt.subplot(grid1[pidx])
     ax2 = plt.subplot(grid2[pidx])
 
+    # Get source densities in CCDs
+    dens_science = point_density(science_color.features[idx1], science_color.features[idx2], xsize=0.05, ysize=0.05)
+    dens_control = point_density(control_color.features[idx1], control_color.features[idx2], xsize=0.05, ysize=0.05)
+
     # Plot all data for science field
-    ax1.scatter(science_color.features[idx1], science_color.features[idx2], lw=0, s=5, color="red", alpha=0.01)
+    ax1.scatter(science_color_all.features[idx1], science_color_all.features[idx2], lw=0, s=5, color="grey", alpha=0.01)
     # Plot filtered data for science field
-    ax1.scatter(science_color.features[idx1][sfil], science_color.features[idx2][sfil],
-                lw=0, s=5, color="blue", alpha=0.1)
+    ax1.scatter(science_color.features[idx1], science_color.features[idx2], lw=0, s=2, color="blue", alpha=0.5,
+                c=dens_science, cmap=cmap)
 
     # Plot all data for control field
-    ax2.scatter(control_color.features[idx1], control_color.features[idx2], lw=0, s=5, color="red", alpha=0.01)
+    ax2.scatter(control_color_all.features[idx1], control_color_all.features[idx2], lw=0, s=5, color="grey", alpha=0.01)
     # Plot filtered data for control field
-    ax2.scatter(control_color.features[idx1][cfil], control_color.features[idx2][cfil],
-                lw=0, s=5, color="blue", alpha=0.1)
+    ax2.scatter(control_color.features[idx1], control_color.features[idx2], lw=0, s=2, color="blue", alpha=0.5,
+                c=dens_control, cmap=cmap)
 
     # Adjust axes
     for ax in [ax1, ax2]:
@@ -139,7 +141,7 @@ for (idx1, idx2), pidx in zip(data_index, plot_index):
 # Save figure
 plt.savefig(results_path + "extinction_law_linfit_sources.png", bbox_inches="tight", dpi=300)
 plt.close()
-
+exit()
 
 # ----------------------------------------------------------------------
 # Choose base photometric bands for fitting

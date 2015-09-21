@@ -1008,9 +1008,9 @@ class Magnitudes(DataBase):
 
     def get_extinction_law(self, base_index, method="LINES", control=None):
         """
-        Implementation to fit CCDs for calculation of extinction law
+        Implementation to fit CCDs for calculation of extinction law (Ascenso et al. 2012)
         :param base_index: Tuple of two indices which form the base of the determination (x axis of the plots...)
-        :return:
+        :return: The index of fitted features and a list of slopes for these
         """
 
         # Some assertions
@@ -1070,7 +1070,7 @@ class Magnitudes(DataBase):
                 beta.append(upper / lower)
                 continue
 
-        return beta
+        return fit_index, beta
 
 
 # ----------------------------------------------------------------------
