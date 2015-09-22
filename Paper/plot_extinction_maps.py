@@ -3,12 +3,14 @@
 import wcsaxes
 import numpy as np
 import matplotlib.pyplot as plt
-from astropy.wcs import WCS
 
+from helper import get_viridis
+from astropy.wcs import WCS
 from astropy.io import fits
 from pnicer import Magnitudes
 from matplotlib.pyplot import GridSpec
 from matplotlib.ticker import MultipleLocator
+
 
 # ----------------------------------------------------------------------
 # Define file paths
@@ -19,11 +21,18 @@ results_path = "/Users/Antares/Dropbox/Projects/PNICER/Paper/Results/"
 emap_2mass_path = "/Users/Antares/Dropbox/Data/Orion/Other/Orion_Wide_Emap_2MASS.fits"
 emap_herschel_path = "/Users/Antares/Dropbox/Data/Orion/Other/Orion_Planck_Herschel_fit_wcs_AK_OriA.fits"
 
+
+# ----------------------------------------------------------------------
+# Load colormap
+# cmap = brewer2mpl.get_map("YlGnBu", "Sequential", number=9, reverse=True).get_mpl_colormap(N=11, gamma=1)
+cmap = get_viridis()
+
+
 # ----------------------------------------------------------------------
 # Load data
 skip = 1
 cskip = 1
-n_features = 3
+n_features = 5
 
 science_dummy = fits.open(science_path)[1].data
 control_dummy = fits.open(control_path)[1].data
@@ -37,7 +46,7 @@ control_glat = control_dummy["GLAT"][::cskip]
 # Set feature parameters
 features_names = ["J", "H", "Ks", "IRAC1", "IRAC2"]
 errors_names = ["J_err", "H_err", "Ks_err", "IRAC1_err", "IRAC2_err"]
-features_extinction = [2.5, 1.55, 1.0, 0.636, 0.54]
+features_extinction = [2.47, 1.55, 1.0, 0.645, 0.55]
 
 # Load photometry
 science_data = [science_dummy[n][::skip] for n in features_names[:n_features]]
@@ -66,14 +75,14 @@ science = Magnitudes(mag=science_data, err=science_error, extvec=features_extinc
 control = Magnitudes(mag=control_data, err=control_error, extvec=features_extinction,
                      lon=control_glon, lat=control_glat, names=features_names)
 
-# science_color = science.mag2color()
-# control_color = control.mag2color()
+science_color = science.mag2color()
+control_color = control.mag2color()
 
 
 # ----------------------------------------------------------------------
 # Get NICER and PNICER extinctions
-# ext_pnicer = science_color.pnicer(control=control_color)
-ext_pnicer = science.pnicer(control=control, add_colors=True)
+ext_pnicer = science_color.pnicer(control=control_color)
+# ext_pnicer = science.pnicer(control=control, add_colors=True)
 ext_nicer = science.nicer(control=control)
 
 # Save extinction data
@@ -83,17 +92,17 @@ ext_nicer = science.nicer(control=control)
 
 # ----------------------------------------------------------------------
 # Build extinction maps
-bandwidth, metric, sampling, nicest, fwhm = 2/60, "gaussian", 2, True, True
+bandwidth, metric, sampling, nicest, fwhm = 3 / 60, "gaussian", 2, False, True
 map1 = ext_pnicer.build_map(bandwidth=bandwidth, metric=metric, sampling=sampling, nicest=nicest, use_fwhm=fwhm)
 map1.save_fits(path="/Users/Antares/Desktop/pnicer_map.fits")
-map2 = ext_nicer.build_map(bandwidth=bandwidth, metric=metric, sampling=sampling, nicest=nicest, use_fwhm=fwhm)
-map2.save_fits(path="/Users/Antares/Desktop/nicer_map.fits")
+# map2 = ext_nicer.build_map(bandwidth=bandwidth, metric=metric, sampling=sampling, nicest=nicest, use_fwhm=fwhm)
+# map2.save_fits(path="/Users/Antares/Desktop/nicer_map.fits")
 
 
 # ----------------------------------------------------------------------
 # Create figure
-fig = plt.figure(figsize=[15, 4])
-grid = GridSpec(ncols=2, nrows=2, bottom=0.05, top=0.95, left=0.05, right=0.9, hspace=0.05, wspace=0.05)
+fig = plt.figure(figsize=[10, 10])
+grid = GridSpec(ncols=1, nrows=3, bottom=0.05, top=0.95, left=0.05, right=0.9, hspace=0.05, wspace=0.05)
 
 # Add colorbar axes
 cax = fig.add_axes([0.91, 0.05, 0.02, 0.89])
@@ -103,31 +112,34 @@ vmin, vmax = 0, 2
 edges = [[216.2, 206.7], [-20.5, -18.05]]
 
 # Plot 1st results
-ax1 = plt.subplot(grid[0], projection=wcsaxes.WCS(map1.fits_header))
+ax1 = plt.subplot(grid[1], projection=wcsaxes.WCS(map1.fits_header))
 # Extinction map
-im1 = ax1.imshow(map1.map, origin="lower", interpolation="nearest", cmap="binary", vmin=vmin, vmax=vmax)
+im1 = ax1.imshow(map1.map, origin="lower", interpolation="nearest",
+                 cmap=cmap, vmin=vmin, vmax=vmax)
 
-# Plot 2nd results
-ax2 = plt.subplot(grid[1], projection=wcsaxes.WCS(map2.fits_header))
-# Extinction map
-im2 = ax2.imshow(map2.map, origin="lower", interpolation="nearest", cmap="binary", vmin=vmin, vmax=vmax)
+# # Plot 2nd results
+# ax2 = plt.subplot(grid[1], projection=wcsaxes.WCS(map2.fits_header))
+# # Extinction map
+# im2 = ax2.imshow(map2.map, origin="lower", interpolation="nearest",
+#                  cmap=cmap, vmin=vmin, vmax=vmax)
 
 # Plot 2MASS emap
-ax3 = plt.subplot(grid[2], projection=wcsaxes.WCS(emap_2mass_header))
+ax3 = plt.subplot(grid[0], projection=wcsaxes.WCS(emap_2mass_header))
 # Extinction map
-im3 = ax3.imshow(emap_2mass, origin="lower", interpolation="nearest", cmap="binary", vmin=vmin, vmax=vmax)
+im3 = ax3.imshow(emap_2mass, origin="lower", interpolation="nearest",
+                 cmap=cmap, vmin=vmin, vmax=vmax)
 
 # Plot Herschel emap
-ax4 = plt.subplot(grid[3], projection=wcsaxes.WCS(emap_herschel_header))
+ax4 = plt.subplot(grid[2], projection=wcsaxes.WCS(emap_herschel_header))
 # Extinction map
-im4 = ax4.imshow(emap_herschel, origin="lower", interpolation="nearest", cmap="binary", vmin=vmin, vmax=vmax)
+im4 = ax4.imshow(emap_herschel, origin="lower", interpolation="nearest",
+                 cmap=cmap, vmin=vmin, vmax=vmax)
 
 # Plot colorbar
 plt.colorbar(im1, cax=cax, ticks=MultipleLocator(0.2), label="$A_K$")
 
 # Set common properties
-for ax, header in zip([ax1, ax2, ax3, ax4], [map1.fits_header, map2.fits_header,
-                                             emap_2mass_header, emap_herschel_header]):
+for ax, header in zip([ax1, ax3, ax4], [map1.fits_header, emap_2mass_header, emap_herschel_header]):
 
     # Set limits
     wcs = WCS(header)

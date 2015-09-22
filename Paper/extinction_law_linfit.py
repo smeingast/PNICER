@@ -128,76 +128,76 @@ science_good_color = science_good.mag2color()
 fit_idx, betas, betas_err = science_good.get_extinction_law(base_index=base_idx, method="LINES", control=control)
 
 
-# ----------------------------------------------------------------------
-# Plot pre-selection of data
-fig1 = plt.figure(figsize=[14, 6.22])
-grid1 = GridSpec(ncols=3, nrows=3, bottom=0.05, top=0.95, left=0.05, right=0.45, hspace=0, wspace=0)
-grid2 = GridSpec(ncols=3, nrows=3, bottom=0.05, top=0.95, left=0.50, right=0.90, hspace=0, wspace=0)
-
-plot_index = [8, 7, 6, 4, 3, 0]
-data_index = [[1, 0], [2, 0], [3, 0], [2, 1], [3, 1], [3, 2]]
-for (idx1, idx2), pidx in zip(data_index, plot_index):
-
-    # Add axes
-    ax1 = plt.subplot(grid1[pidx])
-    ax2 = plt.subplot(grid2[pidx])
-
-    # Get source densities in CCDs
-    # dens_science = point_density(science_color.features[idx1], science_color.features[idx2], xsize=0.05, ysize=0.05)
-    dens_science = point_density(science_good_color.features[idx1], science_good_color.features[idx2], xsize=0.05, ysize=0.05)
-    dens_control = point_density(control_color.features[idx1], control_color.features[idx2], xsize=0.05, ysize=0.05)
-
-    # Plot all data for science field
-    ax1.scatter(science_color_all.features[idx1], science_color_all.features[idx2],
-                lw=0, s=5, color="grey", alpha=0.01)
-    # Plot filtered data for science field
-    # ax1.scatter(science_color.features[idx1], science_color.features[idx2],
-    #             lw=1, s=7, facecolor="none", edgecolor="black", alpha=1)
-    ax1.scatter(science_good_color.features[idx1], science_good_color.features[idx2],
-                lw=0, s=3, alpha=0.5, c=dens_science, cmap=cmap2)
-
-    # Plot all data for control field
-    ax2.scatter(control_color_all.features[idx1], control_color_all.features[idx2], lw=0, s=5, color="grey", alpha=0.01)
-    # Plot filtered data for control field
-    ax2.scatter(control_color.features[idx1], control_color.features[idx2],
-                lw=0, s=2, alpha=0.5, c=dens_control, cmap=cmap1)
-
-    # Adjust axes
-    for ax in [ax1, ax2]:
-
-        # limits
-        ax.set_xlim(-0.7, 2.8)
-        ax.set_ylim(-0.2, 3.3)
-
-        # Force aspect ratio
-        # ax.set_aspect(1)
-
-        # Ticker
-        ax.xaxis.set_major_locator(MultipleLocator(1))
-        ax.xaxis.set_minor_locator(MultipleLocator(0.2))
-        ax.yaxis.set_major_locator(MultipleLocator(1))
-        ax.yaxis.set_minor_locator(MultipleLocator(0.2))
-        # Remove labels
-        if pidx < 6:
-            ax.axes.xaxis.set_ticklabels([])
-        if pidx in [4, 7, 8]:
-            ax.axes.yaxis.set_ticklabels([])
-        # set labels
-        if pidx == 8:
-            ax.set_xlabel("$H-K_S$")
-        if pidx == 7:
-            ax.set_xlabel("$K_S - [3.6]$")
-        if pidx == 6:
-            ax.set_xlabel("$[3.6] - [4.5]$")
-            ax.set_ylabel("$J-H$")
-        if pidx == 3:
-            ax.set_ylabel("$H-K_S$")
-        if pidx == 0:
-            ax.set_ylabel("$K_S - [3.6]$")
-
-# Save figure
-plt.savefig(results_path + "extinction_law_linfit_sources.png", bbox_inches="tight", dpi=300)
-plt.close()
+# # ----------------------------------------------------------------------
+# # Plot pre-selection of data
+# fig1 = plt.figure(figsize=[14, 6.22])
+# grid1 = GridSpec(ncols=3, nrows=3, bottom=0.05, top=0.95, left=0.05, right=0.45, hspace=0, wspace=0)
+# grid2 = GridSpec(ncols=3, nrows=3, bottom=0.05, top=0.95, left=0.50, right=0.90, hspace=0, wspace=0)
+#
+# plot_index = [8, 7, 6, 4, 3, 0]
+# data_index = [[1, 0], [2, 0], [3, 0], [2, 1], [3, 1], [3, 2]]
+# for (idx1, idx2), pidx in zip(data_index, plot_index):
+#
+#     # Add axes
+#     ax1 = plt.subplot(grid1[pidx])
+#     ax2 = plt.subplot(grid2[pidx])
+#
+#     # Get source densities in CCDs
+#     # dens_science = point_density(science_color.features[idx1], science_color.features[idx2], xsize=0.05, ysize=0.05)
+#     dens_science = point_density(science_good_color.features[idx1], science_good_color.features[idx2], xsize=0.05, ysize=0.05)
+#     dens_control = point_density(control_color.features[idx1], control_color.features[idx2], xsize=0.05, ysize=0.05)
+#
+#     # Plot all data for science field
+#     ax1.scatter(science_color_all.features[idx1], science_color_all.features[idx2],
+#                 lw=0, s=5, color="grey", alpha=0.01)
+#     # Plot filtered data for science field
+#     # ax1.scatter(science_color.features[idx1], science_color.features[idx2],
+#     #             lw=1, s=7, facecolor="none", edgecolor="black", alpha=1)
+#     ax1.scatter(science_good_color.features[idx1], science_good_color.features[idx2],
+#                 lw=0, s=3, alpha=0.5, c=dens_science, cmap=cmap2)
+#
+#     # Plot all data for control field
+#     ax2.scatter(control_color_all.features[idx1], control_color_all.features[idx2], lw=0, s=5, color="grey", alpha=0.01)
+#     # Plot filtered data for control field
+#     ax2.scatter(control_color.features[idx1], control_color.features[idx2],
+#                 lw=0, s=2, alpha=0.5, c=dens_control, cmap=cmap1)
+#
+#     # Adjust axes
+#     for ax in [ax1, ax2]:
+#
+#         # limits
+#         ax.set_xlim(-0.7, 2.8)
+#         ax.set_ylim(-0.2, 3.3)
+#
+#         # Force aspect ratio
+#         # ax.set_aspect(1)
+#
+#         # Ticker
+#         ax.xaxis.set_major_locator(MultipleLocator(1))
+#         ax.xaxis.set_minor_locator(MultipleLocator(0.2))
+#         ax.yaxis.set_major_locator(MultipleLocator(1))
+#         ax.yaxis.set_minor_locator(MultipleLocator(0.2))
+#         # Remove labels
+#         if pidx < 6:
+#             ax.axes.xaxis.set_ticklabels([])
+#         if pidx in [4, 7, 8]:
+#             ax.axes.yaxis.set_ticklabels([])
+#         # set labels
+#         if pidx == 8:
+#             ax.set_xlabel("$H-K_S$")
+#         if pidx == 7:
+#             ax.set_xlabel("$K_S - [3.6]$")
+#         if pidx == 6:
+#             ax.set_xlabel("$[3.6] - [4.5]$")
+#             ax.set_ylabel("$J-H$")
+#         if pidx == 3:
+#             ax.set_ylabel("$H-K_S$")
+#         if pidx == 0:
+#             ax.set_ylabel("$K_S - [3.6]$")
+#
+# # Save figure
+# plt.savefig(results_path + "extinction_law_linfit_sources.png", bbox_inches="tight", dpi=300)
+# plt.close()
 
 
 # ----------------------------------------------------------------------
@@ -236,7 +236,8 @@ for beta, berr, idx, pidx in zip(betas, betas_err, fit_idx, range(len(fit_idx)))
     dens = point_density(xdata=xdata_science_good, ydata=ydata_science_good, xsize=0.1, ysize=0.1)
 
     # Plot data
-    ax.scatter(xdata_science, ydata_science, lw=1, s=8, alpha=1, facecolors="none", edgecolor="black")
+    # ax.scatter(xdata_science, ydata_science, lw=1, s=8, alpha=1, facecolors="none", edgecolor="black")
+    ax.scatter(xdata_science, ydata_science, lw=1, s=8, alpha=0.25, facecolors="black", edgecolor="none")
     ax.scatter(xdata_science_good, ydata_science_good, lw=0, s=11, alpha=0.8, c=dens, cmap=cmap2)
 
     # Plot slope and make it pass through median
