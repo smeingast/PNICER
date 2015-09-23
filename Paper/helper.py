@@ -37,9 +37,9 @@ def pnicer_ini(skip_science, skip_control, n_features=5, color=False, sfil=None,
     control_glat = control_dummy["GLAT"][cfil][::skip_control]
 
     # Definitions
-    features_names = ["J", "H", "Ks", "IRAC1", "IRAC2"]
-    errors_names = ["J_err", "H_err", "Ks_err", "IRAC1_err", "IRAC2_err"]
-    features_extinction = [2.5, 1.55, 1.0, 0.636, 0.54]
+    features_names = ["J", "H", "Ks", "IRAC1", "IRAC2"][:n_features]
+    errors_names = ["J_err", "H_err", "Ks_err", "IRAC1_err", "IRAC2_err"][:n_features]
+    features_extinction = [2.5, 1.55, 1.0, 0.636, 0.54][:n_features]
 
     # Photometry
     science_data = [science_dummy[n][sfil][::skip_science] for n in features_names[:n_features]]
