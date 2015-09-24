@@ -12,7 +12,7 @@ from pnicer import Magnitudes
 
 # ----------------------------------------------------------------------
 # PNICER initialization functions
-def pnicer_ini(skip_science, skip_control, n_features=5, color=False, sfil=None, cfil=None):
+def pnicer_ini(skip_science=1, skip_control=1, n_features=5, color=False, sfil=None, cfil=None):
 
     # Type assertion
     assert isinstance(skip_science, int) & isinstance(skip_control, int) & isinstance(n_features, int)
