@@ -1,10 +1,12 @@
 # ----------------------------------------------------------------------
 # Import stuff
+import time
 import wcsaxes
 import warnings
 import brewer2mpl
 import matplotlib.pyplot as plt
 
+from astropy.io import fits
 from itertools import repeat
 from multiprocessing import Pool
 from matplotlib.pyplot import GridSpec
@@ -23,7 +25,7 @@ results_path = "/Users/Antares/Dropbox/Projects/PNICER/Paper/Results/"
 # ----------------------------------------------------------------------
 # Load colorbrewer colormap
 cmap0 = brewer2mpl.get_map("Greys", "Sequential", number=9, reverse=False).get_mpl_colormap(N=500, gamma=1)
-cmap1 = brewer2mpl.get_map("Spectral", "Diverging", number=11, reverse=True).get_mpl_colormap(N=10, gamma=1)
+cmap1 = brewer2mpl.get_map("Spectral", "Diverging", number=11, reverse=True).get_mpl_colormap(N=100, gamma=1)
 cmap2 = brewer2mpl.get_map("YlGnBu", "Sequential", number=9, reverse=True).get_mpl_colormap(N=10, gamma=1)
 viridis = get_viridis()
 
@@ -41,20 +43,23 @@ class_cog_control = fits.open(control_path)[1].data["class_cog"]
 
 # ----------------------------------------------------------------------
 # Make pre-selection of data
-pnicer = science_color.pnicer(control=control_color)
-ext = pnicer.extinction
+# pnicer = science_color.pnicer(control=control_color).save_fits(path="/Users/Antares/test.fits")
+# read table
+""" For some reason when I open a pool with PNICER, i can't do plotting down below during the parallelized
+spatial mapping"""
+ext = fits.open("/Users/Antares/test.fits")[1].data["Extinction"]
 # ext = np.full_like(science.features[0], fill_value=1.0)
 for d in [science.dict, control.dict]:
     # Define filter
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        fil = (d["J"] > 0) & (d["H"] > 0) & (d["Ks"] < 16) & (d["Ks_err"] < 0.1)
+        fil = (d["J"] > 0) & (d["H"] > 0) & (d["Ks"] < 17) & (d["Ks_err"] < 0.1)
 
         # Test no filtering
-        # fil = data.combined_mask
+        # fil = np.full_like(d["J"], fill_value=True, dtype=bool)
 
         if d == science.dict:
-            sfil = fil & (ext > 0.3) & (class_sex_science > 0.8) & (class_cog_science == 1)
+            sfil = fil & (ext > 0.5) & (class_sex_science > 0.8) & (class_cog_science == 1)
             # sfil = fil.copy()
         else:
             cfil = fil & (class_sex_control > 0.8) & (class_cog_control == 1)
@@ -134,7 +139,7 @@ glon_range, glat_range = all_glon.ravel(), all_glat.ravel()
 
 # ----------------------------------------------------------------------
 # Build preliminary extinction map
-emap = pnicer.build_map(bandwidth=pixsize * 2, metric="epanechnikov")
+# emap = pnicer.build_map(bandwidth=pixsize * 2, metric="epanechnikov")
 
 
 # ----------------------------------------------------------------------
@@ -152,26 +157,62 @@ def get_slope(glon_pix, glat_pix, glon_all, glat_all, maxdis):
     n = np.sum(dfil)
 
     # Skip if there are too few
-    if np.sum(dfil) < 100:
+    if np.sum(dfil) < 500:
         return np.nan, np.nan, np.nan, np.nan
 
     # Initialize with current distance filter
     csdata = [science.features[i][dfil] for i in range(science.n_features)]
     cserr = [science.features_err[i][dfil] for i in range(science.n_features)]
     sc = Magnitudes(mag=csdata, err=cserr, extvec=science.extvec.extvec)
+    xd, yd = sc.features[1] - sc.features[2], sc.features[2] - sc.features[0]
+
+    # Return NaN if color range is too small
+    if np.max(xd) - np.min(xd) < 1:
+        return np.nan, np.nan, np.nan, np.nan
+
+    # Filter Ks-H > 4
+    good = yd > -4
+    csdata = [d[good] for d in csdata]
+    cserr = [e[good] for e in cserr]
+    sc = Magnitudes(mag=csdata, err=cserr, extvec=science.extvec.extvec)
+    xd, yd = sc.features[1] - sc.features[2], sc.features[2] - sc.features[0]
+
     f, b, e = sc.get_extinction_law(base_index=(1, 2), method="LINES", control=control)
+
+    # Return if error is too large
+    if e[0] > 0.05:
+        return np.nan, np.nan, np.nan, np.nan
+
+    name = str(np.around(glon_pix, 3)) + "_" + str(np.around(glat_pix, 3)) + ".png"
+    myplot(xd, yd, be=b[0], berr=e[0], name=name)
+    time.sleep(0.3)
 
     # Just return for J band
     return f[0], b[0], e[0], n
 
 
+def myplot(a, b, be, berr, name):
+
+    # Get intercept
+    interc = np.median(b) - be * np.median(a)
+    _, ax = plt.subplots(nrows=1, ncols=1, figsize=[10, 10])
+    ax.scatter(a, b, lw=0)
+    # ax.plot(np.arange(-1, 5, 1), be * np.arange(-1, 5, 1) + interc, color="black", lw=2, linestyle="dashed")
+    ax.annotate(str(np.around(be, 3)) + " $\pm $ " + str(np.around(berr, 3)),
+                xy=[0.95, 0.95], xycoords="axes fraction", ha="right", va="top")
+    ax.set_xlim(0, 2.5)
+    ax.set_ylim(-6, 0)
+    ax.set_aspect(1)
+    plt.savefig("/Users/Antares/Desktop/test/" + name, bbox_inches="tight", dpi=300)
+    plt.close()
+
 # ----------------------------------------------------------------------
 # Run parallel
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
-    with Pool(6) as pool:
-        mp = pool.starmap(get_slope, zip(glon_range, glat_range, repeat(science.lon),
-                                         repeat(science.lat), repeat(20 / 60)))
+# with warnings.catch_warnings():
+#     warnings.simplefilter("ignore")
+with Pool(6) as pool:
+    mp = pool.starmap(get_slope, zip(glon_range, glat_range, repeat(science.lon),
+                                     repeat(science.lat), repeat(30 / 60)))
 
 # Unpack results
 idx, slope, slope_err, nsources = list(zip(*mp))
@@ -187,8 +228,8 @@ fig = plt.figure(figsize=[11, 13])
 grid = GridSpec(ncols=2, nrows=4, bottom=0.05, top=0.95, left=0.05, right=0.95, hspace=0.1, wspace=0.1,
                 width_ratios=[1, 0.02])
 # Add axes
-ax0 = plt.subplot(grid[0], projection=wcsaxes.WCS(header=emap.fits_header))
-cax0 = plt.subplot(grid[1])
+# ax0 = plt.subplot(grid[0], projection=wcsaxes.WCS(header=emap.fits_header))
+# cax0 = plt.subplot(grid[1])
 ax1 = plt.subplot(grid[2], projection=wcsaxes.WCS(header=header))
 cax1 = plt.subplot(grid[3])
 ax2 = plt.subplot(grid[4], projection=wcsaxes.WCS(header=header))
@@ -197,20 +238,28 @@ ax3 = plt.subplot(grid[6], projection=wcsaxes.WCS(header=header))
 cax3 = plt.subplot(grid[7])
 
 # Plot extinction map
-im0 = ax0.imshow(emap.map, interpolation="nearest", origin="lower", vmin=0, vmax=2, cmap=cmap0)
-plt.colorbar(im0, cax=cax0, ticks=MultipleLocator(0.25), label="$A_K$")
+# im0 = ax0.imshow(emap.map, interpolation="nearest", origin="lower", vmin=0, vmax=2, cmap=cmap0)
+# plt.colorbar(im0, cax=cax0, ticks=MultipleLocator(0.25), label="$A_K$")
 
 # Plot slope
-im1 = ax1.imshow(slope.reshape(grid_shape), cmap=cmap1, interpolation="nearest", origin="lower", vmin=-2.82, vmax=-2.62)
-plt.colorbar(im1, cax=cax1, ticks=MultipleLocator(0.02), label=r"$\beta$")
+im1 = ax1.imshow(slope.reshape(grid_shape), cmap=cmap1, interpolation="nearest", origin="lower", vmin=-2.85, vmax=-2.5)
+plt.colorbar(im1, cax=cax1, ticks=MultipleLocator(0.05), label=r"$\beta$")
+
+# Save slope map
+hdulist = fits.HDUList([fits.PrimaryHDU(),
+                        fits.ImageHDU(data=slope.reshape(grid_shape), header=header),
+                        fits.ImageHDU(data=slope_err.reshape(grid_shape), header=header),
+                        fits.ImageHDU(data=nsources.reshape(grid_shape), header=header)])
+hdulist.writeto("/Users/Antares/Desktop/spatial.fits", clobber=True)
 
 # Plot slope error
-im2 = ax2.imshow(slope_err.reshape(grid_shape), cmap=viridis, interpolation="nearest", origin="lower", vmin=0, vmax=0.1)
+im2 = ax2.imshow(slope_err.reshape(grid_shape), cmap=viridis,
+                 interpolation="nearest", origin="lower", vmin=0, vmax=0.05)
 plt.colorbar(im2, cax=cax2, label=r"$\sigma_{\beta}$")
 
 # Plot number of sources
 # ax2.scatter(glon_range, glat_range, c=slope, lw=0, marker="s", s=300, cmap=cmap, vmin=2.45, vmax=2.55)
-im3 = ax3.imshow(nsources.reshape(grid_shape), cmap=viridis, interpolation="nearest",  origin="lower")
+im3 = ax3.imshow(nsources.reshape(grid_shape), cmap=viridis, interpolation="nearest", origin="lower")
 plt.colorbar(im3, cax=cax3, label="#")
 
 # Draw IRAC1 coverage
@@ -219,11 +268,12 @@ irac1_coverage = fits.open(irac1_coverage_path)[0].data
 irac1_coverage_header = fits.open(irac1_coverage_path)[0].header
 
 # Adjust axes
-for ax in [ax0, ax1, ax2]:
-    ax.set_xlim(0, grid_shape[1])
-    ax.set_ylim(0, grid_shape[0])
-    ax.contour(irac1_coverage, levels=[0, 1], transform=ax.get_transform(wcsaxes.WCS(irac1_coverage_header)),
-               colors="black")
+# for ax in [ax0, ax1, ax2]:
+for ax in [ax1, ax2, ax3]:
+    ax.set_xlim(-0.5, grid_shape[1] - 0.5)
+    ax.set_ylim(-0.5, grid_shape[0] - 0.5)
+    # ax.contour(irac1_coverage, levels=[0, 1], transform=ax.get_transform(wcsaxes.WCS(irac1_coverage_header)),
+    #            colors="black")
 
 # Save figure
 plt.savefig(results_path + "extinction_law_spatial.pdf", bbox_inches="tight", dpi=300)
