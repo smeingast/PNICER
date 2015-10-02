@@ -5,15 +5,15 @@ import glob
 import wcsaxes
 import warnings
 import brewer2mpl
+import numpy as np
 import matplotlib.pyplot as plt
 
 from astropy.io import fits
-from pnicer import Magnitudes, Extinction, get_covar
-from scipy.odr import Model, RealData, ODR
+from pnicer import Magnitudes
 from matplotlib.pyplot import GridSpec
 from matplotlib.ticker import MultipleLocator
-from MyFunctions import distance_on_unit_sphere, point_density
-from helper import *
+from MyFunctions import point_density
+from helper import pnicer_ini, get_viridis
 
 
 # ----------------------------------------------------------------------
@@ -264,12 +264,12 @@ for key in fit_keys:
 
         # Plot LINES
         avg_dens = point_density(x1_fil - x2_fil, x2_fil - y_fil, xsize=0.1, ysize=0.1)
-        ax0.plot(np.arange(-1, 5, 0.5), l_beta * np.arange(-1, 5, 0.5) + l_ic, c="black", lw=1, linestyle="dashed", alpha=0.5)
+        ax0.plot(np.arange(-1, 5, 0.5), l_beta * np.arange(-1, 5, 0.5) + l_ic, c="black",
+                 lw=1, linestyle="dashed", alpha=0.5)
         ax0.scatter(x1_fil - x2_fil, x2_fil - y_fil, lw=0, s=10, c=avg_dens)
         ax0.annotate(str(np.around(l_beta, 3)), xy=[0.95, 0.95], xycoords="axes fraction", ha="right", va="top")
         ax0.annotate("$n=" + str(fil_sc.n_data) + "$", xy=[0.5, 1.01], xycoords="axes fraction",
                      ha="center", va="bottom")
-
 
         # # Plot binning
         ax1.scatter(avg_x, avg_y, lw=0, s=20, c=avg_e, zorder=2)
@@ -358,7 +358,6 @@ for key, axl, axb, cax, crange in \
     # else:
     #     lat.set_ticklabel_position("")
 
-
     # break
 
 # Save plot
@@ -371,14 +370,7 @@ hdulist = [fits.ImageHDU(data=beta_lines[key].reshape(glat_grid.shape), header=h
 # Save slope map as FITS
 hdulist = fits.HDUList([fits.PrimaryHDU()] + hdulist)
 hdulist.writeto("/Users/Antares/Desktop/spatial.fits", clobber=True)
-
-
 exit()
-
-
-
-exit()
-
 
 
 # # ----------------------------------------------------------------------
@@ -544,151 +536,151 @@ exit()
 #     return upper / lower, x_s_lines, y_s_lines
 
 
-# ----------------------------------------------------------------------
-# Now we loop over each selected feature and do the fitting
-# fig2 = plt.figure(figsize=[12, 5])
-# grid2 = GridSpec(ncols=3, nrows=1, bottom=0.05, top=0.95, left=0.05, right=0.95, hspace=0.1, wspace=0.2)
-# axes_fit = [plt.subplot(grid2[i]) for i in range(len(fit_keys))]
-
-# Now loop over keys
-pglon, pglat, beta_binning, beta_lines = {}, {}, {}, {}
-for key in fit_keys:
-
-    pglon[key], pglat[key], beta_binning[key], beta_lines[key] = [], [], [], []
-
-    sc, cc = science_fil[key], control_fil[key]
-    assert (isinstance(sc, Magnitudes)) & (isinstance(cc, Magnitudes))
-
-    for glon, glat in zip(glon_grid.ravel(), glat_grid.ravel()):
-
-        # Append data
-        pglon[key].append(glon)
-        pglat[key].append(glat)
-
-        # get sources within given radius
-        dis = np.degrees(distance_on_unit_sphere(ra1=np.radians(sc.lon), dec1=np.radians(sc.lat),
-                                                 ra2=np.radians(glon), dec2=np.radians(glat)))
-
-        # Additional distance filtering for science field
-        dfil = dis < 30 / 60
-
-        # Save number of sources within filter limits
-        n = np.sum(dfil)
-
-        # Skip if there are too few
-        if np.sum(dfil) < 500:
-            beta_binning[key].append(np.nan)
-            beta_lines[key].append(np.nan)
-            continue
-
-        # Initialize with current distance filter
-        fil_data = [sc.features[i][dfil] for i in range(sc.n_features)]
-        fil_err = [sc.features_err[i][dfil] for i in range(sc.n_features)]
-        fil_sc = Magnitudes(mag=fil_data, err=fil_err, extvec=sc.extvec.extvec, names=sc.features_names)
-
-        # First we do binning in Extinction
-        fil_ak = fil_sc.mag2color().pnicer(control=cc.mag2color()).extinction
-        color1 = fil_sc.dict[base_keys[0]] - fil_sc.dict[base_keys[1]]
-        color2 = fil_sc.dict[base_keys[1]] - fil_sc.dict[key]
-
-        # Skip if base color range is less than 1.5
-        if np.nanmax(color1) - np.nanmin(color1) < 1.5:
-            beta_binning[key].append(np.nan)
-            beta_lines[key].append(np.nan)
-            continue
-
-        # Do ODR fit to binned data
-        bbeta, ic_binning, bbeta_err, mcolor1, mcolor2, mstd1, mstd2, mavg, mn = \
-            bin_extinction(xcolor=color1, ycolor=color2, xy_ak=fil_ak, ak_step=0.1)
-
-        # No we also perform the LINES fit
-        lbeta, lcolor1, lcolor2 = lines(pnicer_science=fil_sc, pnicer_control=cc, base_key=base_keys, fit_key=key)
-
-        # Plot parameters
-        x_dummy = np.arange(-1, 5, 1)
-        ic_lines = np.median(lcolor2) - lbeta * np.median(lcolor1)
-
-        # Generate plot name
-        name = str(np.around(glon, 3)) + "_" + str(np.around(glat, 3)) + "_" + key + ".png"
-
-        # Create figure
-        fig_dummy, [ax0, ax1] = plt.subplots(nrows=1, ncols=2, figsize=[10, 5])
-
-        # Plot LINES
-        ax0.plot(x_dummy, lbeta * x_dummy + ic_lines, color="black", lw=1, linestyle="dashed", alpha=0.5)
-        ax0.scatter(lcolor1, lcolor2, lw=0, s=10, color="blue")
-        ax0.annotate(str(np.around(lbeta, 3)), xy=[0.95, 0.95], xycoords="axes fraction", ha="right", va="top")
-        # Plot binning
-        ax1.scatter(mcolor1, mcolor2, lw=0, s=20, c=mavg, zorder=2)
-        ax1.errorbar(mcolor1, mcolor2, xerr=mstd1, yerr=mstd2, zorder=1, ecolor="black", elinewidth=0.5, fmt="none")
-        ax1.plot(x_dummy, bbeta * x_dummy + ic_binning, color="black", lw=1, linestyle="dashed", alpha=0.5, zorder=3)
-        ax1.annotate(str(np.around(bbeta, 3)) + " $\pm $ " + str(np.around(bbeta_err, 3)),
-                    xy=[0.95, 0.95], xycoords="axes fraction", ha="right", va="top")
-        for ax in [ax0, ax1]:
-            ax.set_xlabel("$" + base_keys[0] + "-" + base_keys[1] + "$")
-            ax.set_ylabel("$" + base_keys[1] + "-" + key + "$")
-            ax.set_xlim(-0.5, 3)
-            if key == "J":
-                ax.set_ylim(-6, 0)
-            if key == "IRAC1":
-                ax.set_ylim(-0.5, 2)
-            if key == "IRAC2":
-                ax.set_ylim(-0.5, 2)
-
-        # Save for current position
-        plt.savefig(results_path + "extinction_law_spatial/" + name, bbox_inches="tight", dpi=300)
-        plt.close()
-
-        # Append data only if fits match reasonably
-        # if bbeta - lbeta > 0.1:
-        #     beta_binning[key].append(np.nan)
-        #     beta_lines[key].append(np.nan)
-        # else:
-        beta_binning[key].append(bbeta)
-        beta_lines[key].append(lbeta)
-
-    # Convert to arrays
-    pglon[key], pglat[key] = np.array(pglon[key]), np.array(pglat[key])
-    beta_binning[key], beta_lines[key] = np.array(beta_binning[key]), np.array(beta_lines[key])
-
-
-# Create figure for spatially variable slope plot
-fig = plt.figure(figsize=[11, 5])
-grid = GridSpec(ncols=3, nrows=3, bottom=0.05, top=0.95, left=0.05, right=0.95, hspace=0.1, wspace=0.1,
-                width_ratios=[1, 1, 0.02])
-
-# Add axes
-ax0_l = plt.subplot(grid[0], projection=wcsaxes.WCS(header=header))
-ax0_b = plt.subplot(grid[1], projection=wcsaxes.WCS(header=header))
-cax0 = plt.subplot(grid[2])
-
-ax1_l = plt.subplot(grid[3], projection=wcsaxes.WCS(header=header))
-ax1_b = plt.subplot(grid[4], projection=wcsaxes.WCS(header=header))
-cax1 = plt.subplot(grid[5])
-
-ax2_l = plt.subplot(grid[6], projection=wcsaxes.WCS(header=header))
-ax2_b = plt.subplot(grid[7], projection=wcsaxes.WCS(header=header))
-cax2 = plt.subplot(grid[8])
-
-# Plot spatial dependency for everything
-for key, axl, axb, cax, crange in \
-        zip(fit_keys, [ax0_l, ax1_l, ax2_l], [ax0_b, ax1_b, ax2_b],
-            [cax0, cax1, cax2], [(-2.8, -2.5), (0.55, 0.7), (0.6, 0.9)]):
-
-    # LINES slopes
-    im_l = axl.imshow(beta_lines[key].reshape(glat_grid.shape), cmap=cmap1,
-                      interpolation="nearest", origin="lower", vmin=crange[0], vmax=crange[1])
-    # Binning slopes
-    im_b = axb.imshow(beta_binning[key].reshape(glat_grid.shape), cmap=cmap1,
-                      interpolation="nearest", origin="lower", vmin=crange[0], vmax=crange[1])
-    # Colorbar
-    plt.colorbar(im_l, cax=cax, ticks=MultipleLocator(0.05), label=r"$\beta$")
-
-# Save plot
-plt.savefig(results_path + "extinction_law_spatial.pdf", bbox_inches="tight", dpi=300)
-plt.close()
-
-exit()
+# # ----------------------------------------------------------------------
+# # Now we loop over each selected feature and do the fitting
+# # fig2 = plt.figure(figsize=[12, 5])
+# # grid2 = GridSpec(ncols=3, nrows=1, bottom=0.05, top=0.95, left=0.05, right=0.95, hspace=0.1, wspace=0.2)
+# # axes_fit = [plt.subplot(grid2[i]) for i in range(len(fit_keys))]
+#
+# # Now loop over keys
+# pglon, pglat, beta_binning, beta_lines = {}, {}, {}, {}
+# for key in fit_keys:
+#
+#     pglon[key], pglat[key], beta_binning[key], beta_lines[key] = [], [], [], []
+#
+#     sc, cc = science_fil[key], control_fil[key]
+#     assert (isinstance(sc, Magnitudes)) & (isinstance(cc, Magnitudes))
+#
+#     for glon, glat in zip(glon_grid.ravel(), glat_grid.ravel()):
+#
+#         # Append data
+#         pglon[key].append(glon)
+#         pglat[key].append(glat)
+#
+#         # get sources within given radius
+#         dis = np.degrees(distance_on_unit_sphere(ra1=np.radians(sc.lon), dec1=np.radians(sc.lat),
+#                                                  ra2=np.radians(glon), dec2=np.radians(glat)))
+#
+#         # Additional distance filtering for science field
+#         dfil = dis < 30 / 60
+#
+#         # Save number of sources within filter limits
+#         n = np.sum(dfil)
+#
+#         # Skip if there are too few
+#         if np.sum(dfil) < 500:
+#             beta_binning[key].append(np.nan)
+#             beta_lines[key].append(np.nan)
+#             continue
+#
+#         # Initialize with current distance filter
+#         fil_data = [sc.features[i][dfil] for i in range(sc.n_features)]
+#         fil_err = [sc.features_err[i][dfil] for i in range(sc.n_features)]
+#         fil_sc = Magnitudes(mag=fil_data, err=fil_err, extvec=sc.extvec.extvec, names=sc.features_names)
+#
+#         # First we do binning in Extinction
+#         fil_ak = fil_sc.mag2color().pnicer(control=cc.mag2color()).extinction
+#         color1 = fil_sc.dict[base_keys[0]] - fil_sc.dict[base_keys[1]]
+#         color2 = fil_sc.dict[base_keys[1]] - fil_sc.dict[key]
+#
+#         # Skip if base color range is less than 1.5
+#         if np.nanmax(color1) - np.nanmin(color1) < 1.5:
+#             beta_binning[key].append(np.nan)
+#             beta_lines[key].append(np.nan)
+#             continue
+#
+#         # Do ODR fit to binned data
+#         bbeta, ic_binning, bbeta_err, mcolor1, mcolor2, mstd1, mstd2, mavg, mn = \
+#             bin_extinction(xcolor=color1, ycolor=color2, xy_ak=fil_ak, ak_step=0.1)
+#
+#         # No we also perform the LINES fit
+#         lbeta, lcolor1, lcolor2 = lines(pnicer_science=fil_sc, pnicer_control=cc, base_key=base_keys, fit_key=key)
+#
+#         # Plot parameters
+#         x_dummy = np.arange(-1, 5, 1)
+#         ic_lines = np.median(lcolor2) - lbeta * np.median(lcolor1)
+#
+#         # Generate plot name
+#         name = str(np.around(glon, 3)) + "_" + str(np.around(glat, 3)) + "_" + key + ".png"
+#
+#         # Create figure
+#         fig_dummy, [ax0, ax1] = plt.subplots(nrows=1, ncols=2, figsize=[10, 5])
+#
+#         # Plot LINES
+#         ax0.plot(x_dummy, lbeta * x_dummy + ic_lines, color="black", lw=1, linestyle="dashed", alpha=0.5)
+#         ax0.scatter(lcolor1, lcolor2, lw=0, s=10, color="blue")
+#         ax0.annotate(str(np.around(lbeta, 3)), xy=[0.95, 0.95], xycoords="axes fraction", ha="right", va="top")
+#         # Plot binning
+#         ax1.scatter(mcolor1, mcolor2, lw=0, s=20, c=mavg, zorder=2)
+#         ax1.errorbar(mcolor1, mcolor2, xerr=mstd1, yerr=mstd2, zorder=1, ecolor="black", elinewidth=0.5, fmt="none")
+#         ax1.plot(x_dummy, bbeta * x_dummy + ic_binning, color="black", lw=1, linestyle="dashed", alpha=0.5, zorder=3)
+#         ax1.annotate(str(np.around(bbeta, 3)) + " $\pm $ " + str(np.around(bbeta_err, 3)),
+#                     xy=[0.95, 0.95], xycoords="axes fraction", ha="right", va="top")
+#         for ax in [ax0, ax1]:
+#             ax.set_xlabel("$" + base_keys[0] + "-" + base_keys[1] + "$")
+#             ax.set_ylabel("$" + base_keys[1] + "-" + key + "$")
+#             ax.set_xlim(-0.5, 3)
+#             if key == "J":
+#                 ax.set_ylim(-6, 0)
+#             if key == "IRAC1":
+#                 ax.set_ylim(-0.5, 2)
+#             if key == "IRAC2":
+#                 ax.set_ylim(-0.5, 2)
+#
+#         # Save for current position
+#         plt.savefig(results_path + "extinction_law_spatial/" + name, bbox_inches="tight", dpi=300)
+#         plt.close()
+#
+#         # Append data only if fits match reasonably
+#         # if bbeta - lbeta > 0.1:
+#         #     beta_binning[key].append(np.nan)
+#         #     beta_lines[key].append(np.nan)
+#         # else:
+#         beta_binning[key].append(bbeta)
+#         beta_lines[key].append(lbeta)
+#
+#     # Convert to arrays
+#     pglon[key], pglat[key] = np.array(pglon[key]), np.array(pglat[key])
+#     beta_binning[key], beta_lines[key] = np.array(beta_binning[key]), np.array(beta_lines[key])
+#
+#
+# # Create figure for spatially variable slope plot
+# fig = plt.figure(figsize=[11, 5])
+# grid = GridSpec(ncols=3, nrows=3, bottom=0.05, top=0.95, left=0.05, right=0.95, hspace=0.1, wspace=0.1,
+#                 width_ratios=[1, 1, 0.02])
+#
+# # Add axes
+# ax0_l = plt.subplot(grid[0], projection=wcsaxes.WCS(header=header))
+# ax0_b = plt.subplot(grid[1], projection=wcsaxes.WCS(header=header))
+# cax0 = plt.subplot(grid[2])
+#
+# ax1_l = plt.subplot(grid[3], projection=wcsaxes.WCS(header=header))
+# ax1_b = plt.subplot(grid[4], projection=wcsaxes.WCS(header=header))
+# cax1 = plt.subplot(grid[5])
+#
+# ax2_l = plt.subplot(grid[6], projection=wcsaxes.WCS(header=header))
+# ax2_b = plt.subplot(grid[7], projection=wcsaxes.WCS(header=header))
+# cax2 = plt.subplot(grid[8])
+#
+# # Plot spatial dependency for everything
+# for key, axl, axb, cax, crange in \
+#         zip(fit_keys, [ax0_l, ax1_l, ax2_l], [ax0_b, ax1_b, ax2_b],
+#             [cax0, cax1, cax2], [(-2.8, -2.5), (0.55, 0.7), (0.6, 0.9)]):
+#
+#     # LINES slopes
+#     im_l = axl.imshow(beta_lines[key].reshape(glat_grid.shape), cmap=cmap1,
+#                       interpolation="nearest", origin="lower", vmin=crange[0], vmax=crange[1])
+#     # Binning slopes
+#     im_b = axb.imshow(beta_binning[key].reshape(glat_grid.shape), cmap=cmap1,
+#                       interpolation="nearest", origin="lower", vmin=crange[0], vmax=crange[1])
+#     # Colorbar
+#     plt.colorbar(im_l, cax=cax, ticks=MultipleLocator(0.05), label=r"$\beta$")
+#
+# # Save plot
+# plt.savefig(results_path + "extinction_law_spatial.pdf", bbox_inches="tight", dpi=300)
+# plt.close()
+#
+# exit()
 
 
 # # ----------------------------------------------------------------------
