@@ -404,9 +404,9 @@ class DataBase:
         else:
             raise KeyError("frame must be'galactic' or 'equatorial'")
 
-        # Calculate range of grid to 0.2 degree precision
-        lon_range = [np.floor(np.min(self.lon) * 5) / 5, np.ceil(np.max(self.lon) * 5) / 5]
-        lat_range = [np.floor(np.min(self.lat) * 5) / 5, np.ceil(np.max(self.lat) * 5) / 5]
+        # Calculate range of grid to 0.1 degree precision
+        lon_range = [np.floor(np.min(self.lon) * 10) / 10, np.ceil(np.max(self.lon) * 10) / 10]
+        lat_range = [np.floor(np.min(self.lat) * 10) / 10, np.ceil(np.max(self.lat) * 10) / 10]
 
         naxis1 = np.ceil((lon_range[1] - lon_range[0]) / pixsize).astype(np.int)
         naxis2 = np.ceil((lat_range[1] - lat_range[0]) / pixsize).astype(np.int)
@@ -1006,113 +1006,188 @@ class Magnitudes(DataBase):
         # ...and return :)
         return Extinction(db=self, extinction=ext.data, variance=var, color0=color_0)
 
-    def get_extinction_law(self, base_index, method="LINES", control=None):
-        """
-        Implementation to fit CCDs for calculation of extinction law (Ascenso et al. 2012)
-        :param base_index: Tuple of two indices which form the base of the determination (x axis of the plots...)
-        :return: The index of fitted features and a list of slopes for these
-        """
+    def get_beta_lines(self, base_keys, fit_key, control, kappa=2, sigma=3, err_iter=1000):
 
-        # Some assertions
-        assert (isinstance(base_index, tuple)) & (len(base_index) == 2), " base_index must be tuple with two entries"
-        if control is not None:
-            assert isinstance(control, Magnitudes), "control must be magnitude instance"
-            assert control.n_features == self.n_features, "input and control features do not match"
+        # Some assertions (quite some actually, haha)
+        assert (isinstance(base_keys, tuple)) & (len(base_keys) == 2), " base_keys must be tuple with two entries"
+        assert isinstance(fit_key, str), "fit_key must be string"
+        assert isinstance(control, Magnitudes), "control must be magnitude instance"
+        assert (kappa >= 0) & isinstance(kappa, int), "kappa must be non-zero positive integer"
+        assert sigma > 0, "sigma must positive"
+        assert fit_key in self.features_names, "fit_key not found"
+        assert (base_keys[0] in self.features_names) & (base_keys[1] in self.features_names), "base_keys not found"
 
-        # Define funciton to get the slope
-        def get_beta(fit_method, xj_sc, yj_sc, xj_cf=None, yj_cf=None,
-                     cov_err_sc=None, var_err_sc=None, cov_err_cf=None, var_err_cf=None):
+        # Get indices of requested keys
+        base_idx = (self.features_names.index(base_keys[0]), self.features_names.index(base_keys[1]))
+        fit_idx = self.features_names.index(fit_key)
 
-            assert method in ["OLS", "BCES", "LINES"], "method not supported"
+        # Create common filter for all current filters
+        smask = np.prod(np.vstack([self.features_masks[i] for i in base_idx + (fit_idx,)]), axis=0, dtype=bool)
+        cmask = np.prod(np.vstack([control.features_masks[i] for i in base_idx + (fit_idx,)]), axis=0, dtype=bool)
 
-            if fit_method == "OLS":
-                return get_covar(xi=xj_sc, yi=yj_sc) / np.var(xj_sc)
+        # Shortcuts for control field terms which are not clipped
+        xdata_control = control.features[base_idx[0]][cmask] - control.features[base_idx[1]][cmask]
+        ydata_control = control.features[base_idx[1]][cmask] - control.features[fit_idx][cmask]
 
-            if fit_method == "BCES":
-                return (get_covar(xj_sc, yj_sc) - cov_err_sc) / (np.var(xj_sc) - var_err_sc)
+        var_err_control = np.mean(control.features_err[base_idx[0]][cmask]) ** 2 + \
+            np.mean(control.features_err[base_idx[1]][cmask]) ** 2
+        cov_err_control = -np.mean(control.features_err[base_idx[1]][cmask]) ** 2
+        var_control = np.var(xdata_control)
+        cov_control = get_covar(xdata_control, ydata_control)
 
-            if fit_method == "LINES":
-                upper = get_covar(xj_sc, yj_sc) - get_covar(xj_cf, yj_cf) - cov_err_sc + cov_err_cf
-                lower = np.var(xj_sc) - var_err_sc - np.var(xj_cf) + var_err_cf
-                return upper / lower
+        x1_sc, x2_sc = self.features[base_idx[0]][smask], self.features[base_idx[1]][smask]
+        x1_sc_err, x2_sc_err = self.features_err[base_idx[0]][smask], self.features_err[base_idx[1]][smask]
+        y1_sc, y2_sc = x2_sc, self.features[fit_idx][smask]
 
-        # Determine the fit indices
-        fit_index = list(set(range(self.n_features)) - set(base_index))
+        # Dummy mask for first iteration
+        smask = np.arange(len(x1_sc))
 
-        # Now we loop over all indices to fit
-        beta, beta_err, xdata, ydata = [], [], [], []
-        for fidx in fit_index:
+        # Shortcut for data
+        beta, ic = 0., 0.
+        for _ in range(kappa + 1):
 
-            # Create common filter for all current filters
-            smask = np.prod(np.vstack([self.features_masks[i] for i in base_index + (fidx,)]), axis=0, dtype=bool)
-            if control:
-                cmask = np.prod(np.vstack([control.features_masks[i] for i in base_index + (fidx,)]),
-                                axis=0, dtype=bool)
-            # Shortcut for data
-            xdata_science = self.features[base_index[0]][smask] - self.features[base_index[1]][smask]
-            ydata_science = self.features[base_index[1]][smask] - self.features[fidx][smask]
+            # Mask data
+            x1_sc, x2_sc = x1_sc[smask], x2_sc[smask]
+            x1_sc_err, x2_sc_err = x1_sc_err[smask], x2_sc_err[smask]
+            y1_sc, y2_sc = y1_sc[smask], y2_sc[smask]
+
+            xdata_science, ydata_science = x1_sc - x2_sc, y1_sc - y2_sc
 
             # Determine (Co-)variance terms of errors for science field
-            var_err_science = np.mean(self.features_err[base_index[0]][smask]) ** 2 + \
-                              np.mean(self.features_err[base_index[1]][smask]) ** 2
-            cov_err_science = -np.mean(self.features_err[base_index[1]][smask]) ** 2
+            var_err_science = np.mean(x1_sc_err) ** 2 + np.mean(x2_sc_err) ** 2
+            cov_err_science = -np.mean(x2_sc_err) ** 2
 
-            if method == "LINES":
-                # Here we need a control field
-                assert control, "control field instance not set"
-                # Get control field statistics
-                xdata_control = control.features[base_index[0]][cmask] - control.features[base_index[1]][cmask]
-                ydata_control = control.features[base_index[1]][cmask] - control.features[fidx][cmask]
-                var_err_control = np.mean(control.features_err[base_index[0]][cmask]) ** 2 + \
-                                  np.mean(control.features_err[base_index[1]][cmask]) ** 2
-                cov_err_control = -np.mean(control.features_err[base_index[1]][cmask]) ** 2
-            else:
-                xdata_control = ydata_control = var_err_control = cov_err_control = None
+            # Determine beta for the given data
+            # LINES
+            upper = get_covar(xdata_science, ydata_science) - cov_control - cov_err_science + cov_err_control
+            lower = np.var(xdata_science) - var_err_science - var_control + var_err_control
+            beta = upper / lower
 
-            # Get slope for all data
-            beta.append(get_beta(fit_method=method, xj_sc=xdata_science, yj_sc=ydata_science, xj_cf=xdata_control,
-                                 yj_cf=ydata_control, cov_err_sc=cov_err_science, var_err_sc=var_err_science,
-                                 cov_err_cf=cov_err_control, var_err_cf=var_err_control))
+            # OLS
+            # beta = get_covar(xdata_science, ydata_science) / np.var(xdata_science)
 
-            # Do the same for random splits to get errors
-            sbeta_i = []
-            for _ in range(1000):
-                ridx_sc = np.random.permutation(len(xdata_science))
+            # BCES
+            # upper = get_covar(xdata_science, ydata_science) - cov_err_science
+            # lower = np.var(xdata_science) - var_err_science
+            # beta = upper / lower
 
-                xdata_sc1, xdata_sc2 = xdata_science[ridx_sc[0::2]], xdata_science[ridx_sc[1::2]]
-                ydata_sc1, ydata_sc2 = ydata_science[ridx_sc[0::2]], ydata_science[ridx_sc[1::2]]
+            # Get intercept of linear fit through median
+            ic = np.median(ydata_science) - beta * np.median(xdata_science)
 
-                vesc1 = np.mean(self.features_err[base_index[0]][smask][ridx_sc[0::2]]) ** 2 + \
-                        np.mean(self.features_err[base_index[1]][smask][ridx_sc[0::2]]) ** 2
-                vesc2 = np.mean(self.features_err[base_index[0]][smask][ridx_sc[1::2]]) ** 2 + \
-                        np.mean(self.features_err[base_index[1]][smask][ridx_sc[1::2]]) ** 2
-                cesc1 = -np.mean(self.features_err[base_index[1]][smask][ridx_sc[0::2]]) ** 2
-                cesc2 = -np.mean(self.features_err[base_index[1]][smask][ridx_sc[1::2]]) ** 2
+            # ODR
+            # from scipy.odr import Model, RealData, ODR
+            # fit_model = Model(linear_model)
+            # fit_data = RealData(xdata_science, ydata_science)#, sx=std_x, sy=std_y)
+            # bdummy = ODR(fit_data, fit_model, beta0=[1., 0.]).run()
+            # beta, ic = bdummy.beta
+            # beta_err, ic_err = bdummy.sd_beta
 
-                if method == "LINES":
-                    ridx_cf = np.random.permutation(len(xdata_control))
-                    xdata_cf1, xdata_cf2 = xdata_control[ridx_cf[0::2]], xdata_control[ridx_cf[1::2]]
-                    ydata_cf1, ydata_cf2 = ydata_control[ridx_cf[0::2]], ydata_control[ridx_cf[1::2]]
+            # Get orthogonal distance to this line
+            dis = np.abs(beta * xdata_science - ydata_science + ic) / np.sqrt(beta ** 2 + 1)
 
-                    vecf1 = np.mean(control.features_err[base_index[0]][cmask][ridx_cf[0::2]]) ** 2 + \
-                            np.mean(control.features_err[base_index[1]][cmask][ridx_cf[0::2]]) ** 2
-                    vecf2 = np.mean(control.features_err[base_index[0]][cmask][ridx_cf[1::2]]) ** 2 + \
-                            np.mean(control.features_err[base_index[1]][cmask][ridx_cf[1::2]]) ** 2
-                    cecf1 = -np.mean(control.features_err[base_index[1]][cmask][ridx_cf[0::2]]) ** 2
-                    cecf2 = -np.mean(control.features_err[base_index[1]][cmask][ridx_cf[1::2]]) ** 2
-                else:
-                    xdata_cf1 = xdata_cf2 = ydata_cf1 = ydata_cf2 = vecf1 = vecf2 = cecf1 = cecf2 = None
+            # 3 sig filter
+            smask = dis - np.median(dis) < sigma * np.std(dis)
+            # smask = dis - np.median(dis) < 0.15
 
-                beta1 = get_beta(fit_method=method, xj_sc=xdata_sc1, yj_sc=ydata_sc1, xj_cf=xdata_cf1, yj_cf=ydata_cf1,
-                                 cov_err_sc=cesc1, cov_err_cf=cecf1, var_err_sc=vesc1, var_err_cf=vecf1)
-                beta2 = get_beta(fit_method=method, xj_sc=xdata_sc2, yj_sc=ydata_sc2, xj_cf=xdata_cf2, yj_cf=ydata_cf2,
-                                 cov_err_sc=cesc2, cov_err_cf=cecf2, var_err_sc=vesc2, var_err_cf=vecf2)
+        # Do the same for random splits to get errors
+        beta_i = []
+        for _ in range(err_iter):
 
-                sbeta_i.append(np.std([beta1, beta2]))
+            # Define random index array
+            ridx_sc = np.random.permutation(len(x1_sc))
 
-            beta_err.append(1.25 * np.sum(sbeta_i) / (np.sqrt(2) * 1000))
+            # Split array in two equally sized parts and get data
+            x1_sc_1, x2_sc_1 = x1_sc[ridx_sc[0::2]], x2_sc[ridx_sc[0::2]]
+            x1_sc_2, x2_sc_2 = x1_sc[ridx_sc[1::2]], x2_sc[ridx_sc[1::2]]
+            x1_sc_err_1, x2_sc_err_1 = x1_sc_err[ridx_sc[0::2]], x2_sc_err[ridx_sc[0::2]]
+            x1_sc_err_2, x2_sc_err_2 = x1_sc_err[ridx_sc[1::2]], x2_sc_err[ridx_sc[1::2]]
+            y1_sc_1, y2_sc_1 = y1_sc[ridx_sc[0::2]], y2_sc[ridx_sc[0::2]]
+            y1_sc_2, y2_sc_2 = y1_sc[ridx_sc[1::2]], y2_sc[ridx_sc[1::2]]
 
-        return fit_index, beta, beta_err
+            # Determine variance terms
+            var_sc_1, var_sc_2 = np.nanvar(x1_sc_1 - x2_sc_1), np.nanvar(x1_sc_2 - x2_sc_2)
+            var_sc_err_1 = np.nanmean(x1_sc_err_1) ** 2 + np.nanmean(x2_sc_err_1) ** 2
+            var_sc_err_2 = np.nanmean(x1_sc_err_2) ** 2 + np.nanmean(x2_sc_err_2) ** 2
+
+            # Determine covariance terms
+            # TODO: This probably only works when no NaNs are present...
+            cov_sc_1 = get_covar(xi=x1_sc_1 - x2_sc_1, yi=y1_sc_1 - y2_sc_1)
+            cov_sc_2 = get_covar(xi=x1_sc_2 - x2_sc_2, yi=y1_sc_2 - y2_sc_2)
+            cov_sc_err_1, cov_sc_err_2 = -np.nanmean(x1_sc_err_1) ** 2, -np.nanmean(x1_sc_err_2) ** 2
+
+            upper1 = cov_sc_1 - cov_sc_err_1 - cov_control + cov_err_control
+            lower1 = var_sc_1 - var_sc_err_1 - var_control + var_err_control
+            beta1 = upper1 / lower1
+
+            upper2 = cov_sc_2 - cov_sc_err_2 - cov_control + cov_err_control
+            lower2 = var_sc_2 - var_sc_err_2 - var_control + var_err_control
+            beta2 = upper2 / lower2
+
+            # Append beta values
+            beta_i.append(np.std([beta1, beta2]))
+
+        # Get error estimate
+        beta_err = 1.25 * np.sum(beta_i) / (np.sqrt(2) * 1000)
+
+        # Return fit and data values
+        return beta, beta_err, ic, x1_sc, x2_sc, y2_sc
+
+    def get_beta_binning(self, base_keys, fit_key, extinction, step=0.1):
+
+        # Try to import scipy, otherwise stop
+        try:
+            from scipy.odr import Model, RealData, ODR
+        except ImportError:
+            print("Scipy not installed")
+            # TODO: If I don't put this here, I get a weird warning
+            from scipy.odr import Model, RealData, ODR
+
+        # The extinction data must have the same size as the photometry
+        assert len(extinction) == self.n_data
+
+        # First let's get the data into colors
+        xdata, ydata = self.dict[base_keys[0]] - self.dict[base_keys[1]], self.dict[base_keys[1]] - self.dict[fit_key]
+
+        # Get average colors in extinction bins
+        avg_x, avg_y, std_x, std_y, avg_e, avg_n = [], [], [], [], [], []
+        for e in np.arange(np.floor(np.nanmin(extinction)), np.ceil(np.nanmax(extinction)), step=step):
+
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                avg_fil = (extinction >= e) & (extinction < e + step)
+
+                # Get color for current filter extinction
+                xdummy, ydummy = xdata[avg_fil], ydata[avg_fil]
+
+                # Do 3-sigma clipping around median
+                # avg_clip = (np.abs(xdummy - np.nanmedian(xdummy)) < 3 * np.nanstd(xdummy)) & \
+                #            (np.abs(ydummy - np.nanmedian(ydummy)) < 3 * np.nanstd(ydummy))
+                avg_clip = np.full_like(xdummy, fill_value=True, dtype=bool)
+
+                # We require at least 3 sources
+                if np.sum(avg_clip) < 3:
+                    continue
+
+                # Append averages
+                avg_x.append(np.nanmedian(xdummy[avg_clip]))
+                avg_y.append(np.nanmedian(ydummy[avg_clip]))
+                std_x.append(np.nanstd(xdummy[avg_clip]))
+                std_y.append(np.nanstd(ydummy[avg_clip]))
+                avg_e.append(e + step / 2)
+                avg_n.append(np.sum(avg_clip))
+
+        # Convert to arrays
+        avg_x, avg_y, avg_e, avg_n = np.array(avg_x), np.array(avg_y), np.array(avg_e), np.array(avg_n)
+
+        # Fit a line with ODR
+        fit_model = Model(linear_model)
+        fit_data = RealData(avg_x, avg_y, sx=std_x, sy=std_y)
+        bdummy = ODR(fit_data, fit_model, beta0=[1., 0.]).run()
+        beta, ic = bdummy.beta
+        beta_err, ic_err = bdummy.sd_beta
+
+        # Return slope, intercept and errors
+        return beta, beta_err, ic, ic_err, avg_x, avg_y, avg_e, avg_n
 
 
 # ----------------------------------------------------------------------
@@ -1314,7 +1389,7 @@ class Extinction:
         self.features_dered = [f - self.extinction * v for f, v in zip(self.db.features, self.db.extvec.extvec)]
 
     # ----------------------------------------------------------------------
-    def build_map(self, bandwidth, metric="median", sampling=2, nicest=False, use_fwhm=False):
+    def build_map(self, bandwidth, metric="median", frame="galactic", sampling=2, nicest=False, use_fwhm=False):
         """
         Method to build an extinction map
         :param bandwidth: Resolution of map
@@ -1327,6 +1402,7 @@ class Extinction:
 
         # Sampling must be an integer
         assert isinstance(sampling, int), "sampling must be an integer"
+        assert (frame == "galactic") | (frame == "equatorial"), "frame must be either 'galactic' or 'equatorial'"
 
         # Determine pixel size
         pixsize = bandwidth / sampling
@@ -1337,7 +1413,7 @@ class Extinction:
             bandwidth /= 2 * np.sqrt(2 * np.log(2))
 
         # First let's get a grid
-        grid_header, grid_lon, grid_lat = self.db.build_wcs_grid(frame="galactic", pixsize=pixsize)
+        grid_header, grid_lon, grid_lat = self.db.build_wcs_grid(frame=frame, pixsize=pixsize)
 
         # Run extinction mapping for each pixel
         with Pool() as pool:
@@ -1731,3 +1807,11 @@ def get_covar(xi, yi):
     :return: sample covariance
     """
     return np.sum((xi - np.mean(xi)) * (yi - np.mean(yi))) / len(xi)
+
+
+def linear_model(vec, val):
+    """Linear function y = m*x + b
+    :param vec: vector of the parameters
+    :param val: array of the current x values
+    """
+    return vec[0] * val + vec[1]
