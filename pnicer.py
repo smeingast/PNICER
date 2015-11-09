@@ -1,8 +1,6 @@
-from __future__ import absolute_import, division, print_function
-
-
 # ----------------------------------------------------------------------
 # Import stuff
+from __future__ import absolute_import, division, print_function
 import warnings
 import wcsaxes
 import numpy as np
