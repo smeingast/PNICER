@@ -15,7 +15,6 @@ from matplotlib.ticker import AutoMinorLocator, MaxNLocator, MultipleLocator
 from itertools import combinations, repeat
 from sklearn.neighbors import KernelDensity, NearestNeighbors
 
-
 # ----------------------------------------------------------------------
 # ----------------------------------------------------------------------
 # Define general data class
@@ -352,9 +351,9 @@ class DataBase:
                 # color0_dict[key] = np.nanmedian(np.array(color0_dict[key]), axis=0)
 
         # Get final list of intrinsic colors while forcing the original order
-        self._color0 = []
+        self._intrinsic = []
         for key in self.colors_names:
-            self._color0.append(color0_dict[key])
+            self._intrinsic.append(color0_dict[key])
 
         # Convert to arrays and save combination data
         all_ext = np.array(all_ext)
@@ -384,7 +383,7 @@ class DataBase:
         ext[var > 10] = var[var > 10] = np.nan
 
         # Return
-        return Extinction(db=self, extinction=ext, variance=var, color0=self._color0)
+        return Extinction(db=self, extinction=ext, variance=var, intrinsic=self._intrinsic)
 
     # ----------------------------------------------------------------------
     def build_wcs_grid(self, frame, pixsize=10. / 60):
@@ -1357,13 +1356,13 @@ class ExtinctionVector:
 # ----------------------------------------------------------------------
 # ----------------------------------------------------------------------
 class Extinction:
-    def __init__(self, db, extinction, variance=None, color0=None):
+    def __init__(self, db, extinction, variance=None, intrinsic=None):
         """
         Class for extinction measurements
         :param db: Base class from which the extinction was derived
         :param extinction: extinction measurements
         :param variance: extinction variance
-        :param color0: Intrisic color set for each source
+        :param intrinsic: Intrisic color set for each source
         """
 
         # Check if db is really a DataBase instance
@@ -1374,9 +1373,9 @@ class Extinction:
         self.variance = variance
         if self.variance is None:
             self.variance = np.zeros_like(extinction)
-        self.color0 = color0
-        if self.color0 is None:
-            self.color0 = np.zeros_like(extinction)
+        self.intrinsic = intrinsic
+        if self.intrinsic is None:
+            self.intrinsic = np.zeros_like(extinction)
 
         # extinction and variance must have same length
         if len(self.extinction) != len(self.variance):
