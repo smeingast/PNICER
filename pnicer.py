@@ -405,8 +405,8 @@ class DataBase:
         lon_range = [np.floor(np.min(self.lon) * 10) / 10, np.ceil(np.max(self.lon) * 10) / 10]
         lat_range = [np.floor(np.min(self.lat) * 10) / 10, np.ceil(np.max(self.lat) * 10) / 10]
 
-        naxis1 = np.ceil((lon_range[1] - lon_range[0]) / pixsize).astype(np.int)
-        naxis2 = np.ceil((lat_range[1] - lat_range[0]) / pixsize).astype(np.int)
+        naxis1 = np.ceil((lon_range[1] - lon_range[0]) / pixsize)
+        naxis2 = np.ceil((lat_range[1] - lat_range[0]) / pixsize)
 
         # Initialize WCS
         mywcs = wcs.WCS(naxis=2)
@@ -545,6 +545,7 @@ class DataBase:
         :param path: file path if it should be saved. e.g. "/path/to/image.png"
         :param kernel: name of kernel for KDE. e.g. "epanechnikov" or "gaussian"
         :param skip: Integer to skip every n-th source (for faster plotting)
+        :param cmap: colormap for plot
         :return:
         """
 
@@ -602,14 +603,14 @@ class DataBase:
             plt.savefig(path, bbox_inches="tight")
         plt.close()
 
-    def plot_spatial_kde_gain(self, frame, pixsize=10 / 60, sampling=2, contour=None, path=None, kernel="epanechnikov",
-                              skip=1,
-                              cmap=None):
+    def plot_spatial_kde_gain(self, frame, pixsize=10 / 60, sampling=2, contour=None, path=None,
+                              kernel="epanechnikov", skip=1, cmap=None):
         # TODO: I guess I should move this to a separate plot file. It's too complex to work for all input data ever.
         """
         Plot source densities for features
         :param frame: "equatorial" or "galactic"
         :param pixsize: pixel size of grid
+        :param sampling: Sampling of data, default = 2
         :param contour: 2D data if contours should be drawn
         :param path: file path if it should be saved. e.g. "/path/to/image.png"
         :param kernel: name of kernel for KDE. e.g. "epanechnikov" or "gaussian"
@@ -744,12 +745,11 @@ class DataBase:
             plt.savefig(path, bbox_inches="tight")
         plt.close()
 
-    def plot_kde_extinction_combinations(self, path=None, bandwidth=None, sampling=16):
+    def plot_kde_extinction_combinations(self, path=None, sampling=16):
         # TODO: Make this better
         """
         Plot histogram of extinctions for all combinations. Requires PNICER to be run beforehand
         :param path: file path if it should be saved. e.g. "/path/to/image.png"
-        :param bandwidth: Bandwidth of KDE. If not set, use Scott's rule divided by 2
         :param sampling: Sampling factor of grid (the larger, the more samples)
         """
 
@@ -767,14 +767,14 @@ class DataBase:
         # noinspection PyTypeChecker
         ax1_range = [DataBase.round_partial(np.nanmean(self._ext_combinations) -
                                             3 * np.nanstd(self._ext_combinations), 0.1),
-                     DataBase.round_partial(np.nanmean(self._ext_combinations)
-                                            + 3.5 * np.nanstd(self._ext_combinations), 0.1)]
+                     DataBase.round_partial(np.nanmean(self._ext_combinations) +
+                                            3.5 * np.nanstd(self._ext_combinations), 0.1)]
         # noinspection PyTypeChecker
-        ax2_range = [0., DataBase.round_partial(np.nanmean(self._var_combinations)
-                                                + 3.5 * np.nanstd(self._var_combinations), 0.1)]
+        ax2_range = [0., DataBase.round_partial(np.nanmean(self._var_combinations) +
+                                                3.5 * np.nanstd(self._var_combinations), 0.1)]
 
         plt.figure(figsize=[5 * n_panels[1], 5 * n_panels[0] * 0.5])
-        grid = GridSpec(ncols=n_panels[1], nrows=n_panels[0], bottom=0.05, top=0.95, left=0.05, right=0.95,
+        grid = GridSpec(ncols=n_panels[1], nrows=n_panels[0], bottom=0.1, top=0.9, left=0.1, right=0.9,
                         hspace=0, wspace=0)
 
         for idx in range(self._n_combinations):
@@ -783,21 +783,27 @@ class DataBase:
             ext = self._ext_combinations[idx, :]
             # noinspection PyTypeChecker
             ext = ext[np.isfinite(ext)]
-            if bandwidth is None:
-                bandwidth = np.float(3.5 * np.std(ext) / np.power(np.sqrt(len(ext)), 1 / 3)) / 2
-            grid_ext = np.arange(np.floor(ax1_range[0]), np.ceil(ax1_range[1]), bandwidth / sampling)
-            dens_ext = mp_kde(grid=grid_ext, data=ext, bandwidth=bandwidth, shape=None,
-                              kernel="epanechnikov", absolute=True, sampling=sampling)
+
+            # Estimate bandwidth with Silverman's rule
+            bandwidth_ext = np.float(1.06 * np.std(ext) * len(ext) ** (-1 / 5.))
+
+            # Generate grid and evaluate densities
+            grid_ext = np.arange(np.floor(ax1_range[0]), np.ceil(ax1_range[1]), bandwidth_ext / sampling)
+            dens_ext = mp_kde(grid=grid_ext, data=ext, bandwidth=bandwidth_ext, shape=None,
+                              kernel="gaussian", absolute=True, sampling=sampling)
 
             # Get densities for extinction error
             exterr = self._var_combinations[idx, :]
             # noinspection PyTypeChecker
             exterr = exterr[np.isfinite(exterr)]
-            if bandwidth is None:
-                bandwidth = np.float(3.5 * np.std(exterr) / np.power(np.sqrt(len(exterr)), 1 / 3)) / 2
-            grid_exterr = np.arange(np.floor(ax2_range[0]), np.ceil(ax2_range[1]), bandwidth / sampling)
-            dens_exterr = mp_kde(grid=grid_exterr, data=exterr[np.isfinite(exterr)], bandwidth=bandwidth, shape=None,
-                                 kernel="epanechnikov", absolute=True, sampling=sampling)
+
+            # Estimate bandwidth with Silverman's rule
+            bandwidth_exterr = np.float(1.06 * np.std(exterr) * len(exterr) ** (-1 / 5.))
+
+            # Generate grid and evaluate densities
+            grid_exterr = np.arange(np.floor(ax2_range[0]), np.ceil(ax2_range[1]), bandwidth_exterr / sampling)
+            dens_exterr = mp_kde(grid=grid_exterr, data=exterr[np.isfinite(exterr)], bandwidth=bandwidth_exterr,
+                                 shape=None, kernel="gaussian", absolute=True, sampling=sampling)
 
             # Add axes
             ax1 = plt.subplot(grid[idx])
@@ -1402,6 +1408,7 @@ class Extinction:
         Method to build an extinction map
         :param bandwidth: Resolution of map
         :param metric: Metric to be used. e.g. "median", "gaussian", "epanechnikov", "uniform", "triangular"
+        :param frame: Reference frame; "galactic" or "equatorial"
         :param sampling: Sampling of data. i.e. how many pixels per bandwidth
         :param nicest: whether or not to adjust weights with NICEST correction factor
         :param use_fwhm: If set, the bandwidth parameter represents the gaussian FWHM instead of its standard deviation
