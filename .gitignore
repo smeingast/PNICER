@@ -7,3 +7,6 @@
 
 # Notebook stuff
 .ipynb_checkpoints
+
+# Test resources
+tests_resources/
