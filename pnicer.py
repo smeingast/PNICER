@@ -485,6 +485,7 @@ class DataBase:
         :param ax_size: Size of individual axis
         :param grid_bw: grid bin width
         :param kernel: name of kernel for KDE. e.g. "epanechnikov" or "gaussian"
+        :param cmap: colormap to be used in plot
         :return:
         """
 
@@ -509,7 +510,8 @@ class DataBase:
             # Get density
             data = np.vstack([self.features[idx[0]][mask], self.features[idx[1]][mask]]).T
             xgrid = np.vstack([x.ravel(), y.ravel()]).T
-            dens = mp_kde(grid=xgrid, data=data, bandwidth=grid_bw * 2, shape=x.shape, kernel=kernel)
+            dens = mp_kde(grid=xgrid, data=data, bandwidth=grid_bw * 2, shape=x.shape, kernel=kernel, absolute=True,
+                          sampling=2)
 
             # Show result
             ax.imshow(np.sqrt(dens.T), origin="lower", interpolation="nearest", extent=[l, h, l, h], cmap=cmap)
@@ -535,7 +537,7 @@ class DataBase:
             plt.savefig(path, bbox_inches="tight")
         plt.close()
 
-    def plot_spatial_kde(self, frame, pixsize=10 / 60, path=None, kernel="epanechnikov", skip=1):
+    def plot_spatial_kde(self, frame, pixsize=10 / 60, path=None, kernel="epanechnikov", skip=1, cmap=None):
         """
         Plot source densities for features
         :param frame: "equatorial" or "galactic"
@@ -545,6 +547,14 @@ class DataBase:
         :param skip: Integer to skip every n-th source (for faster plotting)
         :return:
         """
+
+        # Set cmap
+        if cmap is None:
+            try:
+                cmap = plt.get_cmap("viridis")
+            except ValueError:
+                cmap = plt.get_cmap("gist_heat_r")
+
         # Get a WCS grid
         header, lon_grid, lat_grid = self.build_wcs_grid(frame=frame, pixsize=pixsize)
 
@@ -582,7 +592,8 @@ class DataBase:
             dens /= scale
 
             # Plot density
-            ax.imshow(dens, origin="lower", interpolation="nearest", cmap="gist_heat_r", vmin=0, vmax=1)
+            dens[dens < 0.1] = np.nan
+            ax.imshow(dens, origin="lower", interpolation="nearest", cmap=cmap, vmin=0, vmax=1)
 
         # Save or show figure
         if path is None:
@@ -1001,7 +1012,7 @@ class Magnitudes(DataBase):
             ext[mask] = var[mask] = color_0[:, mask] = np.nan
 
         # ...and return :)
-        return Extinction(db=self, extinction=ext.data, variance=var, color0=color_0)
+        return Extinction(db=self, extinction=ext.data, variance=var, intrinsic=color_0)
 
     def get_beta_lines(self, base_keys, fit_key, control, kappa=2, sigma=3, err_iter=1000):
 
