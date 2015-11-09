@@ -2,8 +2,8 @@
 *.iml
 .idea/
 
+# Python byte code
 *pyc
 
-pnicer_test.py
-Paper/Results/
+# Notebook stuff
 .ipynb_checkpoints
