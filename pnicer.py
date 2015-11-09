@@ -1488,7 +1488,7 @@ class ExtinctionMap:
         """
 
         fig = plt.figure(figsize=[figsize, 3 * 0.9 * figsize * (self.shape[0] / self.shape[1])])
-        grid = GridSpec(ncols=2, nrows=3, bottom=0.05, top=0.95, left=0.05, right=0.95, hspace=0.08, wspace=0,
+        grid = GridSpec(ncols=2, nrows=3, bottom=0.1, top=0.9, left=0.1, right=0.9, hspace=0.08, wspace=0,
                         height_ratios=[1, 1, 1], width_ratios=[1, 0.05])
 
         for idx in range(0, 6, 2):
@@ -1508,7 +1508,7 @@ class ExtinctionMap:
             if idx == 2:
                 im = ax.imshow(self.var, origin="lower", interpolation="nearest", cmap="binary",
                                vmin=np.floor(np.percentile(self.var[np.isfinite(self.var)], 1) * 10) / 10,
-                               vmax=np.ceil(np.percentile(self.var[np.isfinite(self.var)], 99) * 10) / 10)
+                               vmax=np.ceil(np.percentile(self.var[np.isfinite(self.var)], 2) * 100) / 100)
                 if self.metric == "median":
                     fig.colorbar(im, cax=cax, label="MAD")
                 else:
