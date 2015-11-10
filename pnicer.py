@@ -15,6 +15,7 @@ from matplotlib.ticker import AutoMinorLocator, MaxNLocator, MultipleLocator
 from itertools import combinations, repeat
 from sklearn.neighbors import KernelDensity, NearestNeighbors
 
+
 # ----------------------------------------------------------------------
 # ----------------------------------------------------------------------
 # Define general data class
@@ -351,9 +352,9 @@ class DataBase:
                 # color0_dict[key] = np.nanmedian(np.array(color0_dict[key]), axis=0)
 
         # Get final list of intrinsic colors while forcing the original order
-        self._intrinsic = []
+        self._color0 = []
         for key in self.colors_names:
-            self._intrinsic.append(color0_dict[key])
+            self._color0.append(color0_dict[key])
 
         # Convert to arrays and save combination data
         all_ext = np.array(all_ext)
@@ -372,18 +373,14 @@ class DataBase:
 
         # Chose extinction as minimum error across all combinations
         all_var[~np.isfinite(all_var)] = 100 * np.nanmax(all_var)
-
-        # Penalize low order data
-        # TODO: I guess I don't need that!
-        # weight = all_var / np.array(all_n)[:, None]
-
         ext = all_ext[np.argmin(all_var, axis=0), np.arange(self.n_data)]
         var = all_var[np.argmin(all_var, axis=0), np.arange(self.n_data)]
+
         # Make error cut
         ext[var > 10] = var[var > 10] = np.nan
 
-        # Return
-        return Extinction(db=self, extinction=ext, variance=var, intrinsic=self._intrinsic)
+        # Return Extinction instance
+        return Extinction(db=self, extinction=ext, variance=var, color0=self._color0)
 
     # ----------------------------------------------------------------------
     def build_wcs_grid(self, frame, pixsize=10. / 60):
@@ -478,7 +475,6 @@ class DataBase:
         plt.close()
 
     def plot_combinations_kde(self, path=None, ax_size=None, grid_bw=0.1, kernel="epanechnikov", cmap="gist_heat_r"):
-        # TODO: This could be broken
         """
         KDE for all 2D combinations of features
         :param path: file path if it should be saved. e.g. "/path/to/image.png"
@@ -746,7 +742,7 @@ class DataBase:
         plt.close()
 
     def plot_kde_extinction_combinations(self, path=None, sampling=16):
-        # TODO: Make this better
+        # TODO: Improve this method, or do not include in official PNICER package
         """
         Plot histogram of extinctions for all combinations. Requires PNICER to be run beforehand
         :param path: file path if it should be saved. e.g. "/path/to/image.png"
@@ -932,7 +928,6 @@ class Magnitudes(DataBase):
     # ----------------------------------------------------------------------
     # NICER implementation
     def nicer(self, control, n_features=None):
-        # TODO: There is a  bug in NICER where I get weird extinction if I have e.g. two IRAC NANs
         """
         NICER routine as descibed in Lombardi & Alves 2001. Generalized for arbitrary input magnitudes
         :param control: control field instance to calculate intrinsic colors
@@ -1009,7 +1004,6 @@ class Magnitudes(DataBase):
         var[~np.isfinite(ext)] = np.nan
 
         # Generate intrinsic source color list
-        # TODO: Test color_0 parameter
         color_0 = np.repeat(color_0, self.n_data).reshape([len(color_0), self.n_data])
         color_0[:, ~np.isfinite(ext)] = np.nan
 
@@ -1017,8 +1011,8 @@ class Magnitudes(DataBase):
             mask = np.where(np.sum(np.vstack(self.features_masks), axis=0, dtype=int) < n_features)[0]
             ext[mask] = var[mask] = color_0[:, mask] = np.nan
 
-        # ...and return :)
-        return Extinction(db=self, extinction=ext.data, variance=var, intrinsic=color_0)
+        # ...and return :) Here, a Colors instance is returned!
+        return Extinction(db=self.mag2color(), extinction=ext.data, variance=var, color0=color_0)
 
     def get_beta_lines(self, base_keys, fit_key, control, kappa=2, sigma=3, err_iter=1000):
 
@@ -1373,26 +1367,29 @@ class ExtinctionVector:
 # ----------------------------------------------------------------------
 # ----------------------------------------------------------------------
 class Extinction:
-    def __init__(self, db, extinction, variance=None, intrinsic=None):
+    def __init__(self, db, extinction, variance=None, color0=None):
         """
         Class for extinction measurements
         :param db: Base class from which the extinction was derived
         :param extinction: extinction measurements
         :param variance: extinction variance
-        :param intrinsic: Intrisic color set for each source
+        :param color0: Intrisic color set for each source.
         """
 
         # Check if db is really a DataBase instance
         assert isinstance(db, DataBase), "passed instance is not DataBase class"
 
+        # Define inititial attributes
         self.db = db
         self.extinction = extinction
+
         self.variance = variance
         if self.variance is None:
             self.variance = np.zeros_like(extinction)
-        self.intrinsic = intrinsic
-        if self.intrinsic is None:
-            self.intrinsic = np.zeros_like(extinction)
+
+        self.color0 = color0
+        if self.color0 is None:
+            self.color0 = np.zeros_like(extinction)
 
         # extinction and variance must have same length
         if len(self.extinction) != len(self.variance):

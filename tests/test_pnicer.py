@@ -58,9 +58,6 @@ control = Magnitudes(mag=control_data, err=control_error, extvec=features_extinc
 # Run PNICER
 pnicer = science.pnicer(control=control, add_colors=True)
 
-science.plot_kde_extinction_combinations()
-exit()
-
 
 # ----------------------------------------------------------------------
 # Also run NICER
