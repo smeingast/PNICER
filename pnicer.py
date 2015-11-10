@@ -26,8 +26,8 @@ class DataBase:
         :param mag: List of magnitude arrays. All arrays must have the same length!
         :param err: List off magnitude error arrays.
         :param extvec: List holding the extinction components for each magnitude
-        :param lon: Longitude of coordinates for each source
-        :param lat: Latitude of coordinates for each source
+        :param lon: Longitude of coordinates for each source; in decimal degrees!
+        :param lat: Latitude of coordinates for each source; in decimal degrees!
         :param names: List of magnitude (feature) names
         """
 
@@ -1680,10 +1680,7 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric
     ext, var, xdata, ydata = ext[index], var[index], xdata[index], ydata[index]
 
     # Calculate the distance to the grid point in a spherical metric
-    # TODO: Move to separate function
-    dis = np.degrees(np.arccos(np.sin(np.radians(ydata)) * np.sin(np.radians(ygrid)) +
-                               np.cos(np.radians(ydata)) * np.cos(np.radians(ygrid)) *
-                               np.cos(np.radians(xdata - xgrid))))
+    dis = distance_on_unit_sphere(ra1=xdata, dec1=ydata, ra2=xgrid, dec2=ygrid, unit="degrees")
 
     # There must be at least three sources within one bandwidth which have extinction data
     if np.sum(np.isfinite(ext[dis < bandwidth])) < 3:
@@ -1830,3 +1827,28 @@ def linear_model(vec, val):
     :param val: array of the current x values
     """
     return vec[0] * val + vec[1]
+
+
+def distance_on_unit_sphere(ra1, dec1, ra2, dec2, unit="radians"):
+    """
+    Returns the distance between two objects on a sphere. Also works with arrays
+    :param ra1: Right ascension of first object
+    :param dec1: Declination of first object
+    :param ra2: Right ascension of second object
+    :param dec2: Declination of second object
+    :param unit: "radians", or "degrees". Unit of input/output
+    :return:
+    """
+
+    if unit not in ["radians", "degrees"]:
+        raise ValueError("'unit' must be either 'radians', or 'degrees'!")
+
+    # Calculate distance on sphere
+    if unit == "radians":
+        dis = np.arccos(np.sin(dec1) * np.sin(dec2) + np.cos(dec1) * np.cos(dec2) * np.cos(ra1 - ra2))
+    else:
+        dis = np.degrees(np.arccos(np.sin(np.radians(dec1)) * np.sin(np.radians(dec2)) +
+                                   np.cos(np.radians(dec1)) * np.cos(np.radians(dec2)) * np.cos(np.radians(ra1 - ra2))))
+
+    # Return distance
+    return dis
