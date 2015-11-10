@@ -1647,7 +1647,6 @@ def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", norm=False,
 # ----------------------------------------------------------------------
 # Extinction mapping functions
 def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric, nicest=False):
-    # TODO: Number map should include the number of sources used for each pixel
     """
     Calculate extinction fro a given grid point
     :param xgrid: X grid point
