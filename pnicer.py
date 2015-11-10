@@ -1391,6 +1391,9 @@ class Extinction:
         if self.color0 is None:
             self.color0 = np.zeros_like(extinction)
 
+        # Index with clean extinction data
+        self.clean_index = np.isfinite(self.extinction)
+
         # extinction and variance must have same length
         if len(self.extinction) != len(self.variance):
             raise ValueError("Extinction and variance arrays must have equal length")
@@ -1431,8 +1434,9 @@ class Extinction:
         with Pool() as pool:
             # Submit tasks
             mp = pool.starmap(get_extinction_pixel,
-                              zip(grid_lon.ravel(), grid_lat.ravel(), repeat(self.db.lon),
-                                  repeat(self.db.lat), repeat(self.extinction), repeat(self.variance),
+                              zip(grid_lon.ravel(), grid_lat.ravel(),
+                                  repeat(self.db.lon[self.clean_index]), repeat(self.db.lat[self.clean_index]),
+                                  repeat(self.extinction[self.clean_index]), repeat(self.variance[self.clean_index]),
                                   repeat(bandwidth), repeat(metric), repeat(nicest)))
 
         # Unpack results
@@ -1643,6 +1647,7 @@ def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", norm=False,
 # ----------------------------------------------------------------------
 # Extinction mapping functions
 def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric, nicest=False):
+    # TODO: Number map should include the number of sources used for each pixel
     """
     Calculate extinction fro a given grid point
     :param xgrid: X grid point
@@ -1663,7 +1668,7 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric
     else:
         trunc = 5
 
-    # Truncate input data to a more managable size
+    # Truncate input data to a more managable size (this step does not detemrmine the final source number)
     index = (xdata > xgrid - trunc * bandwidth) & (xdata < xgrid + trunc * bandwidth) & \
             (ydata > ygrid - trunc * bandwidth) & (ydata < ygrid + trunc * bandwidth)
 
@@ -1675,12 +1680,13 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric
     ext, var, xdata, ydata = ext[index], var[index], xdata[index], ydata[index]
 
     # Calculate the distance to the grid point in a spherical metric
+    # TODO: Move to separate function
     dis = np.degrees(np.arccos(np.sin(np.radians(ydata)) * np.sin(np.radians(ygrid)) +
                                np.cos(np.radians(ydata)) * np.cos(np.radians(ygrid)) *
                                np.cos(np.radians(xdata - xgrid))))
 
     # There must be at least three sources within one bandwidth which have extinction data
-    if np.sum(np.isfinite(ext[dis < bandwidth])) < 1:
+    if np.sum(np.isfinite(ext[dis < bandwidth])) < 3:
         return np.nan, np.nan, 0
 
     # Now we truncate the data to the truncation scale (i.e. a circular patch on the sky)
@@ -1721,9 +1727,6 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric
     if nicest:
         weights *= 10 ** (slope * k_lambda * ext)
 
-    # Mask weights with no extinction
-    weights[~np.isfinite(ext)] = np.nan
-
     # Assertion to not raise editor warnings
     assert isinstance(weights, np.ndarray)
 
@@ -1737,7 +1740,7 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric
     if nicest:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            # Calculate correction factor
+            # Calculate correction factor (Equ. 34 in NICEST)
             cor = slope * k_lambda * np.log(10) * np.nansum(weights * var) / np.nansum(weights)
         return pixel_ext - cor, pixel_var, npixel
     else:
