@@ -56,20 +56,21 @@ control = Magnitudes(mag=control_data, err=control_error, extvec=features_extinc
 
 # ----------------------------------------------------------------------
 # Run PNICER
-pnicer = science.pnicer(control=control, add_colors=True)
+pnicer = science.pnicer(control=control, add_colors=False)
 
 
 # ----------------------------------------------------------------------
 # Also run NICER
 nicer = science.nicer(control=control)
 
+exit()
 
 # ----------------------------------------------------------------------
 # Create the extinction maps without any crazy setup
-pnicer_emap = pnicer.build_map(bandwidth=5 / 60, metric="gaussian", frame="galactic",
+pnicer_emap = pnicer.build_map(bandwidth=2 / 60, metric="gaussian", frame="galactic",
                                sampling=2, nicest=False, use_fwhm=True)
 
-nicer_emap = pnicer.build_map(bandwidth=5 / 60, metric="gaussian", frame="galactic",
+nicer_emap = pnicer.build_map(bandwidth=2 / 60, metric="gaussian", frame="galactic",
                               sampling=2, nicest=False, use_fwhm=True)
 
 

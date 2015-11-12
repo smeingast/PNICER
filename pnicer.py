@@ -279,8 +279,8 @@ class DataBase:
 
         # Get mean and std of control field
         # TODO: Average or weighted average
-        cf_mean, cf_var = weighted_avg(values=control.features[0], weights=control.features_err[0])
-        # cf_mean, cf_var = np.nanmean(control.features[0]), np.nanvar(control.features[0])
+        # cf_mean, cf_var = weighted_avg(values=control.features[0], weights=control.features_err[0])
+        cf_mean, cf_var = np.nanmean(control.features[0]), np.nanvar(control.features[0])
 
         # Calculate extinctions
         ext = (self.features[0] - cf_mean) / self.extvec.extvec[0]
@@ -1001,6 +1001,7 @@ class Magnitudes(DataBase):
         first = np.array([np.dot(cov.data[idx, :, :], b.data[:, idx]) for idx in range(self.n_data)])
         var = np.array([np.dot(b.data[:, idx], first[idx, :]) for idx in range(self.n_data)])
         # Now we have to mask the large variance data again
+        # TODO: This is the same as 1/denominator from Equ. 12
         var[~np.isfinite(ext)] = np.nan
 
         # Generate intrinsic source color list
@@ -1665,7 +1666,7 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric
     if (metric == "average") | (metric == "median"):
         trunc = 1
     else:
-        trunc = 5
+        trunc = 6
 
     # Truncate input data to a more managable size (this step does not detemrmine the final source number)
     index = (xdata > xgrid - trunc * bandwidth) & (xdata < xgrid + trunc * bandwidth) & \
@@ -1695,6 +1696,7 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric
     npixel = np.sum(index)
 
     # Based on chosen metric calculate extinction or weights
+    # TODO: The weight has to include the variance of each source
     if metric == "average":
         pixel_ext = np.nanmean(ext)
         pixel_var = np.sqrt(np.nansum(var)) / npixel
