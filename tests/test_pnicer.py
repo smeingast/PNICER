@@ -63,15 +63,13 @@ pnicer = science.pnicer(control=control, add_colors=False)
 # Also run NICER
 nicer = science.nicer(control=control)
 
-exit()
-
 # ----------------------------------------------------------------------
 # Create the extinction maps without any crazy setup
-pnicer_emap = pnicer.build_map(bandwidth=2 / 60, metric="gaussian", frame="galactic",
-                               sampling=2, nicest=False, use_fwhm=True)
+pnicer_emap = pnicer.build_map(bandwidth=3 / 60, metric="gaussian", frame="galactic",
+                               sampling=2, nicest=False, use_fwhm=False)
 
 nicer_emap = pnicer.build_map(bandwidth=2 / 60, metric="gaussian", frame="galactic",
-                              sampling=2, nicest=False, use_fwhm=True)
+                              sampling=2, nicest=False, use_fwhm=False)
 
 
 # ----------------------------------------------------------------------

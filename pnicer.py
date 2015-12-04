@@ -1425,11 +1425,17 @@ class Extinction:
 
         # In case of a gaussian, we can use the fwhm instead
         if use_fwhm:
+            # TODO: Check if assertions works in installed software
             assert metric == "gaussian", "FWHM only valid for gaussian kernel"
             bandwidth /= 2 * np.sqrt(2 * np.log(2))
 
         # First let's get a grid
         grid_header, grid_lon, grid_lat = self.db.build_wcs_grid(frame=frame, pixsize=pixsize)
+
+        # Set some header keywords
+        grid_header["BWIDTH"] = (bandwidth, "Bandwidth of kernel (degrees)")
+        if use_fwhm:
+            grid_header["FWHM"] = (bandwidth * 2 * np.sqrt(2 * np.log(2)), "FWHM of gaussian (degrees)")
 
         # Run extinction mapping for each pixel
         with Pool() as pool:
@@ -1438,14 +1444,14 @@ class Extinction:
                               zip(grid_lon.ravel(), grid_lat.ravel(),
                                   repeat(self.db.lon[self.clean_index]), repeat(self.db.lat[self.clean_index]),
                                   repeat(self.extinction[self.clean_index]), repeat(self.variance[self.clean_index]),
-                                  repeat(bandwidth), repeat(metric), repeat(nicest)))
+                                  repeat(bandwidth), repeat(metric), repeat(use_fwhm), repeat(nicest)))
 
         # Unpack results
         map_ext, map_var, map_num = list(zip(*mp))
 
         # reshape
-        map_ext = np.array(map_ext).reshape(grid_lon.shape)
-        map_var = np.array(map_var).reshape(grid_lon.shape)
+        map_ext = np.array(map_ext).reshape(grid_lon.shape).astype(np.float32)
+        map_var = np.array(map_var).reshape(grid_lon.shape).astype(np.float32)
         map_num = np.array(map_num).reshape(grid_lon.shape)
 
         # Return extinction map instance
@@ -1647,7 +1653,7 @@ def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", norm=False,
 
 # ----------------------------------------------------------------------
 # Extinction mapping functions
-def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric, nicest=False):
+def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric, use_fwhm, nicest=False):
     """
     Calculate extinction fro a given grid point
     :param xgrid: X grid point
@@ -1658,6 +1664,7 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric
     :param var: extinction variance for each source
     :param bandwidth: bandwidth of kernel
     :param metric: Method to be used. e.g. "median", "gaussian", "epanechnikov", "uniform", "triangular"
+    :param use_fwhm: If set, then the bandwidth was specified as FWHM. Here this is used to preserve the truncation
     :param nicest: Wether or not to use NICEST weight adjustment
     :return: extintion, variance, and number of sources for pixel
     """
@@ -1667,6 +1674,9 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric
         trunc = 1
     else:
         trunc = 6
+        # In case the bandwidth was specified as FWHM, set truncation scale back to standard deviation
+        if use_fwhm:
+            trunc *= 2 * np.sqrt(2 * np.log(2))
 
     # Truncate input data to a more managable size (this step does not detemrmine the final source number)
     index = (xdata > xgrid - trunc * bandwidth) & (xdata < xgrid + trunc * bandwidth) & \
@@ -1683,7 +1693,7 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric
     dis = distance_on_unit_sphere(ra1=xdata, dec1=ydata, ra2=xgrid, dec2=ygrid, unit="degrees")
 
     # There must be at least three sources within one bandwidth which have extinction data
-    if np.sum(np.isfinite(ext[dis < bandwidth])) < 3:
+    if np.sum(np.isfinite(ext[dis < bandwidth])) < 1:
         return np.nan, np.nan, 0
 
     # Now we truncate the data to the truncation scale (i.e. a circular patch on the sky)
@@ -1695,35 +1705,60 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric
     # Calulate number of sources left over after truncation
     npixel = np.sum(index)
 
-    # Based on chosen metric calculate extinction or weights
-    # TODO: The weight has to include the variance of each source
+    # Based on chosen metric calculate extinction or spatial weights
+    # TODO: For average and median I still return the number of sources in each pixel
     if metric == "average":
         pixel_ext = np.nanmean(ext)
         pixel_var = np.sqrt(np.nansum(var)) / npixel
         return pixel_ext, pixel_var, npixel
+
     elif metric == "median":
         pixel_ext = np.nanmedian(ext)
         pixel_mad = np.median(np.abs(ext - pixel_ext))
         return pixel_ext, pixel_mad, npixel
+
     elif metric == "uniform":
-        weights = np.ones_like(ext)
+        def wfunc(wdis):
+        	# TODO: Should this not scale with distance?
+            return np.ones_like(wdis)
+
     elif metric == "triangular":
-        weights = 1 - np.abs(dis / bandwidth)
+        def wfunc(wdis):
+            return 1 - np.abs(wdis / bandwidth)
+
     elif metric == "gaussian":
-        weights = np.exp(-0.5 * (dis / bandwidth) ** 2)
+        def wfunc(wdis):
+            return np.exp(-0.5 * (wdis / bandwidth) ** 2)
+
     elif metric == "epanechnikov":
-        weights = 1 - (dis / bandwidth) ** 2
+        def wfunc(wdis):
+            return 1 - (wdis / bandwidth) ** 2
+
     else:
         raise TypeError("metric not implemented")
 
-    # Set negative weights to 0
-    weights[weights < 0] = 0
+    # Set parameters for density correction
+    # TODO: This needs to be generalised
+    alpha, k_lambda = 0.33, 1
+    beta = np.log(10) * alpha * k_lambda
+
+    # Get spatial weights:
+    weights_spatial = wfunc(wdis=dis)
+    weights_spatial[weights_spatial < 0] = 0
+
+    # Get approximate integral and normalize weights
+    dummy = np.arange(-100, 100, 0.01)
+    weights_spatial_norm = weights_spatial / np.trapz(y=wfunc(dummy), x=dummy)
+
+    # Get density map
+    rho = np.sum(weights_spatial_norm)
+
+    # Calculate total weight including the variance of the extinction measurement
+    weights = weights_spatial / var
 
     # Modify weights for NICEST
-    # TODO: This needs to be generalised
-    slope, k_lambda = 0.33, 1
     if nicest:
-        weights *= 10 ** (slope * k_lambda * ext)
+        weights *= 10 ** (alpha * k_lambda * ext)
 
     # Assertion to not raise editor warnings
     assert isinstance(weights, np.ndarray)
@@ -1732,17 +1767,24 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         pixel_ext = np.nansum(weights * ext) / np.nansum(weights)
-        pixel_var = np.nansum(weights ** 2 * var) / np.nansum(weights) ** 2
 
     # Return
     if nicest:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             # Calculate correction factor (Equ. 34 in NICEST)
-            cor = slope * k_lambda * np.log(10) * np.nansum(weights * var) / np.nansum(weights)
+            cor = beta * np.nansum(weights * var) / np.nansum(weights)
+            # Calculate error for NICEST
+            # TODO: Check if this even makes sense
+            pixel_var = (np.sum((weights**2 * np.exp(2*beta*ext) * (1 + beta + ext)**2) / var) /
+                         np.sum(weights * np.exp(beta * ext) / var)**2)
+        # Return
         return pixel_ext - cor, pixel_var, npixel
     else:
-        return pixel_ext, pixel_var, npixel
+        # Error without NICEST is simply a weighted error
+        pixel_var = np.nansum(weights ** 2 * var) / np.nansum(weights) ** 2
+        # Return
+        return pixel_ext, pixel_var, rho, #npixel
 
 
 # ----------------------------------------------------------------------
