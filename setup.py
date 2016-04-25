@@ -8,6 +8,6 @@ setup(
     url="",
     license="",
     author="Stefan Meingast",
-    author_email="stefan.meingast@univie.ac.at",
+    author_email="stefan.meingast@gmail.com",
     description="Python package to calculate color-excesses and extinction from arbitrary photometric measurements"
 )

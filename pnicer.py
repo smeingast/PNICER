@@ -1,6 +1,5 @@
 # ----------------------------------------------------------------------
 # Import stuff
-from __future__ import absolute_import, division, print_function
 import warnings
 import wcsaxes
 import numpy as np
@@ -1447,15 +1446,16 @@ class Extinction:
                                   repeat(bandwidth), repeat(metric), repeat(use_fwhm), repeat(nicest)))
 
         # Unpack results
-        map_ext, map_var, map_num = list(zip(*mp))
+        map_ext, map_var, map_num, map_rho = list(zip(*mp))
 
         # reshape
         map_ext = np.array(map_ext).reshape(grid_lon.shape).astype(np.float32)
         map_var = np.array(map_var).reshape(grid_lon.shape).astype(np.float32)
         map_num = np.array(map_num).reshape(grid_lon.shape)
+        map_rho = np.array(map_rho).reshape(grid_lon.shape).astype(np.float32)
 
         # Return extinction map instance
-        return ExtinctionMap(ext=map_ext, var=map_var, num=map_num, header=grid_header, metric=metric)
+        return ExtinctionMap(ext=map_ext, var=map_var, num=map_num, dens=map_rho, header=grid_header, metric=metric)
 
     # ----------------------------------------------------------------------
     def save_fits(self, path):
@@ -1483,7 +1483,7 @@ class Extinction:
 # ----------------------------------------------------------------------
 # ----------------------------------------------------------------------
 class ExtinctionMap:
-    def __init__(self, ext, var, num, header, metric):
+    def __init__(self, ext, var, header, metric=None, num=None, dens=None):
         """
         Extinction map class
         :param ext: 2D Extintion map
@@ -1495,7 +1495,18 @@ class ExtinctionMap:
 
         self.map = ext
         self.var = var
-        self.num = num
+        # Number map for each pixel
+        if num is None:
+            self.num = np.full_like(self.map, fill_value=np.nan, dtype=np.float32)
+        else:
+            self.num = num
+        # Density map from kernel estimation
+        if num is None:
+            self.rho = np.full_like(self.map, fill_value=np.nan, dtype=np.float32)
+        else:
+            self.rho = dens
+
+        # Other parameters
         self.metric = metric
         self.shape = self.map.shape
         self.fits_header = header
@@ -1518,7 +1529,6 @@ class ExtinctionMap:
 
         for idx in range(0, 6, 2):
 
-            # print(idx)
             ax = plt.subplot(grid[idx], projection=wcsaxes.WCS(self.fits_header))
             cax = plt.subplot(grid[idx + 1])
 
@@ -1574,7 +1584,8 @@ class ExtinctionMap:
         hdulist = fits.HDUList([fits.PrimaryHDU(),
                                 fits.ImageHDU(data=self.map, header=self.fits_header),
                                 fits.ImageHDU(data=self.var, header=self.fits_header),
-                                fits.ImageHDU(data=self.num, header=self.fits_header)])
+                                fits.ImageHDU(data=self.num, header=self.fits_header),
+                                fits.ImageHDU(data=self.rho, header=self.fits_header)])
         hdulist.writeto(path, clobber=True)
 
 
@@ -1596,7 +1607,7 @@ def _mp_kde(kde, data, grid):
 
 def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", norm=False, absolute=False, sampling=None):
     """
-    Parellisation for kernel density estimation
+    Parallelisation for kernel density estimation
     :param grid Grid on which to evaluate the density
     :param data input data
     :param bandwidth: Bandwidth of kernel
@@ -1684,7 +1695,7 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric
 
     # If we have nothing here, immediately return
     if np.sum(index) == 0:
-        return np.nan, np.nan, 0
+        return np.nan, np.nan, 0, np.nan
 
     # Apply pre-filtering
     ext, var, xdata, ydata = ext[index], var[index], xdata[index], ydata[index]
@@ -1692,17 +1703,22 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric
     # Calculate the distance to the grid point in a spherical metric
     dis = distance_on_unit_sphere(ra1=xdata, dec1=ydata, ra2=xgrid, dec2=ygrid, unit="degrees")
 
-    # There must be at least three sources within one bandwidth which have extinction data
-    if np.sum(np.isfinite(ext[dis < bandwidth])) < 1:
-        return np.nan, np.nan, 0
+    # There must be at least three sources within the truncation scale which have extinction data
+    if np.sum(np.isfinite(ext[dis < trunc * bandwidth])) < 3:
+        return np.nan, np.nan, 0, np.nan
 
     # Now we truncate the data to the truncation scale (i.e. a circular patch on the sky)
     index = dis < trunc * bandwidth / 2
+
+    # If nothing remains, return
+    if np.sum(index) == 0:
+        return np.nan, np.nan, 0, np.nan
 
     # Get data within truncation radius
     ext, var, dis, xdata, ydata = ext[index], var[index], dis[index], xdata[index], ydata[index]
 
     # Calulate number of sources left over after truncation
+    # TODO: Somehow this number is always very high! Check if it is ok in Aladin
     npixel = np.sum(index)
 
     # Based on chosen metric calculate extinction or spatial weights
@@ -1710,16 +1726,15 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric
     if metric == "average":
         pixel_ext = np.nanmean(ext)
         pixel_var = np.sqrt(np.nansum(var)) / npixel
-        return pixel_ext, pixel_var, npixel
+        return pixel_ext, pixel_var, npixel, np.nan
 
     elif metric == "median":
         pixel_ext = np.nanmedian(ext)
         pixel_mad = np.median(np.abs(ext - pixel_ext))
-        return pixel_ext, pixel_mad, npixel
+        return pixel_ext, pixel_mad, npixel, np.nan
 
     elif metric == "uniform":
         def wfunc(wdis):
-        	# TODO: Should this not scale with distance?
             return np.ones_like(wdis)
 
     elif metric == "triangular":
@@ -1779,12 +1794,12 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric
             pixel_var = (np.sum((weights**2 * np.exp(2*beta*ext) * (1 + beta + ext)**2) / var) /
                          np.sum(weights * np.exp(beta * ext) / var)**2)
         # Return
-        return pixel_ext - cor, pixel_var, npixel
+        return pixel_ext - cor, pixel_var, npixel, rho
     else:
         # Error without NICEST is simply a weighted error
         pixel_var = np.nansum(weights ** 2 * var) / np.nansum(weights) ** 2
         # Return
-        return pixel_ext, pixel_var, rho, #npixel
+        return pixel_ext, pixel_var, npixel, rho
 
 
 # ----------------------------------------------------------------------
