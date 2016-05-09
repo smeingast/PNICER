@@ -1,14 +1,10 @@
 # ----------------------------------------------------------------------
 # Import stuff
-from __future__ import absolute_import, division, print_function
 import os
-
 from astropy.io import fits
 from pnicer import Magnitudes
 
-"""
-This file goes through a typical PNICER session and creates a rough extinction map of Orion A from 2MASS data.
-"""
+""" This file goes through a typical PNICER session and creates a rough extinction map of Orion A from 2MASS data. """
 
 
 # ----------------------------------------------------------------------

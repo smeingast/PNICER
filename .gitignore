@@ -5,9 +5,9 @@
 *pyc
 
 # Notebook stuff
-tests/.ipynb_checkpoints
+notebooks
 
 # Other
-tests_resources/
+pnicer/tests_resources/
 my_stuff.py
 stub.py

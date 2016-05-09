@@ -13,7 +13,6 @@ from sklearn.neighbors import NearestNeighbors
 from matplotlib.ticker import MaxNLocator, AutoMinorLocator
 
 # from pnicer.user import Magnitudes, Colors
-from pnicer.extinction import Extinction
 from pnicer.utils import weighted_avg, axes_combinations, mp_kde
 
 
@@ -592,6 +591,7 @@ class DataBase:
         ext[var > 10] = var[var > 10] = np.nan
 
         # Return Extinction instance
+        from pnicer.extinction import Extinction
         return Extinction(db=self, extinction=ext, variance=var, color0=np.array(self._color0))
 
     # ---------------------------------------------------------------------- #

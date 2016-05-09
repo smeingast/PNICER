@@ -4,7 +4,6 @@ import warnings
 import numpy as np
 
 from pnicer.common import DataBase
-from pnicer.extinction import Extinction
 from pnicer.utils import get_covar, linear_model
 
 
@@ -212,6 +211,7 @@ class Magnitudes(DataBase):
             ext[mask] = var[mask] = color_0[:, mask] = np.nan
 
         # ...and return :) Here, a Colors instance is returned!
+        from pnicer.extinction import Extinction
         return Extinction(db=self.mag2color(), extinction=ext.data, variance=var, color0=color_0)
 
     # ----------------------------------------------------------------------
