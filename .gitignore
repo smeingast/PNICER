@@ -10,3 +10,4 @@ tests/.ipynb_checkpoints
 # Other
 tests_resources/
 my_stuff.py
+stub.py
