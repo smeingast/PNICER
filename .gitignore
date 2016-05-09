@@ -1,4 +1,3 @@
-# IntelliJ stuff
 *.iml
 .idea/
 
@@ -8,5 +7,6 @@
 # Notebook stuff
 tests/.ipynb_checkpoints
 
-# Test resources
+# Other
 tests_resources/
+my_stuff.py

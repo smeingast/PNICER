@@ -1,7 +1,7 @@
 # ----------------------------------------------------------------------
 # Import stuff
-import warnings
 import wcsaxes
+import warnings
 import numpy as np
 import multiprocessing
 import matplotlib.pyplot as plt
@@ -10,26 +10,40 @@ from astropy import wcs
 from astropy.io import fits
 from multiprocessing import Pool
 from matplotlib.pyplot import GridSpec
-from matplotlib.ticker import AutoMinorLocator, MaxNLocator, MultipleLocator
 from itertools import combinations, repeat
+from matplotlib.ticker import AutoMinorLocator, MaxNLocator
+# noinspection PyPackageRequirements
 from sklearn.neighbors import KernelDensity, NearestNeighbors
 
+# TODO: Change all assertions into error statements
 
-# ----------------------------------------------------------------------
-# ----------------------------------------------------------------------
-# Define general data class
+
+# ---------------------------------------------------------------------- #
+# ---------------------------------------------------------------------- #
+# noinspection PyProtectedMember
 class DataBase:
     def __init__(self, mag, err, extvec, lon=None, lat=None, names=None):
         """
-        Basic Data class which provides the foundation for extinction measurements
-        :param mag: List of magnitude arrays. All arrays must have the same length!
-        :param err: List off magnitude error arrays.
-        :param extvec: List holding the extinction components for each magnitude
-        :param lon: Longitude of coordinates for each source; in decimal degrees!
-        :param lat: Latitude of coordinates for each source; in decimal degrees!
-        :param names: List of magnitude (feature) names
+        Basic Data class which provides the foundation for extinction measurements.
+
+        Parameters
+        ----------
+        mag : iterable
+            List of magnitude arrays. All arrays must have the same length!
+        err : iterable
+            List off magnitude error arrays.
+        extvec : iterable
+            List holding the extinction components for each magnitude
+        lon : iterable, optional
+            Longitude of coordinates for each source; in decimal degrees!
+        lat : iterable, optional
+            Latitude of coordinates for each source; in decimal degrees!
+        names : list
+            List of magnitude (feature) names.
+
         """
 
+        # Set attributes
         self.features = mag
         self.features_err = err
         self.lon = lon
@@ -58,64 +72,140 @@ class DataBase:
         # Do some input checks
 
         # Dimensions of extinction vector must be equal to dimensions of data
-        assert self.extvec.n_dimensions == self.n_features, \
-            "Dimensions of extinction vector must be equal to number of features"
-
-        # Input data must be in lists
-        assert sum([type(x) in [list] for x in [self.features, self.features_err]]) == 2, "Input must be in lists"
+        if self.extvec.n_dimensions != self.n_features:
+            raise ValueError("Dimensions of extinction vector must be equal to number of features")
 
         # There must be at least one feature
-        assert self.n_features > 0, "There must be at least two features!"
+        if self.n_features < 1:
+            raise ValueError("There must be at least two features")
 
         # All input lists must have equal length
-        assert len(set([len(l) for l in [self.features, self.features_err, self.features_names]])) == 1, \
-            "Input lists must have equal length"
+        if len(set([len(l) for l in [self.features, self.features_err, self.features_names]])) != 1:
+            raise ValueError("Input lists must have equal length")
 
         # Input data must also have the same size
-        assert len(set([x.size for x in self.features])) == 1, "Input arrays must have equal size"
+        if len(set([x.size for x in self.features])) != 1:
+            raise ValueError("Input arrays must have equal size")
 
         # Coordinates must be supplied for all data if set
         if (lon is not None) | (lat is not None):
             if (len(lon) != len(lat)) | (len(lon) != len(self.features[0])):
                 raise ValueError("Input coordinates do not match!")
 
-        # ----------------------------------------------------------------------
-        # Calculate some stuff
-        self.n_data = self.features[0].size
-
-        # Generate feature masks and number of good data points per feature
-        self.features_masks = [np.isfinite(m) & np.isfinite(e) for m, e in zip(self.features, self.features_err)]
-        self.combined_mask = np.prod(np.vstack(self.features_masks), axis=0, dtype=bool)
-
-        # ----------------------------------------------------------------------
-        # Plot range
-        # noinspection PyTypeChecker
-        self.plotrange = [(np.floor(np.percentile(x[m], 0.01)), np.ceil(np.percentile(x[m], 99.99)))
-                          for x, m in zip(self.features, self.features_masks)]
+    # ---------------------------------------------------------------------- #
+    #                         Some useful properties                         #
+    # ---------------------------------------------------------------------- #
 
     # ----------------------------------------------------------------------
-    # Static helper methods in namespace
+    @property
+    def n_data(self):
+        """
+        Number of provided sources.
 
+        Returns
+        -------
+        int
+
+        """
+
+        return self.features[0].size
+
+    # ----------------------------------------------------------------------
+    # noinspection PyTypeChecker
+    @property
+    def plotrange(self):
+        """
+        Convenience property to calculate a plot range for all provided features.
+
+        Returns
+        -------
+        list
+            List of plot ranges.
+
+        """
+
+        return [(np.floor(np.percentile(x[m], 0.01)), np.ceil(np.percentile(x[m], 99.99)))
+                for x, m in zip(self.features, self.features_masks)]
+
+    # ----------------------------------------------------------------------
+    @property
+    def features_masks(self):
+        """
+        Provides a list with masks for each given feature.
+
+
+        Returns
+        -------
+        iterable
+            List of masks.
+
+        """
+
+        return [np.isfinite(m) & np.isfinite(e) for m, e in zip(self.features, self.features_err)]
+
+    # ----------------------------------------------------------------------
+    @property
+    def combined_mask(self):
+        """
+        Combines all feature masks into a single mask.
+
+        Returns
+        -------
+        np.ndarray
+            Combined mask.
+
+        """
+
+        return np.prod(np.vstack(self.features_masks), axis=0, dtype=bool)
+
+    # ---------------------------------------------------------------------- #
+    #                         Static helper methods                          #
+    # ---------------------------------------------------------------------- #
+
+    # ----------------------------------------------------------------------
     @staticmethod
-    def round_partial(data, precision):
+    def _round_partial(data, precision):
         """
-        Simple static method to round data to arbitrary precision
-        :param data: Data to be rounded
-        :param precision: desired precision. e.g. 0.2
-        :return: Rounded data
+        Simple static method to round data to arbitrary precision.
+
+        Parameters
+        ----------
+        data : float, np.ndarray
+            Data to be rounded.
+        precision : float, np.ndarray
+            Desired precision. e.g. 0.2.
+
+        Returns
+        -------
+        float, np.ndarray
+            Rounded data.
+
         """
+
         return np.around(data / precision) * precision
 
+    # ----------------------------------------------------------------------
     @staticmethod
-    def build_grid(data, precision):
+    def _build_grid(data, precision):
         """
-        Static method to build a grid of unique positons from given input data rounded to arbitrary precision
-        :param data: Data from which to build grid (at least 2D)
-        :param precision: Desired position, i.e. pixel scale
-        :return: grid built from input data
+        Static method to build a grid of unique positons from given input data rounded to arbitrary precision.
+
+        Parameters
+        ----------
+        data : np.ndarray
+            Data from which to build grid (at least 2D).
+        precision : float, optional
+            Desired precision, i.e. pixel scale.
+
+        Returns
+        -------
+        np.ndarray
+            Grid built from input data.
+
         """
 
-        grid_data = DataBase.round_partial(data=data, precision=precision).T
+        # Round data to requested precision.
+        grid_data = DataBase._round_partial(data=data, precision=precision).T
 
         # Get unique positions for coordinates
         dummy = np.ascontiguousarray(grid_data).view(np.dtype((np.void, grid_data.dtype.itemsize * grid_data.shape[1])))
@@ -123,22 +213,30 @@ class DataBase:
 
         return grid_data[np.sort(idx)].T
 
+    # ---------------------------------------------------------------------- #
+    #                        Useful Instance methods                         #
+    # ---------------------------------------------------------------------- #
+
     # ----------------------------------------------------------------------
     def rotate(self):
         """
-        Method to rotate data space with the given extinction vector.
-        Only finite data are transmitted intp the new data space.
-        :return: Instance of input with rotated data
+        Method to rotate data space with the given extinction vector. Only finite data are transmitted intp the new
+        data space.
+
+        Returns
+        -------
+            New instance with rotated data.
+
         """
 
         data = np.vstack(self.features).T[self.combined_mask].T
         err = np.vstack(self.features_err).T[self.combined_mask].T
 
         # Rotate data
-        rotdata = self.extvec.rotmatrix.dot(data)
+        rotdata = self.extvec._rotmatrix.dot(data)
 
         # Rotate extinction vector
-        extvec = self.extvec.extinction_rot
+        extvec = self.extvec._extinction_rot
 
         # In case no coordinates are supplied
         if self.lon is not None:
@@ -160,8 +258,17 @@ class DataBase:
     def all_combinations(self, idxstart):
         """
         Method to get all combinations of input features
-        :param idxstart: Minimun number of features required. Used to exclude single magnitudes for univariate PNICER.
-        :return: All combinations from input features
+
+        Parameters
+        ----------
+        idxstart : int
+            Minimun number of features required. Used to exclude single magnitudes for univariate PNICER.
+
+        Returns
+        -------
+        iterable
+            List of instances with all combinations from input features.
+
         """
 
         all_c = [item for sublist in [combinations(range(self.n_features), p)
@@ -176,17 +283,93 @@ class DataBase:
             combination_instances.append(self.__class__(mag=cdata, err=cerror, extvec=extvec,
                                                         lon=self.lon, lat=self.lat, names=cnames))
 
+        # Return list of combinations.
         return combination_instances
+
+    # ----------------------------------------------------------------------
+    def build_wcs_grid(self, frame, pixsize=10. / 60):
+        """
+        Method to build a WCS grid with a valid projection given a pixel scale.
+
+        Parameters
+        ----------
+        frame : str
+            Coordinate frame. 'equatorial' or 'galactic'.
+        pixsize : int, float, optional
+            Pixel size of grid. Default is 10 arcminutes.
+
+        Returns
+        -------
+        tuple
+            Tuple containing the header, the longitude and the latitude grid.
+
+        """
+
+        # TODO: Check if this method can be made better (e.g. include projcode)
+
+        if frame == "equatorial":
+            ctype = ["RA---COE", "DEC--COE"]
+        elif frame == "galactic":
+            ctype = ["GLON-COE", "GLAT-COE"]
+        else:
+            raise KeyError("frame must be'galactic' or 'equatorial'")
+
+        # Calculate range of grid to 0.1 degree precision
+        lon_range = [np.floor(np.min(self.lon) * 10) / 10, np.ceil(np.max(self.lon) * 10) / 10]
+        lat_range = [np.floor(np.min(self.lat) * 10) / 10, np.ceil(np.max(self.lat) * 10) / 10]
+
+        naxis1 = np.ceil((lon_range[1] - lon_range[0]) / pixsize)
+        naxis2 = np.ceil((lat_range[1] - lat_range[0]) / pixsize)
+
+        # Initialize WCS
+        mywcs = wcs.WCS(naxis=2)
+
+        # Set projection parameters
+        mywcs.wcs.crpix = [naxis1 / 2., naxis2 / 2.]
+        mywcs.wcs.cdelt = np.array([-pixsize, pixsize])
+        mywcs.wcs.crval = [(lon_range[0] + lon_range[1]) / 2., (lat_range[0] + lat_range[1]) / 2.]
+        mywcs.wcs.ctype = ctype
+
+        mywcs.wcs.set_pv([(2, 1, np.around(np.median(self.lat), 1))])
+
+        # Make header
+        myheader = mywcs.to_header()
+
+        # Create image coordinates
+        x_pix = np.arange(0, naxis1, 1)
+        y_pix = np.arange(0, naxis2, 1)
+        # ...and grid
+        xy_coo = np.meshgrid(x_pix, y_pix)
+
+        # Convert to world coordinates and get WCS grid for this projection
+        world = mywcs.wcs_pix2world(xy_coo[0], xy_coo[1], 0)
+
+        return myheader, world[0], world[1]
+
+    # ---------------------------------------------------------------------- #
+    #                          Main PNICER routines                          #
+    # ---------------------------------------------------------------------- #
 
     # ----------------------------------------------------------------------
     def _pnicer_multivariate(self, control, sampling, kernel):
         """
         Main PNICER routine to get extinction. This will return only the extinction values for data for which all
-        features are available
-        :param control: instance of control field data
-        :param sampling: Sampling of grid relative to bandwidth of kernel
-        :param kernel: name of kernel to be used for density estimation. e.g. "epanechnikov" or "gaussian"
-        :return: Extinction and variance for input data
+        features are available.
+
+        Parameters
+        ----------
+        control
+            Instance of control field data.
+        sampling : int
+            Sampling of grid relative to bandwidth of kernel.
+        kernel : str
+            Name of kernel to be used for density estimation. e.g. "epanechnikov" or "gaussian".
+
+        Returns
+        -------
+        tuple(np.ndarray, np.ndarray, np.ndarray)
+            Tuple containing extinction, variance and de-reddened features.
+
         """
 
         # Check instances
@@ -196,13 +379,13 @@ class DataBase:
         science_rot, control_rot = self.rotate(), control.rotate()
 
         # Get bandwidth of kernel
-        bandwidth = np.around(np.mean(np.nanmean(self.features_err, axis=1)), 2)
+        bandwidth = np.round(np.mean(np.nanmean(self.features_err, axis=1)), 2)
 
         # Determine bin widths for grid according to bandwidth and sampling
         bin_grid = bin_ext = np.float(bandwidth / sampling)
 
         # Now we build a grid from the rotated data for all components but the first
-        grid_data = DataBase.build_grid(data=np.vstack(science_rot.features)[1:, :], precision=bin_grid)
+        grid_data = DataBase._build_grid(data=np.vstack(science_rot.features)[1:, :], precision=bin_grid)
 
         # Create a grid to evaluate along the reddening vector
         grid_ext = np.arange(start=np.floor(min(control_rot.features[0])),
@@ -231,7 +414,7 @@ class DataBase:
                 # Get weighted average position along vector and the weighted variance
                 a, b = weighted_avg(values=grid_ext, weights=vec)
                 grid_mean.append(a)
-                grid_var.append(b / self.extvec.extinction_norm)  # The normalisation converts this to extinction
+                grid_var.append(b / self.extvec._extinction_norm)  # The normalisation converts this to extinction
 
         # Convert to arrays
         grid_var = np.array(grid_var)
@@ -243,7 +426,7 @@ class DataBase:
         indices = indices[:, 0]
 
         # Inverse rotation of grid to get intrinsic features
-        intrinsic = self.extvec.rotmatrix_inv.dot(np.vstack([grid_mean[indices], grid_data[:, indices]]))
+        intrinsic = self.extvec._rotmatrix_inv.dot(np.vstack([grid_mean[indices], grid_data[:, indices]]))
         if isinstance(self, Magnitudes):
             color0 = np.array([intrinsic[i] - intrinsic[i + 1] for i in range(self.n_features - 1)])
         else:
@@ -251,7 +434,7 @@ class DataBase:
 
         # Now we have the instrisic colors for each vector and indices for all sources.
         # It's time to calculate the extinction. :)
-        ext = (science_rot.features[0] - grid_mean[indices]) / self.extvec.extinction_norm
+        ext = (science_rot.features[0] - grid_mean[indices]) / self.extvec._extinction_norm
         var = grid_var[indices]
 
         # Lastly we put all the extinction measurements back into a full array
@@ -268,13 +451,24 @@ class DataBase:
     # ----------------------------------------------------------------------
     def _pnicer_univariate(self, control):
         """
-        Univariate implementation of PNICER
-        :param control: control field instance
-        :return: extinction and variance estimates for each source
+        Univariate implementation of PNICER.
+
+        Parameters
+        ----------
+        control
+            Control field instance.
+
+        Returns
+        -------
+        tuple
+            Tuple containing extinction, variance and de-reddened features.
+
         """
 
-        assert self.__class__ == control.__class__, "Instance and control class do not match"
-        assert self.n_features == 1 & control.n_features == 1, "Only one feature allowed for this method"
+        if self.__class__ != control.__class__:
+            raise ValueError("Instance and control class do not match")
+        if (self.n_features != 1) | (control.n_features != 1):
+            raise ValueError("Only one feature allowed for this method")
 
         # Get mean and std of control field
         # TODO: Average or weighted average
@@ -284,7 +478,7 @@ class DataBase:
         # Calculate extinctions
         ext = (self.features[0] - cf_mean) / self.extvec.extvec[0]
         var = (self.features_err[0] ** 2 + cf_var) / self.extvec.extvec[0] ** 2
-        color0 = np.full_like(ext, fill_value=cf_mean)
+        color0 = np.full_like(ext, fill_value=float(cf_mean))
         color0[~np.isfinite(ext)] = np.nan
 
         return ext, var, color0[np.newaxis, :]
@@ -293,12 +487,24 @@ class DataBase:
     def _pnicer_combinations(self, control, comb, sampling, kernel):
         """
         PNICER base implementation for combinations. Basically calls the pnicer_single implementation for all
-        combinations. The outpur extinction is then the one with the smallest error from all combinations
-        :param control: instance of control field data
-        :param comb: zip object of combinations to use
-        :param sampling: Sampling of grid relative to bandwidth of kernel
-        :param kernel: name of kernel to be used for density estimation. e.g. "epanechnikov" or "gaussian"
-        :return: Extinction instance with the calcualted extinction and error
+        combinations. The output extinction is then the one with the smallest error from all combinations.
+
+        Parameters
+        ----------
+        control
+            Instance of control field data.
+        comb
+            Zip object of combinations to use.
+        sampling : int
+            Sampling of grid relative to bandwidth of kernel.
+        kernel : str
+            Name of kernel to be used for density estimation. e.g. "epanechnikov" or "gaussian".
+
+        Returns
+        -------
+        Extinction
+            Extinction instance with the calcualted extinction and errors.
+
         """
 
         # Instance assertions
@@ -357,8 +563,9 @@ class DataBase:
 
         # Convert to arrays and save combination data
         all_ext = np.array(all_ext)
-        self._ext_combinations = all_ext.copy()
         all_var = np.array(all_var)
+
+        self._ext_combinations = all_ext.copy()
         self._var_combinations = all_var.copy()
         self._combination_names = names
         self._n_combinations = i
@@ -379,69 +586,31 @@ class DataBase:
         ext[var > 10] = var[var > 10] = np.nan
 
         # Return Extinction instance
-        return Extinction(db=self, extinction=ext, variance=var, color0=self._color0)
+        return Extinction(db=self, extinction=ext, variance=var, color0=np.array(self._color0))
+
+    # ---------------------------------------------------------------------- #
+    #                            Plotting methods                            #
+    # ---------------------------------------------------------------------- #
 
     # ----------------------------------------------------------------------
-    def build_wcs_grid(self, frame, pixsize=10. / 60):
-        """
-        Method to build a WCS grid with a valid projection given a pixel scale
-        :param frame: "equatorial" or "galactic"
-        :param pixsize: pixel size of grid
-        :return: header, longrid, latgrid
-        """
-
-        if frame == "equatorial":
-            ctype = ["RA---COE", "DEC--COE"]
-        elif frame == "galactic":
-            ctype = ["GLON-COE", "GLAT-COE"]
-        else:
-            raise KeyError("frame must be'galactic' or 'equatorial'")
-
-        # Calculate range of grid to 0.1 degree precision
-        lon_range = [np.floor(np.min(self.lon) * 10) / 10, np.ceil(np.max(self.lon) * 10) / 10]
-        lat_range = [np.floor(np.min(self.lat) * 10) / 10, np.ceil(np.max(self.lat) * 10) / 10]
-
-        naxis1 = np.ceil((lon_range[1] - lon_range[0]) / pixsize)
-        naxis2 = np.ceil((lat_range[1] - lat_range[0]) / pixsize)
-
-        # Initialize WCS
-        mywcs = wcs.WCS(naxis=2)
-
-        # Set projection parameters
-        mywcs.wcs.crpix = [naxis1 / 2., naxis2 / 2.]
-        mywcs.wcs.cdelt = np.array([-pixsize, pixsize])
-        mywcs.wcs.crval = [(lon_range[0] + lon_range[1]) / 2., (lat_range[0] + lat_range[1]) / 2.]
-        mywcs.wcs.ctype = ctype
-
-        mywcs.wcs.set_pv([(2, 1, np.around(np.median(self.lat), 1))])
-
-        # Make header
-        myheader = mywcs.to_header()
-
-        # Create image coordinates
-        x_pix = np.arange(0, naxis1, 1)
-        y_pix = np.arange(0, naxis2, 1)
-        # ...and grid
-        xy_coo = np.meshgrid(x_pix, y_pix)
-
-        # Convert to world coordinates and get WCS grid for this projection
-        world = mywcs.wcs_pix2world(xy_coo[0], xy_coo[1], 0)
-
-        return myheader, world[0], world[1]
-
-    # ----------------------------------------------------------------------
-    # Plotting methods
-
     def plot_combinations_scatter(self, path=None, ax_size=None, skip=1, **kwargs):
         """
-        2D Scatter plot of combinations
-        :param path: file path if it should be saved. e.g. "/path/to/image.png"
-        :param ax_size: Size of individual axis
-        :param skip: Skip n source for faster testing
-        :param kwargs: Additional scatter plot arguments
-        :return:
+        2D Scatter plot of combinations.
+
+        Parameters
+        ----------
+        path : str, optional
+            File path if it should be saved. e.g. "/path/to/image.png". Default is None.
+        ax_size : int, float, optional
+            Size of individual axis. Default is [3, 3]
+        skip : int, optional
+            Skip every n-th source for faster plotting. Default is 1.
+        kwargs
+            Any additional scatter plot arguments.
+
         """
 
+        # Set default axis size
         if ax_size is None:
             ax_size = [3, 3]
 
@@ -473,18 +642,27 @@ class DataBase:
             plt.savefig(path, bbox_inches='tight')
         plt.close()
 
+    # ----------------------------------------------------------------------
     def plot_combinations_kde(self, path=None, ax_size=None, grid_bw=0.1, kernel="epanechnikov", cmap="gist_heat_r"):
         """
         KDE for all 2D combinations of features
-        :param path: file path if it should be saved. e.g. "/path/to/image.png"
-        :param ax_size: Size of individual axis
-        :param grid_bw: grid bin width
-        :param kernel: name of kernel for KDE. e.g. "epanechnikov" or "gaussian"
-        :param cmap: colormap to be used in plot
-        :return:
+
+        Parameters
+        ----------
+        path : str, optional
+            File path if it should be saved. e.g. "/path/to/image.png". Default is None.
+        ax_size : int, float, optional
+            Size of individual axis. Default is [3, 3]
+        grid_bw : int, float, optional
+            Grid size. Default is 0.1.
+        kernel : str, optional
+            Name of kernel for KDE. e.g. 'epanechnikov' or 'gaussian'. Default is 'epanechnikov'.
+        cmap : str, optional
+            Colormap to be used in plot. Default is 'gist_heat_r'.
+
         """
 
-        # Set defaults
+        # Set default axis size
         if ax_size is None:
             ax_size = [3, 3]
 
@@ -532,16 +710,26 @@ class DataBase:
             plt.savefig(path, bbox_inches="tight")
         plt.close()
 
+    # ----------------------------------------------------------------------
     def plot_spatial_kde(self, frame, pixsize=10 / 60, path=None, kernel="epanechnikov", skip=1, cmap=None):
         """
         Plot source densities for features
-        :param frame: "equatorial" or "galactic"
-        :param pixsize: pixel size of grid
-        :param path: file path if it should be saved. e.g. "/path/to/image.png"
-        :param kernel: name of kernel for KDE. e.g. "epanechnikov" or "gaussian"
-        :param skip: Integer to skip every n-th source (for faster plotting)
-        :param cmap: colormap for plot
-        :return:
+
+        Parameters
+        ----------
+        frame : str
+            Coordinate frame. 'equatorial' or 'galactic'.
+        pixsize : int, float, optional
+            Pixel size of grid.
+        path : str, optional
+            File path if it should be saved. e.g. '/path/to/image.png'. Default is None.
+        kernel : str, optional
+            Name of kernel for KDE. e.g. 'epanechnikov' or 'gaussian'. Default is 'epanechnikov'.
+        skip : int, optional
+            Skip every n-th source for faster plotting. Default is 1.
+        cmap : str, optional
+            Colormap to be used in plot. Default is None.
+
         """
 
         # Set cmap
@@ -598,155 +786,21 @@ class DataBase:
             plt.savefig(path, bbox_inches="tight")
         plt.close()
 
-    def plot_spatial_kde_gain(self, frame, pixsize=10 / 60, sampling=2, contour=None, path=None,
-                              kernel="epanechnikov", skip=1, cmap=None):
-        # TODO: I guess I should move this to a separate plot file. It's too complex to work for all input data ever.
-        """
-        Plot source densities for features
-        :param frame: "equatorial" or "galactic"
-        :param pixsize: pixel size of grid
-        :param sampling: Sampling of data, default = 2
-        :param contour: 2D data if contours should be drawn
-        :param path: file path if it should be saved. e.g. "/path/to/image.png"
-        :param kernel: name of kernel for KDE. e.g. "epanechnikov" or "gaussian"
-        :param skip: Integer to skip every n-th source (for faster plotting)
-        :param cmap: colormap for plotting
-        :return:
-        """
-
-        assert (frame == "equatorial") | (frame == "galactic"), "Frame not suppoerted"
-
-        if cmap is None:
-            cmap = "coolwarm_r"
-
-        if contour is not None:
-            # Must be 2D map
-            assert len(contour[0].shape) == 2, "Input data not 2D"
-            # Must be astropy WCS
-            assert isinstance(contour[1], wcs.wcs.WCS), "Input data not astropy WCS object"
-
-        # Get a WCS grid
-        header, lon_grid, lat_grid = self.build_wcs_grid(frame=frame, pixsize=pixsize)
-
-        # Get aspect ratio
-        ar = lon_grid.shape[0] / lon_grid.shape[1]
-
-        # Determine number of panels
-        n_panels = [np.floor(np.sqrt(self.n_features)).astype(int),
-                    np.ceil(np.sqrt(self.n_features)).astype(int)]
-        if n_panels[0] * n_panels[1] < self.n_features:
-            n_panels[n_panels.index(min(n_panels))] += 1
-
-        # Plot index for row-wise plotting
-        plot_idx = np.arange(sum(n_panels)).reshape(n_panels, order="F").ravel()
-
-        # Create grid
-        fig = plt.figure(figsize=[10 * n_panels[0], 10 * n_panels[1] * ar])
-        grid = GridSpec(ncols=n_panels[0], nrows=n_panels[1], bottom=0.05, top=0.9, left=0.05, right=0.9,
-                        hspace=0.05, wspace=0.05)
-
-        # Add colorbar
-        cax = fig.add_axes([0.91, 0.05, 0.01, 0.85])
-
-        # Loop over features and plot
-        dens, ax, im = [], [], []
-        for idx, pidx in zip(range(self.n_features), plot_idx):
-
-            # Get density
-            xgrid = np.vstack([lon_grid.ravel(), lat_grid.ravel()]).T
-            data = np.vstack([self.lon[self.features_masks[idx]][::skip], self.lat[self.features_masks[idx]][::skip]]).T
-            dens.append(mp_kde(grid=xgrid, data=data, bandwidth=pixsize * sampling, shape=lon_grid.shape, kernel=kernel,
-                               absolute=True, sampling=sampling))
-
-            # Mask threshold
-            dens[-1][dens[-1] < 1] = np.nan
-
-            # First, draw total gain
-            if idx == 0:
-                ax.append(plt.subplot(grid[0], projection=wcsaxes.WCS(header=header)))
-                data = np.vstack([self.lon[::skip], self.lat[::skip]]).T
-                dens_tot = mp_kde(grid=xgrid, data=data, bandwidth=pixsize * 2, shape=lon_grid.shape, kernel=kernel,
-                                  absolute=True, sampling=2)
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore")
-                    im.append(ax[-1].imshow(dens_tot / dens[0] - 1, origin="lower", interpolation="nearest",
-                                            cmap=cmap, vmin=-0.5, vmax=0.5))
-            else:
-
-                # Add axes
-                ax.append(plt.subplot(grid[pidx], projection=wcsaxes.WCS(header=header)))
-
-                # Plot density
-                with warnings.catch_warnings():
-                    # Ignore NaN and 0 division warnings
-                    warnings.simplefilter("ignore")
-                    im.append(ax[-1].imshow(dens[idx] / dens[idx - 1] - 1, origin="lower", interpolation="nearest",
-                                            cmap=cmap, vmin=-0.5, vmax=0.5))
-
-                    plt.colorbar(im[-1], cax=cax, ticks=MultipleLocator(0.1), label="Relative source density gain")
-
-            # Plot contour
-            if contour is not None:
-                ax[-1].contour(contour[0], levels=[1], colors="black", lw=2, alpha=1,
-                               transform=ax[-1].get_transform(contour[1]))
-
-            # Grab axes
-            lon = ax[-1].coords[0]
-            lat = ax[-1].coords[1]
-
-            # Set minor ticks
-            lon.set_major_formatter("d")
-            lon.display_minor_ticks(True)
-            lon.set_minor_frequency(4)
-            lat.set_major_formatter("d")
-            lat.display_minor_ticks(True)
-            lat.set_minor_frequency(2)
-
-            # Set labels
-            if pidx % n_panels[1] == 0:
-                l = "Galactic Latitude (°)" if frame == "galactic" else "Declination"
-                lat.set_axislabel(l)
-            else:
-                lat.set_ticklabel_position("")
-            if pidx // n_panels[1] >= 1:
-                l = "Galactic Longitude (°)" if frame == "galactic" else "Right Ascension"
-                lon.set_axislabel(l)
-            else:
-                # Hide tick labels
-                lon.set_ticklabel_position("")
-
-        # For VISION
-        # TODO: Remove again
-        for a, d in zip(ax, dens):
-            a.set_xlim(0.1 * d.shape[1], d.shape[1] - 0.1 * d.shape[1])
-            a.set_ylim(0.1 * d.shape[0], d.shape[0] - 0.1 * d.shape[0])
-        # Set new scaling
-        im[0].norm.vmin, im[0].norm.vmax = -1.5, 1.5
-        im[1].norm.vmin, im[1].norm.vmax = -1.5, 1.5
-
-        fig.delaxes(cax)
-        cax1 = fig.add_axes([0.0505, 0.91, 0.414, 0.02])
-        cax2 = fig.add_axes([0.4855, 0.91, 0.414, 0.02])
-        cbar1 = plt.colorbar(im[0], cax=cax1, ticks=MultipleLocator(0.3), orientation="horizontal")
-        cbar2 = plt.colorbar(im[2], cax=cax2, ticks=MultipleLocator(0.1), orientation="horizontal")
-        for cb in [cbar1, cbar2]:
-            cb.ax.xaxis.set_ticks_position("top")
-            cb.set_label("Relative source density gain", labelpad=-40)
-
-        # Save or show figure
-        if path is None:
-            plt.show()
-        else:
-            plt.savefig(path, bbox_inches="tight")
-        plt.close()
-
+    # ----------------------------------------------------------------------
     def plot_kde_extinction_combinations(self, path=None, sampling=16):
-        # TODO: Improve this method, or do not include in official PNICER package
         """
-        Plot histogram of extinctions for all combinations. Requires PNICER to be run beforehand
-        :param path: file path if it should be saved. e.g. "/path/to/image.png"
-        :param sampling: Sampling factor of grid (the larger, the more samples)
+        Plot histogram of extinctions for all combinations. Requires PNICER to be run beforehand.
+
+        Parameters
+        ----------
+        path : str, optional
+            File path if it should be saved. e.g. '/path/to/image.png'. Default is None.
+        sampling : int, optional
+            Sampling factor of grid (the larger, the more samples). Default is 16.
+
         """
+
+        # TODO: Improve or remove!
 
         # If PNICER has not yet been run, raise error
         if self._ext_combinations is None:
@@ -760,13 +814,13 @@ class DataBase:
 
         # Determine plot range
         # noinspection PyTypeChecker
-        ax1_range = [DataBase.round_partial(np.nanmean(self._ext_combinations) -
-                                            3 * np.nanstd(self._ext_combinations), 0.1),
-                     DataBase.round_partial(np.nanmean(self._ext_combinations) +
-                                            3.5 * np.nanstd(self._ext_combinations), 0.1)]
+        ax1_range = [DataBase._round_partial(np.nanmean(self._ext_combinations) -
+                                             3 * np.nanstd(self._ext_combinations), 0.1),
+                     DataBase._round_partial(np.nanmean(self._ext_combinations) +
+                                             3.5 * np.nanstd(self._ext_combinations), 0.1)]
         # noinspection PyTypeChecker
-        ax2_range = [0., DataBase.round_partial(np.nanmean(self._var_combinations) +
-                                                3.5 * np.nanstd(self._var_combinations), 0.1)]
+        ax2_range = [0., DataBase._round_partial(np.nanmean(self._var_combinations) +
+                                                 3.5 * np.nanstd(self._var_combinations), 0.1)]
 
         plt.figure(figsize=[5 * n_panels[1], 5 * n_panels[0] * 0.5])
         grid = GridSpec(ncols=n_panels[1], nrows=n_panels[0], bottom=0.1, top=0.9, left=0.1, right=0.9,
@@ -828,6 +882,7 @@ class DataBase:
             else:
                 ax2.axes.xaxis.set_ticklabels([])
 
+            # TODO: Write stand-alone method to remove ticks from axes
             # Delete first and last label
             xticks = ax1.xaxis.get_major_ticks()
             xticks[-1].set_visible(False)
@@ -846,31 +901,233 @@ class DataBase:
         plt.close()
 
 
-# ----------------------------------------------------------------------
-# ----------------------------------------------------------------------
-# Magnitudes class
+# ---------------------------------------------------------------------- #
+# ---------------------------------------------------------------------- #
+class ExtinctionVector:
+
+    def __init__(self, extvec):
+        """
+        Class for extinction vectors.
+
+        Parameters
+        ----------
+        extvec : iterable
+            List of extinction values for each input feature.
+
+        """
+
+        # Set attributes
+        self.extvec = extvec
+        self.n_dimensions = len(extvec)
+
+    # ---------------------------------------------------------------------- #
+    #                             Static methods                             #
+    # ---------------------------------------------------------------------- #
+
+    @staticmethod
+    def _unit_vectors(n_dimensions):
+        """
+        Calculate unit vectors for a given number of dimensions.
+
+        Parameters
+        ----------
+        n_dimensions : int
+            Number of dimensions
+
+        Returns
+        -------
+        iterable
+            Unit vectors for each dimension in a list.
+
+        """
+
+        return [np.array([1.0 if i == l else 0.0 for i in range(n_dimensions)]) for l in range(n_dimensions)]
+
+    # ----------------------------------------------------------------------
+    @staticmethod
+    def _get_rotmatrix(vector):
+        """
+        Method to determine the rotation matrix so that the rotated first vector component is the only non-zero
+        component.
+
+        Parameters
+        ----------
+        vector
+            Input extinction vector
+
+        Returns
+        -------
+        np.ndarray
+            Rotation matrix
+
+        """
+
+        # Number of dimensions
+        n_dimensions = len(vector)
+        if n_dimensions < 2:
+            ValueError("Vector must have at least two dimensions")
+
+        # Get unit vectors
+        uv = ExtinctionVector._unit_vectors(n_dimensions=n_dimensions)
+
+        # To not raise editor warning
+        vector_rot = [0]
+
+        # Now we loop over all but the first component
+        rotmatrices = []
+        for n in range(n_dimensions - 1):
+
+            # Calculate rotation angle of current component
+            if n == 0:
+                rot_angle = np.arctan(vector[n + 1] / vector[0])
+            else:
+                rot_angle = np.arctan(vector_rot[n + 1] / vector_rot[0])
+
+            # Following the german Wikipedia... :)
+            v = np.outer(uv[0], uv[0]) + np.outer(uv[n + 1], uv[n + 1])
+            w = np.outer(uv[0], uv[n + 1]) - np.outer(uv[n + 1], uv[0])
+            rotmatrices.append((np.cos(rot_angle) - 1) * v + np.sin(rot_angle) * w + np.identity(n_dimensions))
+
+            # Rotate reddening vector
+            if n == 0:
+                vector_rot = rotmatrices[-1].dot(vector)
+            else:
+                vector_rot = rotmatrices[-1].dot(vector_rot)
+
+        # Now we have rotation matrices for each component and we must combine them
+        rotmatrix = rotmatrices[-1]
+        for n in reversed(range(0, len(rotmatrices) - 1)):
+            rotmatrix = rotmatrix.dot(rotmatrices[n])
+
+        return rotmatrix
+
+    # ----------------------------------------------------------------------
+    __rotmatrix = None
+
+    @property
+    def _rotmatrix(self):
+        """
+        Simple property to hold the rotation matrix for all extinction components of the current instance.
+
+        Returns
+        -------
+        np.ndarray
+            Rotation matrix for the extinction vector of the instance.
+
+        """
+
+        # Check if already determined
+        if self.__rotmatrix is not None:
+            return self.__rotmatrix
+
+        self.__rotmatrix = ExtinctionVector._get_rotmatrix(self.extvec)
+        return self.__rotmatrix
+
+    # ----------------------------------------------------------------------
+    # Inverted rotation matrix
+    __rotmatrix_inv = None
+
+    @property
+    def _rotmatrix_inv(self):
+        """
+        Inverted rotation matrix.
+
+        Returns
+        -------
+        np.ndarray
+
+        """
+
+        # Check if already determined
+        if self.__rotmatrix_inv is not None:
+            return self.__rotmatrix_inv
+
+        self.__rotmatrix_inv = self._rotmatrix.T
+        return self.__rotmatrix_inv
+
+    # ----------------------------------------------------------------------
+    __extinction_rot = None
+
+    @property
+    def _extinction_rot(self):
+        """
+        Calculates the rotated extinction vector for current isntance.
+
+        Returns
+        -------
+        np.ndarray
+
+        """
+
+        # Check if already determined
+        if self.__extinction_rot is not None:
+            return self.__extinction_rot
+
+        self.__extinction_rot = self._rotmatrix.dot(self.extvec)
+        return self.__extinction_rot
+
+    # ----------------------------------------------------------------------
+    __extinction_norm = None
+
+    @property
+    def _extinction_norm(self):
+        """
+        Normalization component for projected extinction vector.
+
+        Returns
+        -------
+        float
+
+        """
+        # Check if already determined
+        if self.__extinction_norm is not None:
+            return self.__extinction_norm
+
+        self.__extinction_norm = self._extinction_rot[0]
+        return self.__extinction_norm
+
+
+# ---------------------------------------------------------------------- #
+# ---------------------------------------------------------------------- #
 class Magnitudes(DataBase):
     def __init__(self, mag, err, extvec, lon=None, lat=None, names=None):
         """
-        Main class for users. Includes PNICER and NICER
-        :param mag: List of magnitude arrays. All arrays must have the same length!
-        :param err: List off magnitude error arrays.
-        :param extvec: List holding the extinction components for each magnitude
-        :param lon: Longitude of coordinates for each source
-        :param lat: Latitude of coordinates for each source
-        :param names: List of magnitude (feature) names
+        Main class for users. Includes PNICER and NICER.
+
+        Parameters
+        ----------
+        mag : list
+            List of magnitude arrays. All arrays must have the same length.
+        err : list
+            List off magnitude error arrays.
+        extvec : list
+            List holding the extinction components for each magnitude.
+        lon : np.ndarray, optional
+            Longitude coordinates for each source.
+        lat : np.ndarray, optional
+            Latitude coordinates for each source.
+        names : list, optional
+            List of magnitude (feature) names.
+
         """
 
         # Call parent
         super(Magnitudes, self).__init__(mag=mag, err=err, extvec=extvec, lon=lon, lat=lat, names=names)
+
+        # Create color names
         self.colors_names = [self.features_names[k - 1] + "-" + self.features_names[k]
                              for k in range(1, self.n_features)]
 
     # ----------------------------------------------------------------------
     def mag2color(self):
         """
-        Method to convert to color instances
-        :return: Colors instance of input data
+        Method to convert magnitude to color instances.
+
+        Returns
+        -------
+        Colors
+            Colors instance.
+
         """
 
         # Calculate colors
@@ -883,35 +1140,47 @@ class Magnitudes(DataBase):
         # Color names
         color_extvec = [self.extvec.extvec[k - 1] - self.extvec.extvec[k] for k in range(1, self.n_features)]
 
+        # Return Colors instance
         return Colors(mag=colors, err=colors_error, extvec=color_extvec,
                       lon=self.lon, lat=self.lat, names=self.colors_names)
 
     # ----------------------------------------------------------------------
-    # Method to get all color combinations
     def color_combinations(self):
         """
-        Calculates a list of Colors instances for all combinations
-        :return: List of Colors instances
+        Calculates a list of Colors instances for all combinations.
+
+        Returns
+        -------
+        iterable
+            List of Colors instances.
+
         """
 
-        # First get all colors...
-        colors = self.mag2color()
-
-        # ...and all combinations of colors
-        colors_combinations = colors.all_combinations(idxstart=1)
-
-        return colors_combinations
+        # Get all colors and then all combinations of colors
+        return self.mag2color().all_combinations(idxstart=1)
 
     # ----------------------------------------------------------------------
     def pnicer(self, control, sampling=2, kernel="epanechnikov", add_colors=False):
         """
-        PNICER call method for magnitudes. Includes options to use combinations for input features, or convert them
+        Main PNICER method for magnitudes. Includes options to use combinations for input features, or convert them
         to colors.
-        :param control: instance of control field
-        :param sampling: Sampling of grid relative to bandwidth of kernel
-        :param kernel: name of kernel to be used for density estimation. e.g. "epanechnikov" or "gaussian"
-        :param add_colors: Whether or not to add colors to calculate probabilities
-        :return: Extinction instance with the calculated extinction and error
+
+        Parameters
+        ----------
+        control
+            Control field instance. Same class as self.
+        sampling : int, optional
+            Sampling of grid relative to bandwidth of kernel. Default is 2.
+        kernel : str, optional
+            Name of kernel for KDE. e.g. 'epanechnikov' or 'gaussian'. Default is 'epanechnikov'.
+        add_colors : bool, optional
+            Whether to also include the colors generated from the given magnitudes.
+
+        Returns
+        -------
+        Extinction
+            Extinction instance with the calcualted extinction and errors.
+
         """
 
         if add_colors:
@@ -925,18 +1194,29 @@ class Magnitudes(DataBase):
         return self._pnicer_combinations(control=control, comb=comb, sampling=sampling, kernel=kernel)
 
     # ----------------------------------------------------------------------
-    # NICER implementation
     def nicer(self, control, n_features=None):
         """
         NICER routine as descibed in Lombardi & Alves 2001. Generalized for arbitrary input magnitudes
-        :param control: control field instance to calculate intrinsic colors
-        :param n_features: If set, return only extinction values for sources with data for 'n' features
-        :return: Extinction instance
+
+        Parameters
+        ----------
+        control
+            Control field instance. Same class as self.
+        n_features : int, optional
+            If set, return only extinction values for sources with data for 'n' features.
+
+        Returns
+        -------
+        Extinction
+            Extinction instance with the calcualted extinction and errors.
+
         """
 
         # Some assertions
-        assert self.__class__ == control.__class__, "control and instance class do not match"
-        assert self.n_features == control.n_features, "Number of features in the control instance must match input"
+        if self.__class__ != control.__class__:
+            raise ValueError("control and instance class do not match")
+        if self.n_features != control.n_features:
+            raise ValueError("Number of features do not match")
 
         # Features to be required can only be as much as input features
         if n_features is not None:
@@ -1014,7 +1294,9 @@ class Magnitudes(DataBase):
         # ...and return :) Here, a Colors instance is returned!
         return Extinction(db=self.mag2color(), extinction=ext.data, variance=var, color0=color_0)
 
+    # ----------------------------------------------------------------------
     def get_beta_lines(self, base_keys, fit_key, control, kappa=2, sigma=3, err_iter=1000):
+        # TODO: Improve or remove!
 
         # Some assertions (quite some actually, haha)
         assert (isinstance(base_keys, tuple)) & (len(base_keys) == 2), " base_keys must be tuple with two entries"
@@ -1140,7 +1422,10 @@ class Magnitudes(DataBase):
         # Return fit and data values
         return beta, beta_err, ic, x1_sc, x2_sc, y2_sc
 
+    # ----------------------------------------------------------------------
+    # noinspection PyPackageRequirements
     def get_beta_binning(self, base_keys, fit_key, extinction, step=0.1):
+        # TODO: Improve or remove!
 
         # Try to import scipy, otherwise stop
         try:
@@ -1198,195 +1483,91 @@ class Magnitudes(DataBase):
         return beta, beta_err, ic, ic_err, avg_x, avg_y, avg_e, avg_n
 
 
-# ----------------------------------------------------------------------
-# ----------------------------------------------------------------------
-# Colors class
+# ---------------------------------------------------------------------- #
+# ---------------------------------------------------------------------- #
 class Colors(DataBase):
+
     def __init__(self, mag, err, extvec, lon=None, lat=None, names=None):
         """
-        Basically the same as magnitudes. PNICER implementation does not allow to convert to colors.
-        :param mag:
-        :param err:
-        :param extvec:
-        :param lon:
-        :param lat:
-        :param names:
-        :return:
+        Basically the same as magnitudes without NICER. Naturally the PNICER implementation does not allow to convert
+        to colors.
+
+        Parameters
+        ----------
+        mag
+        err
+        extvec
+        lon
+        lat
+        names
+
+        Returns
+        -------
+
         """
+        # TODO: Add docstring
+
+        # Call parent
         super(Colors, self).__init__(mag=mag, err=err, extvec=extvec, lon=lon, lat=lat, names=names)
+
+        # Add attributes
         self.colors_names = self.features_names
 
     # ----------------------------------------------------------------------
     def pnicer(self, control, sampling=2, kernel="epanechnikov"):
         """
         PNICER call method for colors.
-        :param control: instance of control field
-        :param sampling: Sampling of grid relative to bandwidth of kernel
-        :param kernel: name of kernel to be used for density estimation. e.g. "epanechnikov" or "gaussian"
-        :return: Extinction instance with the calculated extinction and error
+
+        Parameters
+        ----------
+        control
+            Control field instance.
+        sampling : int, optional
+            Sampling of grid relative to bandwidth of kernel. Default is 2.
+        kernel : str, optional
+            Name of kernel for KDE. e.g. 'epanechnikov' or 'gaussian'. Default is 'epanechnikov'.
+
         """
 
         comb = zip(self.all_combinations(idxstart=1), control.all_combinations(idxstart=1))
         return self._pnicer_combinations(control=control, comb=comb, sampling=sampling, kernel=kernel)
 
 
-# ----------------------------------------------------------------------
-# ----------------------------------------------------------------------
-class ExtinctionVector:
-    def __init__(self, extvec):
-        """
-        Class for extinction vector components
-        :param extvec: List of extinction values for each input feature
-        :return:
-        """
-
-        self.extvec = extvec
-        self.n_dimensions = len(extvec)
-
-    # ----------------------------------------------------------------------
-    # Some static helper methods within namespace
-
-    @staticmethod
-    def unit_vectors(n_dimensions):
-        """
-        Calculate unit vectors for a given number of dimensions
-        :param n_dimensions: Number of dimensions
-        :return: Unit vectors in a list
-        """
-
-        return [np.array([1.0 if i == l else 0.0 for i in range(n_dimensions)]) for l in range(n_dimensions)]
-
-    @staticmethod
-    def get_rotmatrix(vector):
-        """
-        Method to determine the rotation matrix so that the rotated first vector component is the only non-zero
-        component. Critical for PNICER
-        :param vector: Input extinction vector
-        :return: rotation matrix
-        """
-
-        # Number of dimensions
-        n_dimensions = len(vector)
-        if n_dimensions < 2:
-            ValueError("Vector must have at least two dimensions")
-
-        # Get unit vectors
-        uv = ExtinctionVector.unit_vectors(n_dimensions=n_dimensions)
-
-        # To not raise editor warning
-        vector_rot = [0]
-
-        # Now we loop over all but the first component
-        rotmatrices = []
-        for n in range(n_dimensions - 1):
-            # Calculate rotation angle of current component
-            if n == 0:
-                rot_angle = np.arctan(vector[n + 1] / vector[0])
-            else:
-                rot_angle = np.arctan(vector_rot[n + 1] / vector_rot[0])
-            # Following the german Wikipedia... :)
-            v = np.outer(uv[0], uv[0]) + np.outer(uv[n + 1], uv[n + 1])
-            w = np.outer(uv[0], uv[n + 1]) - np.outer(uv[n + 1], uv[0])
-            rotmatrices.append((np.cos(rot_angle) - 1) * v + np.sin(rot_angle) * w + np.identity(n_dimensions))
-            # Rotate reddening vector
-            if n == 0:
-                vector_rot = rotmatrices[-1].dot(vector)
-            else:
-                vector_rot = rotmatrices[-1].dot(vector_rot)
-
-        # Now we have rotation matrices for each component and we must combine them
-        rotmatrix = rotmatrices[-1]
-        for n in reversed(range(0, len(rotmatrices) - 1)):
-            rotmatrix = rotmatrix.dot(rotmatrices[n])
-
-        return rotmatrix
-
-    # ----------------------------------------------------------------------
-    _rotmatrix = None
-
-    @property
-    def rotmatrix(self):
-        """
-        Simple property to hold the rotation matrix for all extinction components of this instance
-        :return: rotation matrix
-        """
-
-        # Check if already determined
-        if self._rotmatrix is not None:
-            return self._rotmatrix
-
-        self._rotmatrix = ExtinctionVector.get_rotmatrix(self.extvec)
-        return self._rotmatrix
-
-    # ----------------------------------------------------------------------
-    # Inverted rotation matrix
-    _rotmatrix_inv = None
-
-    @property
-    def rotmatrix_inv(self):
-
-        # Check if already determined
-        if self._rotmatrix_inv is not None:
-            return self._rotmatrix_inv
-
-        self._rotmatrix_inv = self.rotmatrix.T
-        return self._rotmatrix_inv
-
-    # ----------------------------------------------------------------------
-    _extinction_rot = None
-
-    @property
-    def extinction_rot(self):
-        """
-        :return: Rotated input extinction vector
-        """
-
-        # Check if already determined
-        if self._extinction_rot is not None:
-            return self._extinction_rot
-
-        self._extinction_rot = self.rotmatrix.dot(self.extvec)
-        return self._extinction_rot
-
-    # ----------------------------------------------------------------------
-    _extinction_norm = None
-
-    @property
-    def extinction_norm(self):
-        """
-        :return: Normalization component for projected extinction vector
-        """
-        # Check if already determined
-        if self._extinction_norm is not None:
-            return self._extinction_norm
-
-        self._extinction_norm = self.extinction_rot[0]
-        return self._extinction_norm
-
-
-# ----------------------------------------------------------------------
-# ----------------------------------------------------------------------
+# ---------------------------------------------------------------------- #
+# ---------------------------------------------------------------------- #
 class Extinction:
+
     def __init__(self, db, extinction, variance=None, color0=None):
         """
-        Class for extinction measurements
-        :param db: Base class from which the extinction was derived
-        :param extinction: extinction measurements
-        :param variance: extinction variance
-        :param color0: Intrisic color set for each source.
+        Class for extinction measurements.
+
+        Parameters
+        ----------
+        db : DataBase
+            Base class from which the extinction was derived.
+        extinction : np.ndarray
+            Extinction data.
+        variance : np.ndarray, optional
+            Variance in extinction.
+        color0 : np.ndarray, optional
+            Intrisic color set for each source.
+
         """
 
         # Check if db is really a DataBase instance
-        assert isinstance(db, DataBase), "passed instance is not DataBase class"
+        if not isinstance(db, DataBase):
+            raise ValueError("passed instance is not DataBase class")
 
         # Define inititial attributes
         self.db = db
         self.extinction = extinction
 
+        # Set variance to 0 if not given.
         self.variance = variance
         if self.variance is None:
             self.variance = np.zeros_like(extinction)
 
+        # Set intrinsic colors to 0 if not given.
         self.color0 = color0
         if self.color0 is None:
             self.color0 = np.zeros_like(extinction)
@@ -1394,25 +1575,39 @@ class Extinction:
         # Index with clean extinction data
         self.clean_index = np.isfinite(self.extinction)
 
-        # extinction and variance must have same length
+        # Extinction and variance must have same length
         if len(self.extinction) != len(self.variance):
             raise ValueError("Extinction and variance arrays must have equal length")
 
-        # ----------------------------------------------------------------------
         # Calculate de-reddened features
         self.features_dered = [f - self.extinction * v for f, v in zip(self.db.features, self.db.extvec.extvec)]
 
     # ----------------------------------------------------------------------
     def build_map(self, bandwidth, metric="median", frame="galactic", sampling=2, nicest=False, use_fwhm=False):
         """
-        Method to build an extinction map
-        :param bandwidth: Resolution of map
-        :param metric: Metric to be used. e.g. "median", "gaussian", "epanechnikov", "uniform", "triangular"
-        :param frame: Reference frame; "galactic" or "equatorial"
-        :param sampling: Sampling of data. i.e. how many pixels per bandwidth
-        :param nicest: whether or not to adjust weights with NICEST correction factor
-        :param use_fwhm: If set, the bandwidth parameter represents the gaussian FWHM instead of its standard deviation
-        :return: ExtinctionMap instance
+        Method to build an extinction map.
+
+        Parameters
+        ----------
+        bandwidth : int, float
+            Resolution of output map.
+        metric : str, optional
+            Metric to be used. e.g. 'median', 'gaussian', 'epanechnikov', 'uniform, 'triangular'. Default is 'median'.
+        frame : str, optional
+            Reference frame; 'galactic' or 'equatorial'. Default is 'galactic'
+        sampling : int, optional
+            Sampling of data. i.e. how many pixels per bandwidth. Default is 2.
+        nicest : bool, optional
+            Whether to activate the NICEST correction factor.
+        use_fwhm : bool, optional
+            If set, the bandwidth parameter represents the gaussian FWHM instead of its standard deviation. Only
+            available when using a gaussian weighting.
+
+        Returns
+        -------
+        ExtinctionMap
+            ExtinctionMap instance.
+
         """
 
         # Sampling must be an integer
@@ -1460,8 +1655,13 @@ class Extinction:
     # ----------------------------------------------------------------------
     def save_fits(self, path):
         """
-        Write the extinction data to a FITS table file
-        :param path: file path; e.g. "/path/to/table.fits"
+        Write the extinction data to a FITS table file.
+
+        Parameters
+        ----------
+        path : str
+            File path; e.g. "/path/to/table.fits"
+
         """
 
         # Create FITS columns
@@ -1480,17 +1680,30 @@ class Extinction:
         tbhdu.writeto(path, clobber=True)
 
 
-# ----------------------------------------------------------------------
-# ----------------------------------------------------------------------
+# ---------------------------------------------------------------------- #
+# ---------------------------------------------------------------------- #
 class ExtinctionMap:
+
     def __init__(self, ext, var, header, metric=None, num=None, dens=None):
         """
-        Extinction map class
-        :param ext: 2D Extintion map
-        :param var: 2D Extinction variance map
-        :param num: 2D number map
-        :param header: header of grid from which extinction map was built.
-        :param metric: Metric used to create the map
+        Extinction map class.
+
+        Parameters
+        ----------
+        ext : np.ndarray
+            2D Extintion map.
+        var : np.ndarray
+            2D Extinction variance map.
+        header : astropy.fits.Header
+            Header of grid from which extinction map was built.
+        metric : str, optional
+            Metric used to create the map.
+        num : np.ndarray, optional
+            2D source count map.
+
+        Returns
+        -------
+
         """
 
         self.map = ext
@@ -1515,12 +1728,18 @@ class ExtinctionMap:
         if (len(self.map.shape) != 2) | (len(self.var.shape) != 2) | (len(self.num.shape) != 2):
             raise TypeError("Input must be 2D arrays")
 
+    # ----------------------------------------------------------------------
     def plot_map(self, path=None, figsize=5):
         """
-        Simple method to plot extinction map
-        :param path: file path if it should be saved. e.g. "/path/to/image.png"
-        :param figsize: figure size adjustment parameter
-        :return:
+        Method to plot extinction map.
+
+        Parameters
+        ----------
+        path : str, optional
+            File path if it should be saved. e.g. "/path/to/image.png". Default is None.
+        figsize : int, float, optional
+            Figure size for plot. Default is 5.
+
         """
 
         fig = plt.figure(figsize=[figsize, 3 * 0.9 * figsize * (self.shape[0] / self.shape[1])])
@@ -1573,10 +1792,16 @@ class ExtinctionMap:
             plt.savefig(path, bbox_inches="tight")
         plt.close()
 
+    # ----------------------------------------------------------------------
     def save_fits(self, path):
         """
-        Method to save extinciton map as FITS file
-        :param path: file path if it should be saved. e.g. "/path/to/image.fits"
+        Save extinciton map as FITS file.
+
+        Parameters
+        ----------
+        path : str
+            File path; e.g. "/path/to/table.fits"
+
         """
 
         # TODO: Add some header information
@@ -1589,35 +1814,64 @@ class ExtinctionMap:
         hdulist.writeto(path, clobber=True)
 
 
-# ----------------------------------------------------------------------
-# ----------------------------------------------------------------------
-# Helper top level methods for parallel processing
+# ---------------------------------------------------------------------- #
+#            Helper top level methods for parallel processing            #
+# ---------------------------------------------------------------------- #
 
 # ----------------------------------------------------------------------
-# KDE functions for parallelisation
 def _mp_kde(kde, data, grid):
     """
-    :param kde: KernelDensity instance from scikit learn
-    :param data input data
-    :param grid Grid on which to evaluate the density
-    :return density
+    Parallelisation routine for kernel density estimation.
+
+    Parameters
+    ----------
+    kde
+        KernelDensity instance from scikit learn
+    data
+        Input data
+    grid
+        Grid on which to evaluate the density.
+
+    Returns
+    -------
+    np.ndarray
+
     """
+
     return np.exp(kde.fit(data).score_samples(grid))
 
 
+# ----------------------------------------------------------------------
 def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", norm=False, absolute=False, sampling=None):
     """
-    Parallelisation for kernel density estimation
-    :param grid Grid on which to evaluate the density
-    :param data input data
-    :param bandwidth: Bandwidth of kernel
-    :param shape: If set, reshape output data
-    :param kernel: e.g. "epanechnikov" or "gaussian"
-    :param norm: Normalize output. "max", "mean", "sum"
-    :param absolute: Whether to return absolute numbers
-    :param sampling: Sampling factor of grid
-    :return: Kernel densities
+    Kernel density estimation with parallelisation.
+
+    Parameters
+    ----------
+    grid
+        Grid on which to evaluate the density.
+    data
+        Input data
+    bandwidth : int, float
+        Bandwidth of kernel (in data units).
+    shape
+        If set, shape out ouput.
+    kernel : str, optional
+        Name of kernel for KDE. e.g. 'epanechnikov' or 'gaussian'. Default is 'epanechnikov'.
+    norm : bool, optional
+        Whether to normalize the result (density estimate from 0 to 1). Default is False.
+    absolute : bool, optional
+        Whether to return absolute numbers.
+    sampling : int, optional
+        Sampling of grid. Necessary only when absolute numbers should be returned.
+
+    Returns
+    -------
+    np.ndarray
+
     """
+
+    # TODO: remove shape parameter
 
     # If we want absolute values, we must specify the sampling
     if absolute:
@@ -1663,21 +1917,37 @@ def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", norm=False,
 
 
 # ----------------------------------------------------------------------
-# Extinction mapping functions
 def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric, use_fwhm, nicest=False):
     """
-    Calculate extinction fro a given grid point
-    :param xgrid: X grid point
-    :param ygrid: Y grid point
-    :param xdata: X data
-    :param ydata: Y data
-    :param ext: extinction data for each source
-    :param var: extinction variance for each source
-    :param bandwidth: bandwidth of kernel
-    :param metric: Method to be used. e.g. "median", "gaussian", "epanechnikov", "uniform", "triangular"
-    :param use_fwhm: If set, then the bandwidth was specified as FWHM. Here this is used to preserve the truncation
-    :param nicest: Wether or not to use NICEST weight adjustment
-    :return: extintion, variance, and number of sources for pixel
+    Calculate extinction for a given grid point.
+
+    Parameters
+    ----------
+    xgrid : int, float
+        X grid point (longitude).
+    ygrid : int, float
+        Y grid point (latitude).
+    xdata : np.ndarray
+        X data (longitudes for all sources).
+    ydata : np.ndarray
+        Y data (latitudes for all source).
+    ext : np.ndarray
+        Extinction data for each source.
+    var : np.ndarray
+        Variance data for each source.
+    bandwidth : int, float
+        Bandwidth of kernel.
+    metric : str
+        Method to be used. e.g. 'median', 'gaussian', 'epanechnikov', 'uniform', 'triangular'.
+    use_fwhm : bool
+        If set, then the bandwidth was specified as FWHM. Here this is used to preserve the truncation.
+    nicest : bool, optional
+        Wether or not to use NICEST weight adjustment.
+
+    Returns
+    -------
+    tuple
+
     """
 
     # In case the average or median is to be calculated, I set bandwidth == truncation scale
@@ -1802,15 +2072,27 @@ def get_extinction_pixel(xgrid, ygrid, xdata, ydata, ext, var, bandwidth, metric
         return pixel_ext, pixel_var, npixel, rho
 
 
+# ---------------------------------------------------------------------- #
+#                       Helper methods for plotting                      #
+# ---------------------------------------------------------------------- #
+
 # ----------------------------------------------------------------------
-# ----------------------------------------------------------------------
-# Helper methods for plotting
 def axes_combinations(ndim, ax_size=None):
     """
-    Creates a grid of axes to plot all combinations of data
-    :param ndim: number of dimensions
-    :param ax_size: basic size adjustment parameter
-    :return: List of axes which can be used for plotting
+    Creates a grid of axes to plot all combinations of data.
+
+    Parameters
+    ----------
+    ndim : int
+        Number of dimensions.
+    ax_size : list, optional
+        Single axis size. Default is [3, 3].
+
+    Returns
+    -------
+    list
+        List of axes which can be used for plotting.
+
     """
 
     if ax_size is None:
@@ -1850,53 +2132,106 @@ def axes_combinations(ndim, ax_size=None):
     return fig, axes_out
 
 
-# ----------------------------------------------------------------------
-# ----------------------------------------------------------------------
-# Various helper methods
+# ---------------------------------------------------------------------- #
+#                         Various helper methods                         #
+# ---------------------------------------------------------------------- #
 
 # ----------------------------------------------------------------------
 def weighted_avg(values, weights):
     """
-    Calculates weighted mean and standard deviation
-    :param values: data values
-    :param weights: weights
-    :return: weighted mean and variance
+    Calculates weighted mean and standard deviation.
+
+    Parameters
+    ----------
+    values : np.ndarray
+        Data values.
+    weights : np.ndarray
+        Weights for each data point.
+
+    Returns
+    -------
+    tuple(np.ndarray, np.ndarray)
+        Weighted mean and variance.
+
     """
 
+    # Calculate weighted average
     average = np.nansum(values * weights) / np.nansum(weights)
-    # noinspection PyTypeChecker
+
+    # Calculate weighted variance
     variance = np.nansum((values - average) ** 2 * weights) / np.nansum(weights)
+
+    # Return both
     return average, variance
 
 
+# ----------------------------------------------------------------------
 def get_covar(xi, yi):
     """
     Calculate sample covariance (can not contain NaNs!)
-    :param xi: x data
-    :param yi: y data
-    :return: sample covariance
+
+    Parameters
+    ----------
+    xi : np.ndarray
+        X data.
+    yi : np.ndarray
+        Y data.
+
+    Returns
+    -------
+    float
+        Sample covariance.
+
     """
+
     return np.sum((xi - np.mean(xi)) * (yi - np.mean(yi))) / len(xi)
 
 
+# ----------------------------------------------------------------------
 def linear_model(vec, val):
-    """Linear function y = m*x + b
-    :param vec: vector of the parameters
-    :param val: array of the current x values
     """
+    Linear function model y = m*x + b.
+
+    Parameters
+    ----------
+    vec : iterable
+        Vector of the parameters.
+    val : np.ndarray
+        array of the current x values
+
+    Returns
+    -------
+
+    """
+
     return vec[0] * val + vec[1]
 
 
+# ----------------------------------------------------------------------
 def distance_on_unit_sphere(ra1, dec1, ra2, dec2, unit="radians"):
     """
-    Returns the distance between two objects on a sphere. Also works with arrays
-    :param ra1: Right ascension of first object
-    :param dec1: Declination of first object
-    :param ra2: Right ascension of second object
-    :param dec2: Declination of second object
-    :param unit: "radians", or "degrees". Unit of input/output
-    :return:
+    Calculates the distance between two objects on a sphere along a great circle. Also works with arrays.
+
+    Parameters
+    ----------
+    ra1 : int, float, np.ndarray
+        Longitude of first object(s).
+    dec1 : int, float, np.ndarray
+        Latitude of first object(s).
+    ra2 : int, float, np.ndarray
+        Longitude of second object(s).
+    dec2 : int, float, np.ndarray
+        Latitude of second object(s).
+    unit : str, optional
+        Units of calculation. 'Degree' or 'Radians'
+
+    Returns
+    -------
+        Distances.
+
     """
+
+    # TODO: Update with more precise formula!
 
     if unit not in ["radians", "degrees"]:
         raise ValueError("'unit' must be either 'radians', or 'degrees'!")
