@@ -3,16 +3,16 @@
 import os
 from astropy.io import fits
 from pnicer import Magnitudes
+from pnicer.utils import get_resource_path
 
 """ This file goes through a typical PNICER session and creates a rough extinction map of Orion A from 2MASS data. """
 
 
 # ----------------------------------------------------------------------
 # Find the test files
-# TODO: Check if this works when the package is installed
 test_resources_path = os.path.join(os.path.dirname(__file__), "..", "tests_resources/")
-science_path = test_resources_path + "Orion_A_2mass.fits"
-control_path = test_resources_path + "CF_2mass.fits"
+science_path = get_resource_path(package="pnicer.tests_resources", resource="Orion_A_2mass.fits")
+control_path = get_resource_path(package="pnicer.tests_resources", resource="CF_2mass.fits")
 
 
 # ----------------------------------------------------------------------
@@ -57,15 +57,15 @@ pnicer = science.pnicer(control=control, add_colors=False)
 
 # ----------------------------------------------------------------------
 # Also run NICER
-nicer = science.nicer(control=control)
+# nicer = science.nicer(control=control)
 
 # ----------------------------------------------------------------------
 # Create the extinction maps without any crazy setup
 pnicer_emap = pnicer.build_map(bandwidth=3 / 60, metric="gaussian", frame="galactic",
                                sampling=2, nicest=False, use_fwhm=False)
 
-nicer_emap = pnicer.build_map(bandwidth=2 / 60, metric="gaussian", frame="galactic",
-                              sampling=2, nicest=False, use_fwhm=False)
+# nicer_emap = pnicer.build_map(bandwidth=2 / 60, metric="gaussian", frame="galactic",
+#                               sampling=2, nicest=False, use_fwhm=False)
 
 
 # ----------------------------------------------------------------------

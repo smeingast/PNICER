@@ -1,5 +1,8 @@
 # ----------------------------------------------------------------------
 # Import stuff
+import os
+import sys
+import importlib
 import numpy as np
 import multiprocessing
 
@@ -279,3 +282,29 @@ def _mp_kde(kde, data, grid):
     """
 
     return np.exp(kde.fit(data).score_samples(grid))
+
+
+# ----------------------------------------------------------------------
+def get_resource_path(package, resource):
+    """
+    Returns the path to an included resource.
+
+    Parameters
+    ----------
+    package : str
+        package name (e.g. astropype.resources.sextractor).
+    resource : str
+        Name of the resource (e.g. default.conv)
+
+    Returns
+    -------
+    str
+        Path to resource.
+
+    """
+
+    # Import package
+    importlib.import_module(name=package)
+
+    # Return path to resource
+    return os.path.join(os.path.dirname(sys.modules[package].__file__), resource)
