@@ -16,6 +16,7 @@ from pnicer.utils import distance_sky
 
 # ----------------------------------------------------------------------
 # ----------------------------------------------------------------------
+# noinspection PyProtectedMember
 class Extinction:
 
     def __init__(self, db, extinction, variance=None, color0=None):
@@ -108,7 +109,7 @@ class Extinction:
             bandwidth /= 2 * np.sqrt(2 * np.log(2))
 
         # First let's get a grid
-        grid_header, grid_lon, grid_lat = self.db.build_wcs_grid(frame=frame, pixsize=pixsize)
+        grid_header, grid_lon, grid_lat = self.db._build_wcs_grid(frame=frame, pixsize=pixsize)
 
         # Set some header keywords
         grid_header["BWIDTH"] = (bandwidth, "Bandwidth of kernel (degrees)")
@@ -120,7 +121,7 @@ class Extinction:
             # Submit tasks
             mp = pool.starmap(get_extinction_pixel,
                               zip(grid_lon.ravel(), grid_lat.ravel(),
-                                  repeat(self.db.lon[self.clean_index]), repeat(self.db.lat[self.clean_index]),
+                                  repeat(self.db._lon[self.clean_index]), repeat(self.db._lat[self.clean_index]),
                                   repeat(self.extinction[self.clean_index]), repeat(self.variance[self.clean_index]),
                                   repeat(bandwidth), repeat(metric), repeat(use_fwhm), repeat(nicest)))
 
@@ -149,8 +150,8 @@ class Extinction:
         """
 
         # Create FITS columns
-        col1 = fits.Column(name="Lon", format='D', array=self.db.lon)
-        col2 = fits.Column(name="Lat", format='D', array=self.db.lat)
+        col1 = fits.Column(name="Lon", format='D', array=self.db._lon)
+        col2 = fits.Column(name="Lat", format='D', array=self.db._lat)
         col3 = fits.Column(name="Extinction", format="E", array=self.extinction)
         col4 = fits.Column(name="Variance", format="E", array=self.variance)
 
@@ -290,6 +291,7 @@ class ExtinctionMap:
 
         # TODO: Add some header information
         # Create and save
+        # noinspection PyTypeChecker
         hdulist = fits.HDUList([fits.PrimaryHDU(),
                                 fits.ImageHDU(data=self.map, header=self.fits_header),
                                 fits.ImageHDU(data=self.var, header=self.fits_header),

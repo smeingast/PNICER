@@ -8,8 +8,10 @@ from pnicer.utils import get_covar, linear_model
 
 
 # ----------------------------------------------------------------------
+# noinspection PyProtectedMember
 class Magnitudes(DataBase):
-    def __init__(self, mag, err, extvec, lon=None, lat=None, names=None):
+
+    def __init__(self, mag, err, extvec, coordinates=None, names=None):
         """
         Main class for users. Includes PNICER and NICER.
 
@@ -19,19 +21,17 @@ class Magnitudes(DataBase):
             List of magnitude arrays. All arrays must have the same length.
         err : list
             List off magnitude error arrays.
+        coordinates : SkyCoord, optional
+            Astropy SkyCoord instance.
         extvec : list
             List holding the extinction components for each magnitude.
-        lon : np.ndarray, optional
-            Longitude coordinates for each source.
-        lat : np.ndarray, optional
-            Latitude coordinates for each source.
         names : list, optional
             List of magnitude (feature) names.
 
         """
 
         # Call parent
-        super(Magnitudes, self).__init__(mag=mag, err=err, extvec=extvec, lon=lon, lat=lat, names=names)
+        super(Magnitudes, self).__init__(mag=mag, err=err, extvec=extvec, coordinates=coordinates, names=names)
 
         # Create color names
         self.colors_names = [self.features_names[k - 1] + "-" + self.features_names[k]
@@ -60,8 +60,8 @@ class Magnitudes(DataBase):
         color_extvec = [self.extvec.extvec[k - 1] - self.extvec.extvec[k] for k in range(1, self.n_features)]
 
         # Return Colors instance
-        return Colors(mag=colors, err=colors_error, extvec=color_extvec,
-                      lon=self.lon, lat=self.lat, names=self.colors_names)
+        return Colors(mag=colors, err=colors_error, extvec=color_extvec, coordinates=self.coordinates,
+                      names=self.colors_names)
 
     # ----------------------------------------------------------------------
     def color_combinations(self):
@@ -76,7 +76,7 @@ class Magnitudes(DataBase):
         """
 
         # Get all colors and then all combinations of colors
-        return self.mag2color().all_combinations(idxstart=1)
+        return self.mag2color()._all_combinations(idxstart=1)
 
     # ----------------------------------------------------------------------
     def pnicer(self, control, sampling=2, kernel="epanechnikov", add_colors=False):
@@ -105,10 +105,10 @@ class Magnitudes(DataBase):
         if add_colors:
             # To create a color, we need at least two features
             assert self.n_features >= 2, "To use colors, at least two features are required"
-            comb = zip(self.all_combinations(idxstart=2) + self.color_combinations(),
-                       control.all_combinations(idxstart=2) + control.color_combinations())
+            comb = zip(self._all_combinations(idxstart=2) + self.color_combinations(),
+                       control._all_combinations(idxstart=2) + control.color_combinations())
         else:
-            comb = zip(self.all_combinations(idxstart=2), control.all_combinations(idxstart=2))
+            comb = zip(self._all_combinations(idxstart=2), control._all_combinations(idxstart=2))
 
         return self._pnicer_combinations(control=control, comb=comb, sampling=sampling, kernel=kernel)
 
@@ -207,7 +207,7 @@ class Magnitudes(DataBase):
         color_0[:, ~np.isfinite(ext)] = np.nan
 
         if n_features is not None:
-            mask = np.where(np.sum(np.vstack(self.features_masks), axis=0, dtype=int) < n_features)[0]
+            mask = np.where(np.sum(np.vstack(self._features_masks), axis=0, dtype=int) < n_features)[0]
             ext[mask] = var[mask] = color_0[:, mask] = np.nan
 
         # ...and return :) Here, a Colors instance is returned!
@@ -232,8 +232,8 @@ class Magnitudes(DataBase):
         fit_idx = self.features_names.index(fit_key)
 
         # Create common filter for all current filters
-        smask = np.prod(np.vstack([self.features_masks[i] for i in base_idx + (fit_idx,)]), axis=0, dtype=bool)
-        cmask = np.prod(np.vstack([control.features_masks[i] for i in base_idx + (fit_idx,)]), axis=0, dtype=bool)
+        smask = np.prod(np.vstack([self._features_masks[i] for i in base_idx + (fit_idx,)]), axis=0, dtype=bool)
+        cmask = np.prod(np.vstack([control._features_masks[i] for i in base_idx + (fit_idx,)]), axis=0, dtype=bool)
 
         # Shortcuts for control field terms which are not clipped
         xdata_control = control.features[base_idx[0]][cmask] - control.features[base_idx[1]][cmask]
@@ -404,9 +404,10 @@ class Magnitudes(DataBase):
 
 
 # ----------------------------------------------------------------------
+# noinspection PyProtectedMember
 class Colors(DataBase):
 
-    def __init__(self, mag, err, extvec, lon=None, lat=None, names=None):
+    def __init__(self, mag, err, extvec, coordinates=None, names=None):
         """
         Basically the same as magnitudes without NICER. Naturally the PNICER implementation does not allow to convert
         to colors.
@@ -416,8 +417,7 @@ class Colors(DataBase):
         mag
         err
         extvec
-        lon
-        lat
+        coordinates
         names
 
         Returns
@@ -427,7 +427,7 @@ class Colors(DataBase):
         # TODO: Add docstring
 
         # Call parent
-        super(Colors, self).__init__(mag=mag, err=err, extvec=extvec, lon=lon, lat=lat, names=names)
+        super(Colors, self).__init__(mag=mag, err=err, extvec=extvec, coordinates=coordinates, names=names)
 
         # Add attributes
         self.colors_names = self.features_names
@@ -448,5 +448,5 @@ class Colors(DataBase):
 
         """
 
-        comb = zip(self.all_combinations(idxstart=1), control.all_combinations(idxstart=1))
+        comb = zip(self._all_combinations(idxstart=1), control._all_combinations(idxstart=1))
         return self._pnicer_combinations(control=control, comb=comb, sampling=sampling, kernel=kernel)

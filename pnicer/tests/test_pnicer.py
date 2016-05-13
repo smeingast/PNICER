@@ -1,7 +1,7 @@
 # ----------------------------------------------------------------------
 # Import stuff
-import os
 from astropy.io import fits
+from astropy.coordinates import SkyCoord
 from pnicer import Magnitudes
 from pnicer.utils import get_resource_path
 
@@ -10,7 +10,6 @@ from pnicer.utils import get_resource_path
 
 # ----------------------------------------------------------------------
 # Find the test files
-test_resources_path = os.path.join(os.path.dirname(__file__), "..", "tests_resources/")
 science_path = get_resource_path(package="pnicer.tests_resources", resource="Orion_A_2mass.fits")
 control_path = get_resource_path(package="pnicer.tests_resources", resource="CF_2mass.fits")
 
@@ -26,28 +25,25 @@ features_extinction = [2.5, 1.55, 1.0]
 # Load data
 with fits.open(science_path) as science, fits.open(control_path) as control:
 
-    science_dummy = science[1].data
-    control_dummy = control[1].data
+    sci, con = science[1].data, control[1].data
 
     # Coordinates
-    science_glon, control_glon = science_dummy["GLON"], control_dummy["GLON"]
-    science_glat, control_glat = science_dummy["GLAT"], control_dummy["GLAT"]
+    science_coo = SkyCoord(l=sci["GLON"], b=sci["GLAT"], frame="galactic", equinox="J2000", unit="deg")
+    control_coo = SkyCoord(l=con["GLON"], b=con["GLAT"], frame="galactic", equinox="J2000", unit="deg")
 
     # Photometry
-    science_data = [science_dummy[n] for n in features_names]
-    control_data = [control_dummy[n] for n in features_names]
+    science_phot, control_phot = [sci[n] for n in features_names], [sci[n] for n in features_names]
 
     # Errors
-    science_error = [science_dummy[n] for n in errors_names]
-    control_error = [control_dummy[n] for n in errors_names]
+    science_err, control_err = [sci[n] for n in errors_names], [con[n] for n in errors_names]
 
 
 # ----------------------------------------------------------------------
 # Initialize data with PNICER
-science = Magnitudes(mag=science_data, err=science_error, extvec=features_extinction,
-                     lon=science_glon, lat=science_glat, names=features_names)
-control = Magnitudes(mag=control_data, err=control_error, extvec=features_extinction,
-                     lon=control_glon, lat=control_glat, names=features_names)
+science = Magnitudes(mag=science_phot, err=science_err, extvec=features_extinction, coordinates=science_coo,
+                     names=features_names)
+control = Magnitudes(mag=control_phot, err=control_err, extvec=features_extinction, coordinates=control_coo,
+                     names=features_names)
 
 
 # ----------------------------------------------------------------------

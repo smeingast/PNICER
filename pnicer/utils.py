@@ -6,6 +6,8 @@ import importlib
 import numpy as np
 import multiprocessing
 
+from astropy import wcs
+from astropy.io import fits
 from matplotlib import pyplot as plt
 from multiprocessing.pool import Pool
 from itertools import combinations, repeat
@@ -133,7 +135,29 @@ def linear_model(vec, val):
 
 
 # ----------------------------------------------------------------------
-def axes_combinations(ndim, ax_size=None):
+def round_partial(data, precision):
+    """
+    Simple static method to round data to arbitrary precision.
+
+    Parameters
+    ----------
+    data : float, np.ndarray
+        Data to be rounded.
+    precision : float, np.ndarray
+        Desired precision. e.g. 0.2.
+
+    Returns
+    -------
+    float, np.ndarray
+        Rounded data.
+
+    """
+
+    return np.around(data / precision) * precision
+
+
+# ----------------------------------------------------------------------
+def caxes(ndim, ax_size=None, labels=None):
     """
     Creates a grid of axes to plot all combinations of data.
 
@@ -143,13 +167,19 @@ def axes_combinations(ndim, ax_size=None):
         Number of dimensions.
     ax_size : list, optional
         Single axis size. Default is [3, 3].
+    labels : iterable, optional
+        Optional list of feature names
 
     Returns
     -------
-    list
-        List of axes which can be used for plotting.
+    tuple
+        tuple containing the figure and a list of the axes.
 
     """
+
+    if labels is not None:
+        if len(labels) != ndim:
+            raise ValueError("Number of provided labels must match dimensions")
 
     if ax_size is None:
         ax_size = [3, 3]
@@ -170,24 +200,83 @@ def axes_combinations(ndim, ax_size=None):
     for idx in c:
 
         # Get index of subplot
-        x_idx, y_idx = ndim - idx[0] - 2, ndim - 1 - idx[1]
+        x_idx, y_idx = ndim - idx[0] - 2, ndim - idx[1] - 1
 
-        # Get axes
-        axes_out.append(axes[x_idx, y_idx])
+        # Grab axis
+        ax = axes[x_idx, y_idx]
 
         # Hide tick labels
         if x_idx < ndim - 2:
-            axes_out[-1].axes.xaxis.set_ticklabels([])
+            ax.axes.xaxis.set_ticklabels([])
         if y_idx > 0:
-            axes_out[-1].axes.yaxis.set_ticklabels([])
+            ax.axes.yaxis.set_ticklabels([])
 
-        # Delete the other axes
+        # Add axis labels
+        if labels is not None:
+            if ax.get_position().x0 < 0.11:
+                ax.set_ylabel("$" + labels[idx[0]] + "$")
+            if ax.get_position().y0 < 0.11:
+                ax.set_xlabel("$" + labels[idx[1]] + "$")
+
+        # Append axes to return list
+        axes_out.append(axes[x_idx, y_idx])
+
+        # Delete not necessary axes
         if ((idx[0] > 0) | (idx[1] - 1 > 0)) & (idx[0] != idx[1] - 1):
             fig.delaxes(axes[idx[0], idx[1] - 1])
 
     return fig, axes_out
 
 
+# ----------------------------------------------------------------------
+def caxes_delete_ticklabels(axes, xfirst=False, xlast=False, yfirst=False, ylast=False):
+    """
+    Deletes tick labels from a combination axes list.
+
+    Parameters
+    ----------
+    axes : list
+        The combination axes list.
+    xfirst : bool, optional
+        Whether the first x label should be deleted.
+    xlast : bool, optional
+        Whether the last x label should be deleted.
+    yfirst : bool, optional
+        Whether the first y label should be deleted.
+    ylast : bool, optional
+        Whether the last y label should be deleted.
+
+
+    """
+
+    # Loop through the axes
+    for ax, idx in zip(axes, combinations(range(len(axes)), 2)):
+
+        # Modify x ticks
+        if idx[0] == 0:
+
+            # Grab ticks
+            xticks = ax.xaxis.get_major_ticks()
+
+            # Conditionally delete
+            if xfirst:
+                xticks[0].set_visible(False)
+            if xlast:
+                xticks[-1].set_visible(False)
+
+        if idx[1] == np.max(idx):
+
+            # Grab ticks
+            yticks = ax.yaxis.get_major_ticks()
+
+            # Conditionally delete
+            if yfirst:
+                yticks[0].set_visible(False)
+            if ylast:
+                yticks[-1].set_visible(False)
+
+
+# ----------------------------------------------------------------------
 def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", norm=False, absolute=False, sampling=None):
     """
     Kernel density estimation with parallelisation.
@@ -262,6 +351,7 @@ def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", norm=False,
         return mp.reshape(shape)
 
 
+# ----------------------------------------------------------------------
 def _mp_kde(kde, data, grid):
     """
     Parallelisation routine for kernel density estimation.
@@ -308,3 +398,136 @@ def get_resource_path(package, resource):
 
     # Return path to resource
     return os.path.join(os.path.dirname(sys.modules[package].__file__), resource)
+
+
+# ----------------------------------------------------------------------
+def centroid_sphere(lon, lat, units="radian"):
+    """
+    Calcualte the centroid on a sphere. Strictly valid only for a unit sphere and for a coordinate system with latitudes
+    from -90 to 90 degrees and longitudes from 0 to 360 degrees.
+
+    Parameters
+    ----------
+    lon : list, np.array
+        Input longitudes
+    lat : list, np.array
+        Input latitudes
+    units : str, optional
+        Input units. Either 'radian' or 'degree'. Default is 'radian'.
+
+    Returns
+    -------
+    tuple
+        Tuple with (lon, lat) of centroid
+
+    """
+
+    # Convert to radians if degrees
+    if "deg" in units.lower():
+        mlon, mlat = np.radians(lon), np.radians(lat)
+    else:
+        mlon, mlat = lon, lat
+
+    # Convert to cartesian coordinates
+    x, y, z = np.cos(mlat) * np.cos(mlon), np.cos(mlat) * np.sin(mlon), np.sin(mlat)
+
+    # 3D centroid
+    xcen, ycen, zcen = np.sum(x) / len(x), np.sum(y) / len(y), np.sum(z) / len(z)
+
+    # Push centroid to triangle surface
+    cenlen = np.sqrt(xcen**2 + ycen**2 + zcen**2)
+    xsur, ysur, zsur = xcen / cenlen, ycen / cenlen, zcen / cenlen
+
+    # Convert back to spherical coordinates and return
+    outlon = np.arctan2(ysur, xsur)
+
+    # Convert back to 0-2pi range if necessary
+    if outlon < 0:
+        outlon += 2 * np.pi
+    outlat = np.arcsin(zsur)
+
+    # Return
+    if "deg" in units.lower():
+        return np.degrees(outlon), np.degrees(outlat)
+    else:
+        return outlon, outlat
+
+
+# ----------------------------------------------------------------------
+def data2header(lon, lat, frame="icrs", proj_code="CAR", pixsize=1/3600, enlarge=1.05, **kwargs):
+    """
+    Create an astropy Header instance from a given dataset (longitude/latitude). The world coordinate system can be
+    chosen between galactic and equatorial; all WCS projections are supported. Very useful for creating a quick WCS
+    to plot data.
+
+    Parameters
+    ----------
+    lon : list, np.array
+        Input list or array of longitude coordinates in degrees.
+    lat : list, np.array
+        Input list or array of latitude coordinates in degrees.
+    frame : str, optional
+        World coordinate system frame of input data ('icrs' or 'galactic')
+    proj_code : str, optional
+        Projection code. (e.g. 'TAN', 'AIT', 'CAR', etc)
+    pixsize : int, float, optional
+        Pixel size of generated header in degrees. Not so important for plots, but still required.
+    kwargs
+        Additional projection parameters (e.g. pv2_1=-30)
+
+    Returns
+    -------
+    astropy.fits.Header
+        Astropy fits header instance.
+
+    """
+
+    # Define projection
+    crval1, crval2 = centroid_sphere(lon=lon, lat=lat, units="degree")
+
+    # Projection code
+    if frame.lower() == "icrs":
+        ctype1 = "RA{:->6}".format(proj_code)
+        ctype2 = "DEC{:->5}".format(proj_code)
+        frame = "equ"
+    elif frame.lower() == "galactic":
+        ctype1 = "GLON{:->4}".format(proj_code)
+        ctype2 = "GLAT{:->4}".format(proj_code)
+        frame = "gal"
+    else:
+        raise ValueError("Projection system {0:s} not supported".format(frame))
+
+    # Build additional string
+    additional = ""
+    for key, value in kwargs.items():
+        additional += ("{0: <8}= {1}\n".format(key.upper(), value))
+
+    # Create preliminary header without size information
+    header = fits.Header.fromstring("NAXIS   = 2" + "\n"
+                                    "CTYPE1  = '" + ctype1 + "'\n"
+                                    "CTYPE2  = '" + ctype2 + "'\n"
+                                    "CRVAL1  = " + str(crval1) + "\n"
+                                    "CRVAL2  = " + str(crval2) + "\n"
+                                    "CUNIT1  = 'deg'" + "\n"
+                                    "CUNIT2  = 'deg'" + "\n"
+                                    "CDELT1  = -" + str(pixsize) + "\n"
+                                    "CDELT2  = " + str(pixsize) + "\n"
+                                    "COORDSYS= '" + frame + "'" + "\n" +
+                                    additional,
+                                    sep="\n")
+
+    # Determine extent of data for this projection
+    x, y = wcs.WCS(header).wcs_world2pix(lon, lat, 1)
+    naxis1 = np.ceil((x.max()) - np.floor(x.min())) * enlarge
+    naxis2 = np.ceil((y.max()) - np.floor(y.min())) * enlarge
+
+    # Calculate pixel shift relative to centroid (caused by unisotropic distribution of sources)
+    xdelta = (x.min() + x.max()) / 2
+    ydelta = (y.min() + y.max()) / 2
+
+    # Add size to header
+    header["NAXIS1"], header["NAXIS2"] = naxis1, naxis2
+    header["CRPIX1"], header["CRPIX2"] = naxis1 / 2 - xdelta, naxis2 / 2 + ydelta
+
+    # Return Header
+    return header
