@@ -93,7 +93,7 @@ def weighted_avg(values, weights):
 
 
 # ----------------------------------------------------------------------
-def get_covar(xi, yi):
+def get_sample_covar(xi, yi):
     """
     Calculate sample covariance (can not contain NaNs!).
 
