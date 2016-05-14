@@ -384,6 +384,38 @@ class DataBase:
                 for x, m in zip(self.features, self._features_masks)]
 
     # ----------------------------------------------------------------------
+    @property
+    def _plotrange_world(self):
+        """
+        Convenience property to calcualte the plot range in world coordinates
+
+        Returns
+        -------
+        list
+            List with (left, right) and (bottom, top) tuple entries
+
+        """
+
+        # Build a wcs gruid with the defaults
+        header, _ = self._build_wcs_grid()
+
+        # Get footprint coordinates
+        flon, flat = wcs.WCS(header=header).calc_footprint().T
+
+        # Calculate centroid
+        from pnicer.utils import centroid_sphere, distance_sky
+        clon, clat = centroid_sphere(lon=flon, lat=flat, units="degree")
+
+        # Maximize distances to the field edges in longitude
+        left = flon[:2][np.argmax(distance_sky(lon1=flon[:2], lat1=0, lon2=clon, lat2=0, unit="degree"))]
+        right = flon[2:][np.argmax(distance_sky(lon1=flon[2:], lat1=0, lon2=clon, lat2=0, unit="degree"))]
+
+        # Maximize distances in latititude
+        top, bottom = np.max(flat), np.min(flat)
+
+        return [(left, right), (bottom, top)]
+
+    # ----------------------------------------------------------------------
     @staticmethod
     def _get_plot_axsize(size):
         """
@@ -595,14 +627,23 @@ class DataBase:
         """
 
         # Get figure and axes
-        fig, axes, *_ = self._gridspec_world(pixsize=10 / 60, ax_size=ax_size, proj_code="CAR")
+        fig, axes, _, header = self._gridspec_world(pixsize=10 / 60, ax_size=ax_size, proj_code="CAR")
+
+        # Get plot limits
+        lim = wcs.WCS(header=header).wcs_world2pix(*self._plotrange_world, 0)
 
         # Loop over features and plot
         for idx in range(self.n_features):
 
+            trans = axes[idx].get_transform(self._frame)
+
             axes[idx].scatter(self._lon[self._features_masks[idx]][::skip],
                               self._lat[self._features_masks[idx]][::skip],
-                              transform=axes[idx].get_transform(self._frame), **kwargs)
+                              transform=trans, **kwargs)
+
+            # Set axes limits
+            axes[idx].set_xlim(lim[0])
+            axes[idx].set_ylim(lim[1])
 
         # Finalize plot
         self._finalize_plot(path=path)
