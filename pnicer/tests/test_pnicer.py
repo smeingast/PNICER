@@ -2,8 +2,10 @@
 # Import stuff
 from astropy.io import fits
 from astropy.coordinates import SkyCoord
+
 from pnicer import Magnitudes
 from pnicer.utils import get_resource_path
+
 
 """ This file goes through a typical PNICER session and creates a rough extinction map of Orion A from 2MASS data. """
 
@@ -28,22 +30,20 @@ with fits.open(science_path) as science, fits.open(control_path) as control:
     sci, con = science[1].data, control[1].data
 
     # Coordinates
-    science_coo = SkyCoord(l=sci["GLON"], b=sci["GLAT"], frame="galactic", equinox="J2000", unit="deg")
-    control_coo = SkyCoord(l=con["GLON"], b=con["GLAT"], frame="galactic", equinox="J2000", unit="deg")
+    sci_coo = SkyCoord(l=sci["GLON"], b=sci["GLAT"], frame="galactic", equinox="J2000", unit="deg")[::skip]
+    con_coo = SkyCoord(l=con["GLON"], b=con["GLAT"], frame="galactic", equinox="J2000", unit="deg")
 
     # Photometry
-    science_phot, control_phot = [sci[n] for n in features_names], [sci[n] for n in features_names]
+    sci_phot, con_phot = [sci[n][::skip] for n in feature_names], [con[n] for n in feature_names]
 
     # Errors
-    science_err, control_err = [sci[n] for n in errors_names], [con[n] for n in errors_names]
+    sci_err, con_err = [sci[n][::skip] for n in error_names], [con[n] for n in error_names]
 
 
 # ----------------------------------------------------------------------
-# Initialize data with PNICER
-science = Magnitudes(mag=science_phot, err=science_err, extvec=features_extinction, coordinates=science_coo,
-                     names=features_names)
-control = Magnitudes(mag=control_phot, err=control_err, extvec=features_extinction, coordinates=control_coo,
-                     names=features_names)
+# Initialize PNICER
+science = Magnitudes(mag=sci_phot, err=sci_err, extvec=feature_extinction, coordinates=sci_coo, names=feature_names)
+control = Magnitudes(mag=con_phot, err=con_err, extvec=feature_extinction, coordinates=con_coo, names=feature_names)
 
 
 # ----------------------------------------------------------------------
@@ -65,11 +65,8 @@ pnicer_emap = pnicer.build_map(bandwidth=3 / 60, metric="gaussian", frame="galac
 
 
 # ----------------------------------------------------------------------
-# Plot the PNICER map
+# Plot the PNICER extinction map
 pnicer_emap.plot_map(figsize=10)
 
-"""
-If no errors pop up, then the basic PNICER package works
-"""
-
+""" If no errors pop up, then the basic PNICER package works """
 print("{0:<80s}".format("PNICER routines terminated successfully! Happy extinciton mapping :) "))
