@@ -3,7 +3,7 @@
 import numpy as np
 
 from pnicer.common import DataBase
-from pnicer.utils import get_covar
+from pnicer.utils import get_sample_covar, get_color_covar
 
 
 # ----------------------------------------------------------------------
@@ -137,9 +137,8 @@ class Magnitudes(DataBase):
 
         """
 
-        # Some assertions
-        if self.__class__ != control.__class__:
-            raise ValueError("control and instance class do not match")
+        # Some checks
+        self._check_class(ccls=control)
         if self.n_features != control.n_features:
             raise ValueError("Number of features do not match")
 
@@ -221,138 +220,221 @@ class Magnitudes(DataBase):
         return Extinction(db=self.mag2color(), extinction=ext.data, variance=var, color0=color_0)
 
     # ----------------------------------------------------------------------
-    def get_beta_lines(self, base_keys, fit_key, control, kappa=2, sigma=3, err_iter=1000):
+    # noinspection PyPackageRequirements
+    @staticmethod
+    def _get_beta(method, xdata, ydata, **kwargs):
+        """
+        Performs a linear fit with different user-specified methods.
+
+        Parameters
+        ----------
+        method : str
+            Method to be used. One of: 'lines', 'ols', 'bces', 'odr'.
+        xdata : np.ndarray
+            X data to be fit.
+        ydata : np.ndarray
+            Y data to be fit.
+        kwargs
+            Dictionary holding the data statistics (required for 'lines' and 'bces').
+
+        Returns
+        -------
+        tuple(float, float)
+            Tuple with the calculated slope and intercept.
+
+        Raises
+        ------
+        ValueError
+            If the given method is not supported.
+
+        """
+
+        # LINES
+        if method.lower() == "lines":
+            upper = get_sample_covar(xdata, ydata) - kwargs["cov_control"] - kwargs["science_err_covar"][1, 0] +\
+                kwargs["control_err_covar"][1, 0]
+            lower = np.var(xdata) - kwargs["science_err_covar"][0, 0] - kwargs["var_control"] + \
+                kwargs["control_err_covar"][0, 0]
+            beta = upper / lower
+
+        # Ordinary least squares
+        elif method.lower() == "ols":
+            beta = get_sample_covar(xdata, ydata) / np.var(xdata)
+
+        # BCES
+        elif method.lower() == "bces":
+            upper = get_sample_covar(xdata, ydata) - kwargs["science_err_covar"][1, 0]
+            lower = np.var(xdata) - kwargs["science_err_covar"][0, 0]
+            beta = upper / lower
+
+        # Orthogonal distance regression
+        elif method.lower() == "odr":
+
+            from scipy.odr import Model, RealData, ODR
+
+            # Define linear model
+            def _linear_model(vec, val):
+                return vec[0] * val + vec[1]
+
+            # Perform ODR
+            fit_model = Model(_linear_model)
+            fit_data = RealData(xdata, ydata)  # sx=std_x, sy=std_y)
+            bdummy = ODR(fit_data, fit_model, beta0=[1., 0.]).run()
+            beta, ic = bdummy.beta
+            # beta_err, ic_err = bdummy.sd_beta
+
+        # If the given method is not suppoerted raise error.
+        else:
+            raise ValueError("Method {0:s} not supported (One of: 'lines', 'ols', 'bces', or 'odr')".format(method))
+
+        # Calculate intercept (ODR has its own intercept)
+        if method != "odr":
+            ic = np.median(ydata) - beta * np.median(xdata)
+
+        # Return slope and intercept
+        # noinspection PyUnboundLocalVariable
+        return beta, ic
+
+    # ----------------------------------------------------------------------
+    def color_excess_ratio(self, x_keys, y_keys, method="lines", control=None, kappa=2, sigma=3, err_iter=100):
 
         # TODO: Add docstring
-        # TODO: Improve or remove!
+
+        # Add fit key if not set manually
+        if isinstance(y_keys, str):
+            y_keys = [x_keys[1], y_keys]
 
         # Some input checks
-        if len(base_keys) != 2:
+        if len(x_keys) != 2:
             raise ValueError("'base_keys' must be tuple or list with two entries")
-        self._check_class(ccls=control)
-        if fit_key not in self.features_names:
-            raise ValueError("'fit_key' not found")
-        if (base_keys[0] not in self.features_names) | (base_keys[1] not in self.features_names):
+        if (y_keys[0] not in self.features_names) | (y_keys[1] not in self.features_names):
+            raise ValueError("'fit_keys' not found")
+        if (x_keys[0] not in self.features_names) | (x_keys[1] not in self.features_names):
             raise ValueError("'base_keys' not found")
         if (kappa < 0) | (isinstance(kappa, int) is False):
             raise ValueError("'kappa' must be non-zero positive integer")
         if sigma <= 0:
             raise ValueError("'sigma' must be positive")
+        if method.lower() == "lines":
+            if control is None:
+                raise ValueError("The LINES method requires control field data")
 
         # Get indices of requested keys
-        base_idx = (self.features_names.index(base_keys[0]), self.features_names.index(base_keys[1]))
-        fit_idx = self.features_names.index(fit_key)
+        x_idx, y_idx = self._name2index(name=x_keys), self._name2index(name=y_keys)
 
-        # Create common masks for all given features
-        smask = np.prod(np.vstack([self._features_masks[i] for i in base_idx + (fit_idx,)]), axis=0, dtype=bool)
-        cmask = np.prod(np.vstack([control._features_masks[i] for i in base_idx + (fit_idx,)]), axis=0, dtype=bool)
+        # Create common masks for all given features for science data
+        smask = self._custom_mask(names=x_keys + y_keys)
 
-        # Shortcuts for control field terms which are not clipped
-        xdata_control = control.features[base_idx[0]][cmask] - control.features[base_idx[1]][cmask]
-        ydata_control = control.features[base_idx[1]][cmask] - control.features[fit_idx][cmask]
+        # Apply mask
+        xc_science = self.features[x_idx[0]][smask] - self.features[x_idx[1]][smask]
+        yc_science = self.features[y_idx[0]][smask] - self.features[y_idx[1]][smask]
+        x1_sc_err, x2_sc_err = self.features_err[x_idx[0]][smask], self.features_err[x_idx[1]][smask]
+        y1_sc_err, y2_sc_err = self.features_err[y_idx[0]][smask], self.features_err[y_idx[1]][smask]
 
-        var_err_control = np.mean(control.features_err[base_idx[0]][cmask]) ** 2 + \
-            np.mean(control.features_err[base_idx[1]][cmask]) ** 2
-        cov_err_control = -np.mean(control.features_err[base_idx[1]][cmask]) ** 2
-        var_control = np.var(xdata_control)
-        cov_control = get_covar(xdata_control, ydata_control)
+        # Create dictionary to pass to beta routine
+        beta_dict = {}
 
-        x1_sc, x2_sc = self.features[base_idx[0]][smask], self.features[base_idx[1]][smask]
-        x1_sc_err, x2_sc_err = self.features_err[base_idx[0]][smask], self.features_err[base_idx[1]][smask]
-        y1_sc, y2_sc = x2_sc, self.features[fit_idx][smask]
+        # If a control field is given:
+        if control is not None:
+
+            # Sanity check
+            self._check_class(ccls=control)
+
+            # Get combined mask for control field
+            cmask = control._custom_mask(names=x_keys + y_keys)
+
+            # Shortcuts for control field terms
+            xc_control = control.features[x_idx[0]][cmask] - control.features[x_idx[1]][cmask]
+            yc_control = control.features[y_idx[0]][cmask] - control.features[y_idx[1]][cmask]
+
+            # Determine control field error covariance matrix
+            beta_dict["control_err_covar"] = get_color_covar(*[control.features_err[x_idx[i]][cmask] for i in range(2)],
+                                                             *[control.features_err[y_idx[i]][cmask] for i in range(2)],
+                                                             *x_idx, *y_idx)
+
+            # And sample covariance
+            beta_dict["var_control"] = np.var(xc_control)
+            beta_dict["cov_control"] = get_sample_covar(xc_control, yc_control)
 
         # Dummy mask for first iteration
-        smask = np.arange(len(x1_sc))
+        smask = np.arange(len(xc_science))
 
-        # Shortcut for data
+        # Start iterations
         beta, ic = 0., 0.
         for _ in range(kappa + 1):
 
-            # Mask data
-            x1_sc, x2_sc = x1_sc[smask], x2_sc[smask]
+            # Mask data (used for iterations)
+            xc_science, yc_science = xc_science[smask], yc_science[smask]
             x1_sc_err, x2_sc_err = x1_sc_err[smask], x2_sc_err[smask]
-            y1_sc, y2_sc = y1_sc[smask], y2_sc[smask]
+            y1_sc_err, y2_sc_err = y1_sc_err[smask], y2_sc_err[smask]
 
-            xdata_science, ydata_science = x1_sc - x2_sc, y1_sc - y2_sc
+            # Determine covariance matrix of errors for science field
+            beta_dict["science_err_covar"] = get_color_covar(x1_sc_err, x2_sc_err, y1_sc_err, y2_sc_err, *x_idx, *y_idx)
 
-            # Determine (Co-)variance terms of errors for science field
-            var_err_science = np.mean(x1_sc_err) ** 2 + np.mean(x2_sc_err) ** 2
-            cov_err_science = -np.mean(x2_sc_err) ** 2
+            # Determine slope and intercept
+            beta, ic = self._get_beta(method=method, xdata=xc_science, ydata=yc_science, **beta_dict)
 
-            # Determine beta for the given data
-            # LINES
-            upper = get_covar(xdata_science, ydata_science) - cov_control - cov_err_science + cov_err_control
-            lower = np.var(xdata_science) - var_err_science - var_control + var_err_control
-            beta = upper / lower
+            # Get orthogonal distance to the fit
+            dis = np.abs(beta * xc_science - yc_science + ic) / np.sqrt(beta ** 2 + 1)
 
-            # OLS
-            # beta = get_covar(xdata_science, ydata_science) / np.var(xdata_science)
-
-            # BCES
-            # upper = get_covar(xdata_science, ydata_science) - cov_err_science
-            # lower = np.var(xdata_science) - var_err_science
-            # beta = upper / lower
-
-            # Get intercept of linear fit through median
-            ic = np.median(ydata_science) - beta * np.median(xdata_science)
-
-            # ODR
-            # from scipy.odr import Model, RealData, ODR
-            # fit_model = Model(linear_model)
-            # fit_data = RealData(xdata_science, ydata_science)#, sx=std_x, sy=std_y)
-            # bdummy = ODR(fit_data, fit_model, beta0=[1., 0.]).run()
-            # beta, ic = bdummy.beta
-            # beta_err, ic_err = bdummy.sd_beta
-
-            # Get orthogonal distance to this line
-            dis = np.abs(beta * xdata_science - ydata_science + ic) / np.sqrt(beta ** 2 + 1)
-
-            # 3 sig filter
+            # Apply sigma clipping
             smask = dis - np.median(dis) < sigma * np.std(dis)
-            # smask = dis - np.median(dis) < 0.15
 
         # Do the same for random splits to get errors
-        beta_i = []
+        beta_err = []
+
+        # Prepare dictionaries
+        beta_dict_1 = {k: beta_dict[k] for k in beta_dict if k not in ["science_err_covar"]}
+        beta_dict_split = [beta_dict_1, beta_dict_1.copy()]
+
+        # Do as many iterations as requested
         for _ in range(err_iter):
 
-            # Define random index array
-            ridx_sc = np.random.permutation(len(x1_sc))
+            # Define random index array...
+            ridx_sc = np.random.permutation(len(xc_science))
 
-            # Split array in two equally sized parts and get data
-            x1_sc_1, x2_sc_1 = x1_sc[ridx_sc[0::2]], x2_sc[ridx_sc[0::2]]
-            x1_sc_2, x2_sc_2 = x1_sc[ridx_sc[1::2]], x2_sc[ridx_sc[1::2]]
-            x1_sc_err_1, x2_sc_err_1 = x1_sc_err[ridx_sc[0::2]], x2_sc_err[ridx_sc[0::2]]
-            x1_sc_err_2, x2_sc_err_2 = x1_sc_err[ridx_sc[1::2]], x2_sc_err[ridx_sc[1::2]]
-            y1_sc_1, y2_sc_1 = y1_sc[ridx_sc[0::2]], y2_sc[ridx_sc[0::2]]
-            y1_sc_2, y2_sc_2 = y1_sc[ridx_sc[1::2]], y2_sc[ridx_sc[1::2]]
+            # ...and split in half
+            ridx = ridx_sc[0::2], ridx_sc[1::2]
 
-            # Determine variance terms
-            var_sc_1, var_sc_2 = np.nanvar(x1_sc_1 - x2_sc_1), np.nanvar(x1_sc_2 - x2_sc_2)
-            var_sc_err_1 = np.nanmean(x1_sc_err_1) ** 2 + np.nanmean(x2_sc_err_1) ** 2
-            var_sc_err_2 = np.nanmean(x1_sc_err_2) ** 2 + np.nanmean(x2_sc_err_2) ** 2
+            # Define samples
+            xc_sc_split, yc_sc_split = [xc_science[i] for i in ridx], [yc_science[i] for i in ridx]
+            x1_sc_err_split, x2_sc_err_split = [x1_sc_err[i] for i in ridx], [x2_sc_err[i] for i in ridx]
+            y1_sc_err_split, y2_sc_err_split = [y1_sc_err[i] for i in ridx], [y2_sc_err[i] for i in ridx]
 
-            # Determine covariance terms
-            # TODO: This probably only works when no NaNs are present...
-            cov_sc_1 = get_covar(xi=x1_sc_1 - x2_sc_1, yi=y1_sc_1 - y2_sc_1)
-            cov_sc_2 = get_covar(xi=x1_sc_2 - x2_sc_2, yi=y1_sc_2 - y2_sc_2)
-            cov_sc_err_1, cov_sc_err_2 = -np.nanmean(x1_sc_err_1) ** 2, -np.nanmean(x1_sc_err_2) ** 2
+            # Calculate covariance matrices
+            cov_sc_err_split = [get_color_covar(a, b, c, d, *x_idx, *y_idx) for a, b, c, d in
+                                zip(x1_sc_err_split, x2_sc_err_split, y1_sc_err_split, y2_sc_err_split)]
 
-            upper1 = cov_sc_1 - cov_sc_err_1 - cov_control + cov_err_control
-            lower1 = var_sc_1 - var_sc_err_1 - var_control + var_err_control
-            beta1 = upper1 / lower1
+            # ...and put them into the dictionaries
+            for idx in range(2):
+                beta_dict_split[idx]["science_err_covar"] = cov_sc_err_split[idx]
 
-            upper2 = cov_sc_2 - cov_sc_err_2 - cov_control + cov_err_control
-            lower2 = var_sc_2 - var_sc_err_2 - var_control + var_err_control
-            beta2 = upper2 / lower2
+            # Get beta
+            beta_i = [self._get_beta(method=method, xdata=x, ydata=y, **d)
+                      for x, y, d in zip(xc_sc_split, yc_sc_split, beta_dict_split)]
 
             # Append beta values
-            beta_i.append(np.std([beta1, beta2]))
+            beta_err.append(np.std(list(zip(*beta_i))[0]))
 
-        # Get error estimate
-        beta_err = 1.25 * np.sum(beta_i) / (np.sqrt(2) * 1000)
+        # Get final error estimate
+        beta_err = 1.25 * np.sum(beta_err) / (np.sqrt(2) * err_iter)
+
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=[10, 10])
+
+        ax.scatter(xc_science, yc_science, s=5, c="black", lw=0)
+
+        xd = np.arange(-10, 10, 1)
+        yd = beta * xd + ic
+
+        ax.plot(xd, yd)
+        ax.set_xlim(-1, 5)
+
+        plt.show()
+        exit()
 
         # Return fit and data values
-        return beta, beta_err, ic, x1_sc, x2_sc, y2_sc
+        return beta, beta_err, ic
 
 
 # ----------------------------------------------------------------------
