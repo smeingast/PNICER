@@ -264,6 +264,52 @@ class DataBase:
     # ---------------------------------------------------------------------- #
 
     # ----------------------------------------------------------------------
+    def _index2name(self, idx):
+        """
+        Returns the name (or names) of features based on their index entry.
+
+        Parameters
+        ----------
+        idx : int, list
+            Index (or indices) for which to get the names.
+
+        Returns
+        -------
+            Name or Names
+
+        """
+
+        if isinstance(idx, int):
+            return self.features_names[idx]
+        elif (isinstance(idx, list)) | isinstance(idx, tuple):
+            return [self.features_names[i] for i in idx]
+        else:
+            raise ValueError("Index must be integer or list")
+
+    # ----------------------------------------------------------------------
+    def _name2index(self, name):
+        """
+        Returns the index (or indices) of features based on their name.
+
+        Parameters
+        ----------
+        name : str, list
+            Name (or names) of features
+
+        Returns
+        -------
+            Index or indices.
+
+        """
+
+        if isinstance(name, str):
+            return self.features_names.index(name)
+        elif (isinstance(name, list)) | (isinstance(name, tuple)):
+            return [self.features_names.index(n) for n in name]
+        else:
+            raise ValueError("Name must be given as a string or a list")
+
+    # ----------------------------------------------------------------------
     @staticmethod
     def _build_feature_grid(data, precision):
         """
