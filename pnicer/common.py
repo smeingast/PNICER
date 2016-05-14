@@ -5,7 +5,6 @@ import warnings
 import numpy as np
 
 from astropy import wcs
-from astropy.coordinates import SkyCoord
 from itertools import combinations
 # noinspection PyPackageRequirements
 from sklearn.neighbors import NearestNeighbors
@@ -31,7 +30,7 @@ class DataBase:
             List off magnitude error arrays.
         extvec : iterable
             List holding the extinction components for each magnitude.
-        coordinates : SkyCoord, optional
+        coordinates : astropy.coordinates.SkyCoord, optional
             Astropy SkyCoord instance.
         names : list
             List of magnitude (feature) names.
@@ -500,19 +499,43 @@ class DataBase:
         # Get aspect ratio of grid
         ar = header["NAXIS2"] / header["NAXIS1"]
 
-        # Chose layout depending on aspect ratio of image
+        # Choose layout depending on aspect ratio of image
         if ar < 1:
-            ncols, nrows = 1, self.n_features
+            ncols, nrows, o = 1, self.n_features, "v"
         else:
-            ncols, nrows = self.n_features, 1
+            ncols, nrows, o = self.n_features, 1, "h"
 
         # Create plot grid and figure
         fig = plt.figure(figsize=[ax_size * ncols, ax_size * nrows * ar])
         grid_plot = GridSpec(ncols=ncols, nrows=nrows, bottom=0.05, top=0.95, left=0.05, right=0.95,
-                             hspace=0.15, wspace=0.15)
+                             hspace=0.25, wspace=0.25)
 
         # Add axes
         axes = [plt.subplot(grid_plot[idx], projection=wcsaxes.WCS(header=header)) for idx in range(self.n_features)]
+
+        # Generate labels
+        llon, llat = "GLON" if "gal" in self._frame else "RA", "GLAT" if "gal" in self._frame else "DEC"
+
+        # Add feature labels
+        [axes[idx].annotate(self.features_names[idx], xy=[0.5, 1.01], xycoords="axes fraction",
+                            ha="center", va="bottom") for idx in range(self.n_features)]
+
+        # Add axis labels
+        if o == "v":
+
+            # For a vertical arrangement we set the x label for only the bottom-most plot
+            axes[-1].set_xlabel(llon)
+
+            # and y labels for everything
+            [ax.set_ylabel(llat) for ax in axes]
+
+        elif o == "h":
+
+            # For a horizontal arrangement we set the y label for the left most-plot
+            axes[0].set_ylabel(llat)
+
+            # and the x label for everything
+            [ax.set_xlabel(llon) for ax in axes]
 
         return fig, axes, grid_world, header
 
@@ -635,15 +658,15 @@ class DataBase:
         # Loop over features and plot
         for idx in range(self.n_features):
 
-            trans = axes[idx].get_transform(self._frame)
+            # Grab axes
+            ax = axes[idx]
 
-            axes[idx].scatter(self._lon[self._features_masks[idx]][::skip],
-                              self._lat[self._features_masks[idx]][::skip],
-                              transform=trans, **kwargs)
+            ax.scatter(self._lon[self._features_masks[idx]][::skip], self._lat[self._features_masks[idx]][::skip],
+                       transform=ax.get_transform(self._frame), **kwargs)
 
             # Set axes limits
-            axes[idx].set_xlim(lim[0])
-            axes[idx].set_ylim(lim[1])
+            ax.set_xlim(lim[0])
+            ax.set_ylim(lim[1])
 
         # Finalize plot
         self._finalize_plot(path=path)
