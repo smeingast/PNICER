@@ -18,9 +18,9 @@ control_path = get_resource_path(package="pnicer.tests_resources", resource="CF_
 
 # ----------------------------------------------------------------------
 # Define feature names and extinction vector
-features_names = ["Jmag", "Hmag", "Kmag"]
-errors_names = ["e_Jmag", "e_Hmag", "e_Kmag"]
-features_extinction = [2.5, 1.55, 1.0]
+feature_names = ["Jmag", "Hmag", "Kmag"]
+error_names = ["e_Jmag", "e_Hmag", "e_Kmag"]
+feature_extinction = [2.5, 1.55, 1.0]
 
 
 # ----------------------------------------------------------------------
@@ -30,14 +30,14 @@ with fits.open(science_path) as science, fits.open(control_path) as control:
     sci, con = science[1].data, control[1].data
 
     # Coordinates
-    sci_coo = SkyCoord(l=sci["GLON"], b=sci["GLAT"], frame="galactic", equinox="J2000", unit="deg")[::skip]
+    sci_coo = SkyCoord(l=sci["GLON"], b=sci["GLAT"], frame="galactic", equinox="J2000", unit="deg")
     con_coo = SkyCoord(l=con["GLON"], b=con["GLAT"], frame="galactic", equinox="J2000", unit="deg")
 
     # Photometry
-    sci_phot, con_phot = [sci[n][::skip] for n in feature_names], [con[n] for n in feature_names]
+    sci_phot, con_phot = [sci[n] for n in feature_names], [con[n] for n in feature_names]
 
     # Errors
-    sci_err, con_err = [sci[n][::skip] for n in error_names], [con[n] for n in error_names]
+    sci_err, con_err = [sci[n] for n in error_names], [con[n] for n in error_names]
 
 
 # ----------------------------------------------------------------------
