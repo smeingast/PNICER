@@ -672,7 +672,7 @@ class DataBase:
         self._finalize_plot(path=path)
 
     # ----------------------------------------------------------------------
-    def plot_sources_kde(self, path=None, pixsize=10 / 60, ax_size=10, kernel="epanechnikov", skip=1, **kwargs):
+    def plot_sources_kde(self, path=None, bandwidth=10 / 60, ax_size=10, kernel="epanechnikov", skip=1, **kwargs):
         """
         Plot source densities for features
 
@@ -680,8 +680,8 @@ class DataBase:
         ----------
         path : str, optional
             File path if it should be saved. e.g. '/path/to/image.png'. Default is None.
-        pixsize : int, float, optional
-            Pixel size of grid.
+        bandwidth : int, float, optional
+            Kernel bandwidth in degrees. Default is 10 arcmin. 2x sampling is forced.
         ax_size : int, float, optional
             Single axis width in plot. Default is 10.
         kernel : str, optional
@@ -694,7 +694,7 @@ class DataBase:
         """
 
         # Get figure, axes, and wcs grid
-        fig, axes, grid_world, header = self._gridspec_world(pixsize=pixsize, ax_size=ax_size, proj_code="CAR")
+        fig, axes, grid_world, header = self._gridspec_world(pixsize=bandwidth / 2, ax_size=ax_size, proj_code="CAR")
 
         # To avoid editor warning
         scale = 1
@@ -706,7 +706,7 @@ class DataBase:
             xgrid = np.vstack([grid_world[0].ravel(), grid_world[1].ravel()]).T
             data = np.vstack([self._lon[self._features_masks[idx]][::skip],
                               self._lat[self._features_masks[idx]][::skip]]).T
-            dens = mp_kde(grid=xgrid, data=data, bandwidth=pixsize * 2, shape=grid_world[0].shape, kernel=kernel,
+            dens = mp_kde(grid=xgrid, data=data, bandwidth=bandwidth, shape=grid_world[0].shape, kernel=kernel,
                           norm=False)
 
             # Norm and save scale (we want everything scaled to the same reference! In this case the first feature)
