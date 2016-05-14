@@ -135,6 +135,10 @@ class DataBase:
 
         return [np.isfinite(m) & np.isfinite(e) for m, e in zip(self.features, self.features_err)]
 
+    # ---------------------------------------------------------------------- #
+    #                                  Masks                                 #
+    # ---------------------------------------------------------------------- #
+
     # ----------------------------------------------------------------------
     @property
     def _combined_mask(self):
@@ -149,6 +153,41 @@ class DataBase:
         """
 
         return np.prod(np.vstack(self._features_masks), axis=0, dtype=bool)
+
+    # ----------------------------------------------------------------------
+    def _custom_mask(self, idx=None, names=None):
+        """
+        Creates a custom mask for a given set of combined features
+
+        Parameters
+        ----------
+        idx : iterable, optional
+            List of indices to create the mask for
+        names : iterable, optional
+            List of names for the features for which a combined mask should be made
+
+
+        Returns
+        -------
+        np.ndarray
+            Combined mask.
+
+        Raises
+        ------
+        ValueError
+            If no argument is given.
+
+        """
+
+        if (idx is None) & (names is None):
+            raise ValueError("Either indices or names must be specified")
+
+        # Grab indices for given names
+        if names:
+            idx = [self.features_names.index(key) for key in names]
+
+        # Return combined mask
+        return np.prod(np.vstack([self._features_masks[i] for i in idx]), axis=0, dtype=bool)
 
     # ---------------------------------------------------------------------- #
     #                          Coordinate properties                         #
