@@ -996,7 +996,20 @@ class ExtinctionVector:
 
         # Set attributes
         self.extvec = extvec
-        self.n_dimensions = len(extvec)
+
+    # ----------------------------------------------------------------------
+    @property
+    def n_dimensions(self):
+        """
+        Number of dimensions.
+
+        Returns
+        -------
+        int
+
+        """
+
+        return len(self.extvec)
 
     # ----------------------------------------------------------------------
     @staticmethod
