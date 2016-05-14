@@ -227,7 +227,7 @@ class DataBase:
 
     # ----------------------------------------------------------------------
     @staticmethod
-    def _build_grid(data, precision):
+    def _build_feature_grid(data, precision):
         """
         Static method to build a grid of unique positons from given input data rounded to arbitrary precision.
 
@@ -735,7 +735,7 @@ class DataBase:
         bin_grid = bin_ext = np.float(bandwidth / sampling)
 
         # Now we build a grid from the rotated data for all components but the first
-        grid_data = DataBase._build_grid(data=np.vstack(science_rot.features)[1:, :], precision=bin_grid)
+        grid_data = DataBase._build_feature_grid(data=np.vstack(science_rot.features)[1:, :], precision=bin_grid)
 
         # Create a grid to evaluate along the reddening vector
         grid_ext = np.arange(start=np.floor(min(control_rot.features[0])),
