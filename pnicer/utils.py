@@ -115,6 +115,74 @@ def get_sample_covar(xi, yi):
 
 
 # ----------------------------------------------------------------------
+def get_color_covar(magerr1, magerr2, magerr3, magerr4, name1, name2, name3, name4):
+    """
+    Calculate the error covariance matrix for color combinations of four magnitudes.
+    x: (mag1 - mag2)
+    y: (mag3 - mag4)
+
+    Parameters
+    ----------
+    magerr1 : np.ndarray
+        Source magnitudes in band 1.
+    magerr2 : np.ndarray
+        Source magnitudes in band 2.
+    magerr3 : np.ndarray
+        Source magnitudes in band 3.
+    magerr4 : np.ndarray
+        Source magnitudes in band 4.
+    name1 : str, int
+        Unique identifier string or index for band 1.
+    name2 : str, int
+        Unique identifier string or index for band 2.
+    name3 : str, int
+        Unique identifier string or index for band 3.
+    name4 : str, int
+        Unique identifier string or index for band 4.
+
+    Returns
+    -------
+    np.ndarray
+        Covariance matrix for color errors.
+
+    """
+
+    # Initialize matrix
+    cmatrix = np.zeros(shape=(2, 2))
+
+    # Calculate first entry
+    cmatrix[0, 0] = np.mean(magerr1) ** 2 + np.mean(magerr2) ** 2
+
+    # Calculate last entry
+    cmatrix[1, 1] = np.mean(magerr3) ** 2 * np.mean(magerr4) ** 2
+
+    # Initially set cross entries to 0
+    cov = 0.
+
+    # Add first term
+    if name1 == name3:
+        cov += np.mean(magerr1) * np.mean(magerr3)
+
+    # Add second term
+    if name1 == name4:
+        cov -= np.mean(magerr1) * np.mean(magerr4)
+
+    # Add third term
+    if name2 == name3:
+        cov -= np.mean(magerr2) * np.mean(magerr3)
+
+    # Add fourth term
+    if name2 == name4:
+        cov += np.mean(magerr2) * np.mean(magerr4)
+
+    # Set entries in matrix
+    cmatrix[1, 0] = cmatrix[0, 1] = cov
+
+    # Return total covariance
+    return cmatrix
+
+
+# ----------------------------------------------------------------------
 def round_partial(data, precision):
     """
     Simple static method to round data to arbitrary precision.
