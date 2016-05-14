@@ -221,7 +221,7 @@ class DataBase:
             return self.coordinates.dec.degree
 
     # ---------------------------------------------------------------------- #
-    #                         Static helper methods                          #
+    #                             Helper methods                             #
     # ---------------------------------------------------------------------- #
 
     # ----------------------------------------------------------------------
@@ -252,6 +252,27 @@ class DataBase:
         _, idx = np.unique(dummy, return_index=True)
 
         return grid_data[np.sort(idx)].T
+
+    # ----------------------------------------------------------------------
+    @classmethod
+    def _check_class(cls, ccls):
+        """
+        Checks another instance for compatability in the PNICER methods.
+
+        Parameters
+        ----------
+        ccls
+            Instance to check.
+
+        Raises
+        ------
+        ValueError
+            If the classes do not match.
+
+        """
+
+        if cls != ccls.__class__:
+            raise ValueError("Instance and control class do not match")
 
     # ---------------------------------------------------------------------- #
     #                            Instance methods                            #
@@ -743,8 +764,7 @@ class DataBase:
         """
 
         # Some dummy checks
-        if self.__class__ != control.__class__:
-            raise ValueError("Instance and control class do not match")
+        self._check_class(ccls=control)
         if (self.n_features != 1) | (control.n_features != 1):
             raise ValueError("Only one feature allowed for this method")
 
@@ -896,8 +916,10 @@ class DataBase:
         # Avoid circular import
         from pnicer.user import Magnitudes, Colors
 
-        # Instance assertions
-        assert self.__class__ == control.__class__, "instance and control class do not match"
+        # Check instances
+        self._check_class(ccls=control)
+
+        # Dummy assertion for editor
         assert (isinstance(self, Magnitudes) | isinstance(self, Colors))
 
         # We loop over all combinations
