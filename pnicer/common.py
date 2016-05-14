@@ -244,8 +244,6 @@ class DataBase:
 
         """
 
-        # TODO: Check if new method from stackoverflow is better
-
         # Round data to requested precision.
         grid_data = round_partial(data=data, precision=precision).T
 
@@ -714,8 +712,10 @@ class DataBase:
                 scale = np.max(dens)
             dens /= scale
 
-            # Plot density
-            dens[dens < 1e-5] = np.nan
+            # Mask lowest level with NaNs
+            dens[dens <= 1e-4] = np.nan
+
+            # Show density
             axes[idx].imshow(dens, origin="lower", interpolation="nearest", cmap="viridis", vmin=0, vmax=1, **kwargs)
 
         # Save or show figure
@@ -787,7 +787,11 @@ class DataBase:
         """
 
         # Check instances
-        assert self.__class__ == control.__class__, "Input and control instance not compatible"
+        if self.__class__ != control.__class__:
+            raise ValueError("Input and control instance not compatible")
+
+        # Avoid circular import
+        from pnicer.user import Magnitudes
 
         # Let's rotate the data spaces
         science_rot, control_rot = self._rotate(), control._rotate()
@@ -841,8 +845,6 @@ class DataBase:
 
         # Inverse rotation of grid to get intrinsic features
         intrinsic = self.extvec._rotmatrix_inv.dot(np.vstack([grid_mean[indices], grid_data[:, indices]]))
-
-        from pnicer.user import Magnitudes
 
         # In case of Magnitudes we need to calculate the intinsic value
         if isinstance(self, Magnitudes):
