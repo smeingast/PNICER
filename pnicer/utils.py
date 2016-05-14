@@ -95,7 +95,7 @@ def weighted_avg(values, weights):
 # ----------------------------------------------------------------------
 def get_covar(xi, yi):
     """
-    Calculate sample covariance (can not contain NaNs!)
+    Calculate sample covariance (can not contain NaNs!).
 
     Parameters
     ----------
@@ -112,26 +112,6 @@ def get_covar(xi, yi):
     """
 
     return np.sum((xi - np.mean(xi)) * (yi - np.mean(yi))) / len(xi)
-
-
-# ----------------------------------------------------------------------
-def linear_model(vec, val):
-    """
-    Linear function model y = m*x + b.
-
-    Parameters
-    ----------
-    vec : iterable
-        Vector of the parameters.
-    val : np.ndarray
-        array of the current x values
-
-    Returns
-    -------
-
-    """
-
-    return vec[0] * val + vec[1]
 
 
 # ----------------------------------------------------------------------
@@ -235,7 +215,7 @@ def caxes_delete_ticklabels(axes, xfirst=False, xlast=False, yfirst=False, ylast
 
     Parameters
     ----------
-    axes : list
+    axes : iterable
         The combination axes list.
     xfirst : bool, optional
         Whether the first x label should be deleted.
@@ -472,6 +452,8 @@ def data2header(lon, lat, frame="icrs", proj_code="CAR", pixsize=1/3600, enlarge
         Projection code. (e.g. 'TAN', 'AIT', 'CAR', etc)
     pixsize : int, float, optional
         Pixel size of generated header in degrees. Not so important for plots, but still required.
+    enlarge : float, optional
+        Optional enlargement factor for calculated field size. Default is 1.05. Set to 1 if no enlargement is wanted.
     kwargs
         Additional projection parameters (e.g. pv2_1=-30)
 

@@ -1,10 +1,9 @@
 # ----------------------------------------------------------------------
 # import stuff
-import warnings
 import numpy as np
 
 from pnicer.common import DataBase
-from pnicer.utils import get_covar, linear_model
+from pnicer.utils import get_covar
 
 
 # ----------------------------------------------------------------------
@@ -64,7 +63,7 @@ class Magnitudes(DataBase):
                       names=self.colors_names)
 
     # ----------------------------------------------------------------------
-    def color_combinations(self):
+    def _color_combinations(self):
         """
         Calculates a list of Colors instances for all combinations.
 
@@ -103,13 +102,20 @@ class Magnitudes(DataBase):
         """
 
         if add_colors:
+
             # To create a color, we need at least two features
-            assert self.n_features >= 2, "To use colors, at least two features are required"
-            comb = zip(self._all_combinations(idxstart=2) + self.color_combinations(),
-                       control._all_combinations(idxstart=2) + control.color_combinations())
+            if self.n_features < 2:
+                raise ValueError("To use colors, at least two features are required")
+
+            # Build all combinations by adding colors to parameter space; also require at least two magnitudes
+            comb = zip(self._all_combinations(idxstart=2) + self._color_combinations(),
+                       control._all_combinations(idxstart=2) + control._color_combinations())
         else:
+
+            # Build combinations, but start with 2.
             comb = zip(self._all_combinations(idxstart=2), control._all_combinations(idxstart=2))
 
+        # Call PNICER
         return self._pnicer_combinations(control=control, comb=comb, sampling=sampling, kernel=kernel)
 
     # ----------------------------------------------------------------------
@@ -216,22 +222,28 @@ class Magnitudes(DataBase):
 
     # ----------------------------------------------------------------------
     def get_beta_lines(self, base_keys, fit_key, control, kappa=2, sigma=3, err_iter=1000):
+
+        # TODO: Add docstring
         # TODO: Improve or remove!
 
-        # Some assertions (quite some actually, haha)
-        assert (isinstance(base_keys, tuple)) & (len(base_keys) == 2), " base_keys must be tuple with two entries"
-        assert isinstance(fit_key, str), "fit_key must be string"
-        assert isinstance(control, Magnitudes), "control must be magnitude instance"
-        assert (kappa >= 0) & isinstance(kappa, int), "kappa must be non-zero positive integer"
-        assert sigma > 0, "sigma must positive"
-        assert fit_key in self.features_names, "fit_key not found"
-        assert (base_keys[0] in self.features_names) & (base_keys[1] in self.features_names), "base_keys not found"
+        # Some input checks
+        if len(base_keys) != 2:
+            raise ValueError("'base_keys' must be tuple or list with two entries")
+        self._check_class(ccls=control)
+        if fit_key not in self.features_names:
+            raise ValueError("'fit_key' not found")
+        if (base_keys[0] not in self.features_names) | (base_keys[1] not in self.features_names):
+            raise ValueError("'base_keys' not found")
+        if (kappa < 0) | (isinstance(kappa, int) is False):
+            raise ValueError("'kappa' must be non-zero positive integer")
+        if sigma <= 0:
+            raise ValueError("'sigma' must be positive")
 
         # Get indices of requested keys
         base_idx = (self.features_names.index(base_keys[0]), self.features_names.index(base_keys[1]))
         fit_idx = self.features_names.index(fit_key)
 
-        # Create common filter for all current filters
+        # Create common masks for all given features
         smask = np.prod(np.vstack([self._features_masks[i] for i in base_idx + (fit_idx,)]), axis=0, dtype=bool)
         cmask = np.prod(np.vstack([control._features_masks[i] for i in base_idx + (fit_idx,)]), axis=0, dtype=bool)
 
@@ -341,66 +353,6 @@ class Magnitudes(DataBase):
 
         # Return fit and data values
         return beta, beta_err, ic, x1_sc, x2_sc, y2_sc
-
-    # ----------------------------------------------------------------------
-    # noinspection PyPackageRequirements
-    def get_beta_binning(self, base_keys, fit_key, extinction, step=0.1):
-        # TODO: Improve or remove!
-
-        # Try to import scipy, otherwise stop
-        try:
-            from scipy.odr import Model, RealData, ODR
-        except ImportError:
-            print("Scipy not installed")
-            # TODO: If I don't put this here, I get a weird warning
-            from scipy.odr import Model, RealData, ODR
-
-        # The extinction data must have the same size as the photometry
-        assert len(extinction) == self.n_data
-
-        # First let's get the data into colors
-        xdata, ydata = self.dict[base_keys[0]] - self.dict[base_keys[1]], self.dict[base_keys[1]] - self.dict[fit_key]
-
-        # Get average colors in extinction bins
-        avg_x, avg_y, std_x, std_y, avg_e, avg_n = [], [], [], [], [], []
-        for e in np.arange(np.floor(np.nanmin(extinction)), np.ceil(np.nanmax(extinction)), step=step):
-
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                avg_fil = (extinction >= e) & (extinction < e + step)
-
-                # Get color for current filter extinction
-                xdummy, ydummy = xdata[avg_fil], ydata[avg_fil]
-
-                # Do 3-sigma clipping around median
-                # avg_clip = (np.abs(xdummy - np.nanmedian(xdummy)) < 3 * np.nanstd(xdummy)) & \
-                #            (np.abs(ydummy - np.nanmedian(ydummy)) < 3 * np.nanstd(ydummy))
-                avg_clip = np.full_like(xdummy, fill_value=True, dtype=bool)
-
-                # We require at least 3 sources
-                if np.sum(avg_clip) < 3:
-                    continue
-
-                # Append averages
-                avg_x.append(np.nanmedian(xdummy[avg_clip]))
-                avg_y.append(np.nanmedian(ydummy[avg_clip]))
-                std_x.append(np.nanstd(xdummy[avg_clip]))
-                std_y.append(np.nanstd(ydummy[avg_clip]))
-                avg_e.append(e + step / 2)
-                avg_n.append(np.sum(avg_clip))
-
-        # Convert to arrays
-        avg_x, avg_y, avg_e, avg_n = np.array(avg_x), np.array(avg_y), np.array(avg_e), np.array(avg_n)
-
-        # Fit a line with ODR
-        fit_model = Model(linear_model)
-        fit_data = RealData(avg_x, avg_y, sx=std_x, sy=std_y)
-        bdummy = ODR(fit_data, fit_model, beta0=[1., 0.]).run()
-        beta, ic = bdummy.beta
-        beta_err, ic_err = bdummy.sd_beta
-
-        # Return slope, intercept and errors
-        return beta, beta_err, ic, ic_err, avg_x, avg_y, avg_e, avg_n
 
 
 # ----------------------------------------------------------------------
