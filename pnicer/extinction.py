@@ -1,8 +1,7 @@
 # ----------------------------------------------------------------------
 # Import stuff
-import warnings
-
 import wcsaxes
+import warnings
 import numpy as np
 
 from astropy.io import fits
@@ -41,31 +40,17 @@ class Extinction:
 
         # Check if db is really a DataBase instance
         if not isinstance(db, DataBase):
-            raise ValueError("passed instance is not DataBase class")
+            raise ValueError("Passed instance database incompatible")
 
-        # Define inititial attributes
+        # Set attributes
         self.db = db
         self.extinction = extinction
+        self.variance = np.zeros_like(extinction) if variance is None else variance
+        self.color0 = np.zeros_like(extinction) if color0 is None else color0
 
-        # Set variance to 0 if not given.
-        self.variance = variance
-        if self.variance is None:
-            self.variance = np.zeros_like(extinction)
-
-        # Set intrinsic colors to 0 if not given.
-        self.color0 = color0
-        if self.color0 is None:
-            self.color0 = np.zeros_like(extinction)
-
-        # Index with clean extinction data
-        self.clean_index = np.isfinite(self.extinction)
-
-        # Extinction and variance must have same length
+        # Sanity checks
         if len(self.extinction) != len(self.variance):
             raise ValueError("Extinction and variance arrays must have equal length")
-
-        # Calculate de-reddened features
-        self.features_dered = [f - self.extinction * v for f, v in zip(self.db.features, self.db.extvec.extvec)]
 
     # ---------------------------------------------------------------------- #
     #                              Magic methods                             #
@@ -80,11 +65,44 @@ class Extinction:
         return str(self.extinction)
 
     # ---------------------------------------------------------------------- #
-    #                            Instance methods                            #
+    #                               Properties                               #
     # ---------------------------------------------------------------------- #
 
     # ----------------------------------------------------------------------
-    def build_map(self, bandwidth, metric="median", frame="galactic", sampling=2, nicest=False, use_fwhm=False):
+    @property
+    def _clean_index(self):
+        """
+        Index of finite extinction measurements.
+
+        Returns
+        -------
+        np.ndarray
+
+        """
+
+        return np.isfinite(self.extinction)
+
+    @property
+    def features_dered(self):
+        """
+        Dereddened features.
+
+        Returns
+        -------
+        list
+
+        """
+
+        return [f - self.extinction * v for f, v in zip(self.db.features, self.db.extvec.extvec)]
+
+    # ---------------------------------------------------------------------- #
+    #                            Instance methods                            #
+    # ---------------------------------------------------------------------- #
+
+    _std2fwhm = 2 * np.sqrt(2 * np.log(2))
+
+    # ----------------------------------------------------------------------
+    def build_map(self, bandwidth, metric="median", sampling=2, nicest=False, use_fwhm=False):
         """
         Method to build an extinction map.
 
@@ -93,9 +111,7 @@ class Extinction:
         bandwidth : int, float
             Resolution of output map.
         metric : str, optional
-            Metric to be used. e.g. 'median', 'gaussian', 'epanechnikov', 'uniform, 'triangular'. Default is 'median'.
-        frame : str, optional
-            Reference frame; 'galactic' or 'equatorial'. Default is 'galactic'
+            Metric to be used. One of 'median', 'gaussian', 'epanechnikov', 'uniform, 'triangular'. Default is 'median'.
         sampling : int, optional
             Sampling of data. i.e. how many pixels per bandwidth. Default is 2.
         nicest : bool, optional
@@ -112,33 +128,36 @@ class Extinction:
         """
 
         # Sampling must be an integer
-        assert isinstance(sampling, int), "sampling must be an integer"
-        assert (frame == "galactic") | (frame == "equatorial"), "frame must be either 'galactic' or 'equatorial'"
+        if not isinstance(sampling, int):
+            raise ValueError("Sampling factor must be an integer")
+
+        # FWHM can only be used with a gaussian metric
+        if use_fwhm & (metric != "gaussian"):
+            raise ValueError("FWHM only valid for gaussian kernel")
 
         # Determine pixel size
         pixsize = bandwidth / sampling
 
-        # In case of a gaussian, we can use the fwhm instead
+        # Create WCS grid
+        grid_header, (grid_lon, grid_lat) = self.db._build_wcs_grid(proj_code="CAR", pixsize=pixsize)
+
+        # Adjust bandwidth in case FWHM is to be used
         if use_fwhm:
-            # TODO: Check if assertions works in installed software
-            assert metric == "gaussian", "FWHM only valid for gaussian kernel"
-            bandwidth /= 2 * np.sqrt(2 * np.log(2))
+            grid_header["FWHM"] = (bandwidth, "FWHM of gaussian (degrees)")
+            bandwidth /= self._std2fwhm
+        elif metric == "gaussian":
+            grid_header["FWHM"] = (bandwidth * self._std2fwhm, "FWHM of gaussian (degrees)")
 
-        # First let's get a grid
-        grid_header, grid_lon, grid_lat = self.db._build_wcs_grid(frame=frame, pixsize=pixsize)
-
-        # Set some header keywords
+        # Add bandwidth to header
         grid_header["BWIDTH"] = (bandwidth, "Bandwidth of kernel (degrees)")
-        if use_fwhm:
-            grid_header["FWHM"] = (bandwidth * 2 * np.sqrt(2 * np.log(2)), "FWHM of gaussian (degrees)")
 
         # Run extinction mapping for each pixel
         with Pool() as pool:
             # Submit tasks
             mp = pool.starmap(get_extinction_pixel,
                               zip(grid_lon.ravel(), grid_lat.ravel(),
-                                  repeat(self.db._lon[self.clean_index]), repeat(self.db._lat[self.clean_index]),
-                                  repeat(self.extinction[self.clean_index]), repeat(self.variance[self.clean_index]),
+                                  repeat(self.db._lon[self._clean_index]), repeat(self.db._lat[self._clean_index]),
+                                  repeat(self.extinction[self._clean_index]), repeat(self.variance[self._clean_index]),
                                   repeat(bandwidth), repeat(metric), repeat(use_fwhm), repeat(nicest)))
 
         # Unpack results
