@@ -6,9 +6,7 @@ import numpy as np
 
 from astropy.io import fits
 from itertools import repeat
-from matplotlib import pyplot as plt
 from multiprocessing.pool import Pool
-from matplotlib.gridspec import GridSpec
 
 from pnicer.utils import distance_sky
 
@@ -240,7 +238,13 @@ class ExtinctionMap:
         if (self.map.ndim != 2) | (self.var.ndim != 2) | (self.num.ndim != 2) | (self.rho.ndim != 2):
             raise TypeError("Input must be 2D arrays")
 
-    # ----------------------------------------------------------------------
+    @staticmethod
+    def _get_vlim(data, percentiles, r=10):
+        vmin = np.floor(np.percentile(data[np.isfinite(data)], percentiles[0]) * r) / r
+        vmax = np.ceil(np.percentile(data[np.isfinite(data)], percentiles[1]) * r) / r
+        return vmin, vmax
+
+        # ----------------------------------------------------------------------
     def plot_map(self, path=None, figsize=10):
         """
         Method to plot extinction map.
@@ -250,51 +254,59 @@ class ExtinctionMap:
         path : str, optional
             File path if it should be saved. e.g. "/path/to/image.png". Default is None.
         figsize : int, float, optional
-            Figure size for plot. Default is 5.
+            Figure size for plot. Default is 10.
 
         """
 
-        fig = plt.figure(figsize=[figsize, 3 * 0.9 * figsize * (self.shape[0] / self.shape[1])])
-        grid = GridSpec(ncols=2, nrows=3, bottom=0.1, top=0.9, left=0.1, right=0.9, hspace=0.08, wspace=0,
-                        height_ratios=[1, 1, 1], width_ratios=[1, 0.05])
+        # Import
+        from matplotlib import pyplot as plt
+        from matplotlib.gridspec import GridSpec
 
-        for idx in range(0, 6, 2):
+        fig = plt.figure(figsize=[figsize, 4 * 0.9 * figsize * (self.shape[0] / self.shape[1])])
+        grid = GridSpec(ncols=2, nrows=4, bottom=0.1, top=0.9, left=0.1, right=0.9, hspace=0.08, wspace=0,
+                        height_ratios=[1, 1, 1, 1], width_ratios=[1, 0.05])
+
+        for idx in range(0, 8, 2):
 
             ax = plt.subplot(grid[idx], projection=wcsaxes.WCS(self.fits_header))
             cax = plt.subplot(grid[idx + 1])
 
             # Plot Extinction map
             if idx == 0:
-                im = ax.imshow(self.map, origin="lower", interpolation="nearest", cmap="binary",
-                               vmin=np.floor(np.percentile(self.map[np.isfinite(self.map)], 1) * 10) / 10,
-                               vmax=np.ceil(np.percentile(self.map[np.isfinite(self.map)], 99) * 10) / 10)
+                vmin, vmax = self._get_vlim(data=self.map, percentiles=[1, 99], r=10)
+                im = ax.imshow(self.map, origin="lower", interpolation="nearest", cmap="binary", vmin=vmin, vmax=vmax)
                 fig.colorbar(im, cax=cax, label="Extinction (mag)")
 
-            # Plot variance map
-            if idx == 2:
-                im = ax.imshow(self.var, origin="lower", interpolation="nearest", cmap="binary",
-                               vmin=np.floor(np.percentile(self.var[np.isfinite(self.var)], 1) * 10) / 10,
-                               vmax=np.ceil(np.percentile(self.var[np.isfinite(self.var)], 2) * 100) / 100)
+            # Plot error map
+            elif idx == 2:
+                vmin, vmax = self._get_vlim(data=np.sqrt(self.var), percentiles=[1, 90], r=100)
+                im = ax.imshow(np.sqrt(self.var), origin="lower", interpolation="nearest", cmap="binary", vmin=vmin,
+                               vmax=vmax)
                 if self.metric == "median":
-                    fig.colorbar(im, cax=cax, label="MAD")
+                    fig.colorbar(im, cax=cax, label="MAD (mag)")
                 else:
-                    fig.colorbar(im, cax=cax, label="Variance")
+                    fig.colorbar(im, cax=cax, label="Error (mag)")
 
-            if idx == 4:
-                im = ax.imshow(self.num, origin="lower", interpolation="nearest", cmap="binary",
-                               vmin=np.floor(np.percentile(self.num[np.isfinite(self.num)], 1) * 10) / 10,
-                               vmax=np.ceil(np.percentile(self.num[np.isfinite(self.num)], 99) * 10) / 10)
+            elif idx == 4:
+                vmin, vmax = self._get_vlim(data=self.num, percentiles=[1, 99], r=1)
+                im = ax.imshow(self.num, origin="lower", interpolation="nearest", cmap="binary", vmin=vmin, vmax=vmax)
                 fig.colorbar(im, cax=cax, label="N")
 
+            elif idx == 6:
+                vmin, vmax = self._get_vlim(data=self.rho, percentiles=[1, 99], r=10)
+                im = ax.imshow(self.rho, origin="lower", interpolation="nearest", cmap="binary", vmin=vmin, vmax=vmax)
+                fig.colorbar(im, cax=cax, label="N")
+
+            # Grab axes
+            lon, lat = ax.coords[0], ax.coords[1]
+
             # Add axes labels
-            lon = ax.coords[0]
-            lat = ax.coords[1]
-            if idx == 4:
+            if idx == 6:
                 lon.set_axislabel("Longitude")
             lat.set_axislabel("Latitude")
 
             # Hide tick labels
-            if (idx == 0) | (idx == 2):
+            if idx != 6:
                 lon.set_ticklabel_position("")
 
         # Save or show figure
@@ -315,15 +327,17 @@ class ExtinctionMap:
             File path; e.g. "/path/to/table.fits"
 
         """
-
         # TODO: Add some header information
-        # Create and save
+
+        # Create HDU list
         # noinspection PyTypeChecker
         hdulist = fits.HDUList([fits.PrimaryHDU(),
                                 fits.ImageHDU(data=self.map, header=self.fits_header),
                                 fits.ImageHDU(data=self.var, header=self.fits_header),
                                 fits.ImageHDU(data=self.num, header=self.fits_header),
                                 fits.ImageHDU(data=self.rho, header=self.fits_header)])
+
+        # Write
         hdulist.writeto(path, clobber=True)
 
 
@@ -446,12 +460,14 @@ def get_extinction_pixel(lon_grid, lat_grid, lon_sources, lat_sources, ext, var,
 
     # Get spatial weights:
     weights_spatial = wfunc(wdis=dis)
+
     weights_spatial[weights_spatial < 0] = 0
 
     # Get approximate integral and normalize weights
     dummy = np.arange(-100, 100, 0.01)
     weights_spatial_norm = np.divide(weights_spatial, np.trapz(y=wfunc(dummy), x=dummy))
 
+    # TODO: Check if NICEST should modify this
     # Get density map
     rho = np.sum(weights_spatial_norm)
 
@@ -476,7 +492,7 @@ def get_extinction_pixel(lon_grid, lat_grid, lon_sources, lat_sources, ext, var,
             cor = beta * np.nansum(weights * var) / np.nansum(weights)
 
             # Calculate error for NICEST (private communication with M. Lombardi)
-            # TODO: Check if this even makes sense
+            # TODO: Check if this makes sense
             pixel_var = (np.sum((weights**2 * np.exp(2*beta*ext) * (1 + beta + ext)**2) / var) /
                          np.sum(weights * np.exp(beta * ext) / var)**2)
 
