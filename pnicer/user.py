@@ -119,14 +119,18 @@ class Magnitudes(DataBase):
         return self._pnicer_combinations(control=control, comb=comb, sampling=sampling, kernel=kernel)
 
     # ----------------------------------------------------------------------
-    def nicer(self, control, n_features=None):
+    def nicer(self, control=None, color0=None, n_features=None):
         """
         NICER routine as descibed in Lombardi & Alves 2001. Generalized for arbitrary input magnitudes
 
         Parameters
         ----------
         control
-            Control field instance. Same class as self.
+            Control field instance.
+        color0 : iterable, optional
+            If no control field is specified a list of intrinsic colors can be given instead. In this case the
+            variance/covariance terms are set to 0! Passing a control field instance will always override manual color0
+            parameters.
         n_features : int, optional
             If set, return only extinction values for sources with data for 'n' features.
 
@@ -138,38 +142,51 @@ class Magnitudes(DataBase):
         """
 
         # Some checks
-        self._check_class(ccls=control)
-        if self.n_features != control.n_features:
-            raise ValueError("Number of features do not match")
+        if control is not None:
+            self._check_class(ccls=control)
 
         # Features to be required can only be as much as input features
         if n_features is not None:
-            assert n_features <= self.n_features, "Can't require more features than there are available"
-            assert n_features > 0, "Must require at least one feature"
+            if n_features > self.n_features:
+                raise ValueError("Can't require more features than available ({0})".format(self.n_features))
+            if n_features <= 0:
+                raise ValueError("Must request at least one feature")
 
         # Get reddening vector
         k = [x - y for x, y in zip(self.extvec.extvec[:-1], self.extvec.extvec[1:])]
 
-        # Calculate covariance matrix of control field
-        cov_cf = np.ma.cov([np.ma.masked_invalid(control.features[l]) - np.ma.masked_invalid(control.features[l + 1])
-                            for l in range(self.n_features - 1)])
+        # Calculate covariance matrix of control field and intrinsic colors
+        if control is not None:
 
-        # Get intrisic color of control field
-        color_0 = [np.nanmean(control.features[l] - control.features[l + 1]) for l in range(control.n_features - 1)]
+            # Matrix
+            cov_cf = np.ma.cov([np.ma.masked_invalid(control.features[l]) -
+                                np.ma.masked_invalid(control.features[l + 1]) for l in range(self.n_features - 1)])
 
-        # Replace NaN errors with a large number
+            # Intrinsic colors
+            color_0 = [np.nanmean(control.features[l] - control.features[l + 1]) for l in range(control.n_features - 1)]
+
+        # If no control field is given, set the matrix to 0 and the intrinsic colors manually
+        elif color0 is not None:
+            cov_cf, color_0 = np.ma.zeros((self.n_features - 1, self.n_features - 1)), color0
+
+        # If nothing is given raise error
+        else:
+            raise ValueError("Must specify either control field or intrinsic colors")
+
         errors = []
         for e in self.features_err:
             a = e.copy()
-            a[~np.isfinite(a)] = 1000
+            a[~np.isfinite(a)] = 100
             errors.append(a)
 
         # Calculate covariance matrix of errors in the science field
         cov_er = np.zeros([self.n_data, self.n_features - 1, self.n_features - 1])
         for i in range(self.n_features - 1):
-            # Diagonal
+
+            # Diagonal entries
             cov_er[:, i, i] = errors[i] ** 2 + errors[i + 1] ** 2
-            # Other entries
+
+            # Cross entries
             if i > 0:
                 cov_er[:, i, i - 1] = cov_er[:, i - 1, i] = -errors[i] ** 2
 
@@ -353,7 +370,7 @@ class Magnitudes(DataBase):
         x_idx, y_idx = self._name2index(name=x_keys), self._name2index(name=y_keys)
 
         # Create common masks for all given features for science data
-        smask = self._custom_mask(names=x_keys + y_keys)
+        smask = self._custom_strict_mask(names=x_keys + y_keys)
 
         # Apply mask
         xc_science = self.features[x_idx[0]][smask] - self.features[x_idx[1]][smask]
@@ -371,7 +388,7 @@ class Magnitudes(DataBase):
             self._check_class(ccls=control)
 
             # Get combined mask for control field
-            cmask = control._custom_mask(names=x_keys + y_keys)
+            cmask = control._custom_strict_mask(names=x_keys + y_keys)
 
             # Shortcuts for control field terms
             xc_control = control.features[x_idx[0]][cmask] - control.features[x_idx[1]][cmask]
