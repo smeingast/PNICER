@@ -476,15 +476,15 @@ class Magnitudes(DataBase):
 
         # Generate QC plot
         if qc:
-            self._plot_exction_ratio(beta=beta, ic=ic, x_science=xc_science, y_science=yc_science, x_control=xc_control,
-                                     y_control=yc_control)
+            self._plot_extinction_ratio(beta=beta, ic=ic, x_science=xc_science, y_science=yc_science,
+                                        x_control=xc_control, y_control=yc_control)
 
         # Return fit and data values
         return beta, beta_err, ic
 
     # ----------------------------------------------------------------------
     @staticmethod
-    def _plot_exction_ratio(beta, ic, x_science, y_science, x_control=None, y_control=None):
+    def _plot_extinction_ratio(beta, ic, x_science, y_science, x_control=None, y_control=None):
         """
         Generates the qc plot for the extinction ratio fit.
 

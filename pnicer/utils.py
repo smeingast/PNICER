@@ -8,7 +8,6 @@ import multiprocessing
 
 from astropy import wcs
 from astropy.io import fits
-from matplotlib import pyplot as plt
 from multiprocessing.pool import Pool
 from itertools import combinations, repeat
 # noinspection PyPackageRequirements
@@ -224,6 +223,9 @@ def caxes(ndim, ax_size=None, labels=None):
         tuple containing the figure and a list of the axes.
 
     """
+
+    # import
+    from matplotlib import pyplot as plt
 
     if labels is not None:
         if len(labels) != ndim:
