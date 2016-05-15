@@ -123,7 +123,7 @@ class DataBase:
     @property
     def _features_masks(self):
         """
-        Provides a list with masks for each given feature.
+        Provides a list with masks for each given feature. True (1) entries are good, False (0) are bad.
 
 
         Returns
@@ -140,10 +140,30 @@ class DataBase:
     # ---------------------------------------------------------------------- #
 
     # ----------------------------------------------------------------------
-    @property
-    def _combined_mask(self):
+    def _loose_mask(self, max_bad_features):
         """
-        Combines all feature masks into a single mask.
+        Returns a mask where entries are masked when given 'max_bad_features' bad entries. When e.g. set to 0, no bad
+        features are allowed at all (same as strict mask). When set to 2, then all entries are masked which have 2 or
+        more bad measurements.
+
+        Parameters
+        ----------
+        max_bad_features : int
+            Maximum number of bad measurements for each source.
+
+        Returns
+        -------
+        np.ndarray
+            Loose mask.
+
+        """
+        return self.n_features - np.sum(np.vstack(self._features_masks), axis=0) <= max_bad_features
+
+    # ----------------------------------------------------------------------
+    @property
+    def _strict_mask(self):
+        """
+        Combines all feature masks into a single mask. Any entry that has a NaN in any band will be masked.
 
         Returns
         -------
@@ -154,10 +174,14 @@ class DataBase:
 
         return np.prod(np.vstack(self._features_masks), axis=0, dtype=bool)
 
+        # Would be the same:
+        # return self._loose_mask(max_bad_features=0)
+
     # ----------------------------------------------------------------------
-    def _custom_mask(self, idx=None, names=None):
+    def _custom_strict_mask(self, idx=None, names=None):
         """
-        Creates a custom mask for a given set of combined features
+        Creates a custom mask for a given set of combined features. Any entry that has a single NaN in any of the
+        specified bands will be masked.
 
         Parameters
         ----------
@@ -375,8 +399,9 @@ class DataBase:
 
         """
 
-        data = np.vstack(self.features).T[self._combined_mask].T
-        err = np.vstack(self.features_err).T[self._combined_mask].T
+        # Apply strict masks (no NaN can be present!)
+        data = np.vstack(self.features).T[self._strict_mask].T
+        err = np.vstack(self.features_err).T[self._strict_mask].T
 
         # Rotate data
         rotdata = self.extvec._rotmatrix.dot(data)
@@ -386,7 +411,7 @@ class DataBase:
 
         # In case no coordinates are supplied they need to be masked
         if self.coordinates is not None:
-            coordinates = self.coordinates[self._combined_mask]
+            coordinates = self.coordinates[self._strict_mask]
         else:
             coordinates = None
 
@@ -968,8 +993,8 @@ class DataBase:
         out_col = np.full([len(color0), self.n_data], fill_value=np.nan, dtype=float)
 
         # Output data for all sources
-        out_ext[self._combined_mask], out_var[self._combined_mask] = ext, var
-        out_col[:, self._combined_mask] = color0
+        out_ext[self._strict_mask], out_var[self._strict_mask] = ext, var
+        out_col[:, self._strict_mask] = color0
 
         # Return Extinction, variance and intrinsic features
         return out_ext, out_var, out_col
