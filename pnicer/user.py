@@ -119,7 +119,7 @@ class Magnitudes(DataBase):
         return self._pnicer_combinations(control=control, comb=comb, sampling=sampling, kernel=kernel)
 
     # ----------------------------------------------------------------------
-    def nicer(self, control=None, color0=None, min_features=None):
+    def nicer(self, control=None, color0=None, color0_err=None, min_features=None):
         """
         NICER routine as descibed in Lombardi & Alves 2001. Generalized for arbitrary input magnitudes
 
@@ -131,6 +131,8 @@ class Magnitudes(DataBase):
             If no control field is specified a list of intrinsic colors can be given instead. In this case the
             variance/covariance terms are set to 0! Passing a control field instance will always override manual color0
             parameters.
+        color0_err : iterable, optional
+            Error (standard deviation) of manually specified intrinsic colors.
         min_features : int, optional
             If set, return only extinction values for sources with measurements in more or equal to 'n' bands.
 
@@ -168,6 +170,11 @@ class Magnitudes(DataBase):
         # If no control field is given, set the matrix to 0 and the intrinsic colors manually
         elif color0 is not None:
             cov_cf, color_0 = np.ma.zeros((self.n_features - 1, self.n_features - 1)), color0
+
+            # Put manual color variance into matrix if given
+            if color0_err is not None:
+                for i in range(self.n_features - 1):
+                    cov_cf[i, i] = color0_err[i] ** 2
 
         # If nothing is given raise error
         else:
