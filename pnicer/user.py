@@ -119,7 +119,7 @@ class Magnitudes(DataBase):
         return self._pnicer_combinations(control=control, comb=comb, sampling=sampling, kernel=kernel)
 
     # ----------------------------------------------------------------------
-    def nicer(self, control=None, color0=None, n_features=None):
+    def nicer(self, control=None, color0=None, min_features=None):
         """
         NICER routine as descibed in Lombardi & Alves 2001. Generalized for arbitrary input magnitudes
 
@@ -131,8 +131,8 @@ class Magnitudes(DataBase):
             If no control field is specified a list of intrinsic colors can be given instead. In this case the
             variance/covariance terms are set to 0! Passing a control field instance will always override manual color0
             parameters.
-        n_features : int, optional
-            If set, return only extinction values for sources with data for 'n' features.
+        min_features : int, optional
+            If set, return only extinction values for sources with measurements in more or equal to 'n' bands.
 
         Returns
         -------
@@ -146,10 +146,10 @@ class Magnitudes(DataBase):
             self._check_class(ccls=control)
 
         # Features to be required can only be as much as input features
-        if n_features is not None:
-            if n_features > self.n_features:
+        if min_features is not None:
+            if min_features > self.n_features:
                 raise ValueError("Can't require more features than available ({0})".format(self.n_features))
-            if n_features <= 0:
+            if min_features <= 0:
                 raise ValueError("Must request at least one feature")
 
         # Get reddening vector
@@ -198,7 +198,8 @@ class Magnitudes(DataBase):
 
         # Get b from the paper (equ. 12)
         upper = np.dot(cov_inv, k)
-        b = upper.T / np.dot(k, upper.T)
+        lower = np.dot(k, upper.T)
+        b = upper.T / lower
 
         # Get colors
         scolors = np.array([self.features[l] - self.features[l + 1] for l in range(self.n_features - 1)])
@@ -212,24 +213,24 @@ class Magnitudes(DataBase):
         # Put back NaNs for those with only bad colors
         scolors[:, bad_color] = np.nan
 
-        # Equation 13 in the NICER paper
+        # Calculate extinction (equation 13 in NICER paper)
         ext = b[0, :] * (scolors[0, :] - color_0[0])
         for i in range(1, self.n_features - 1):
             ext += b[i, :] * (scolors[i, :] - color_0[i])
 
-        # Calculate variance (has to be done in loop due to RAM issues!)
-        first = np.array([np.dot(cov.data[idx, :, :], b.data[:, idx]) for idx in range(self.n_data)])
-        var = np.array([np.dot(b.data[:, idx], first[idx, :]) for idx in range(self.n_data)])
-        # Now we have to mask the large variance data again
-        # TODO: This is the same as 1/denominator from Equ. 12
+        # Calculate variance
+        var = 1 / lower
         var[~np.isfinite(ext)] = np.nan
+        # Old method (as in paper; has to be done in loop due to RAM issues!)
+        # first = np.array([np.dot(cov.data[idx, :, :], b.data[:, idx]) for idx in range(self.n_data)])
+        # var = np.array([np.dot(b.data[:, idx], first[idx, :]) for idx in range(self.n_data)])
 
         # Generate intrinsic source color list
         color_0 = np.repeat(color_0, self.n_data).reshape([len(color_0), self.n_data])
         color_0[:, ~np.isfinite(ext)] = np.nan
 
-        if n_features is not None:
-            mask = np.where(np.sum(np.vstack(self._features_masks), axis=0, dtype=int) < n_features)[0]
+        if min_features is not None:
+            mask = np.where(np.sum(np.vstack(self._features_masks), axis=0, dtype=int) < min_features)[0]
             ext[mask] = var[mask] = color_0[:, mask] = np.nan
 
         # ...and return :) Here, a Colors instance is returned!
