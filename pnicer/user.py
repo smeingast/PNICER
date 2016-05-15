@@ -296,9 +296,39 @@ class Magnitudes(DataBase):
         return beta, ic
 
     # ----------------------------------------------------------------------
-    def color_excess_ratio(self, x_keys, y_keys, method="lines", control=None, kappa=2, sigma=3, err_iter=100):
+    def color_excess_ratio(self, x_keys, y_keys, method="lines", control=None, kappa=1, sigma=3, err_iter=100,
+                           qc=True):
+        """
+        Calculates the selective color excess rations (e.g.: E(J-H)/E(H-K)) for a given combinations of magnitudes. This
+        slope is derived via different methods (LINES, BCES, OLS, or ODR).
 
-        # TODO: Add docstring
+        Parameters
+        ----------
+        x_keys : iterable
+            List of magnitude keys to be put on the abscissa (e.g. for 2MASS ["Hmag", "Kmag"]).
+        y_keys : iterable
+            List of magnitude keys to be put on the ordinate (e.g. for 2MASS ["Jmag", "Hmag"]).
+        method : str, optional
+            Method to use for fitting the data. One of 'lines', 'bces', 'ols', 'odr'.
+        control
+            Control field instance (required for 'lines').
+        kappa : int
+            Number of clipping iterations in the fitting procedure. Default is 1.
+        sigma : int, float, optional
+            Sigma clipping factor in iterations. Default is 3.
+        err_iter : int, optional
+            Number of iterations for error calculation via bootstrapping. Default is 100.
+        qc : bool, optional
+            Whether to show a quality control plot of the results.
+
+        Returns
+        -------
+        tuple(float, float, float)
+            Tuple holding the slope, the error of the slope and the intercept of the fit.
+
+        """
+
+        # TODO: Check LINES since the fit looks very different from the other methods!
 
         # Add fit key if not set manually
         if isinstance(y_keys, str):
@@ -355,6 +385,9 @@ class Magnitudes(DataBase):
             # And sample covariance
             beta_dict["var_control"] = np.var(xc_control)
             beta_dict["cov_control"] = get_sample_covar(xc_control, yc_control)
+
+        else:
+            xc_control = yc_control = None
 
         # Dummy mask for first iteration
         smask = np.arange(len(xc_science))
@@ -419,22 +452,60 @@ class Magnitudes(DataBase):
         # Get final error estimate
         beta_err = 1.25 * np.sum(beta_err) / (np.sqrt(2) * err_iter)
 
-        import matplotlib.pyplot as plt
-        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=[10, 10])
-
-        ax.scatter(xc_science, yc_science, s=5, c="black", lw=0)
-
-        xd = np.arange(-10, 10, 1)
-        yd = beta * xd + ic
-
-        ax.plot(xd, yd)
-        ax.set_xlim(-1, 5)
-
-        plt.show()
-        exit()
+        # Generate QC plot
+        if qc:
+            self._plot_exction_ratio(beta=beta, ic=ic, x_science=xc_science, y_science=yc_science, x_control=xc_control,
+                                     y_control=yc_control)
 
         # Return fit and data values
         return beta, beta_err, ic
+
+    # ----------------------------------------------------------------------
+    @staticmethod
+    def _plot_exction_ratio(beta, ic, x_science, y_science, x_control=None, y_control=None):
+        """
+        Generates the qc plot for the extinction ratio fit.
+
+        Parameters
+        ----------
+        beta : float
+            Slope of fit.
+        ic : float
+            Intercept of fit.
+        x_science : np.ndarray
+            X data for science field.
+        y_science : np.ndarray
+            Y data for science field.
+        x_control : np.ndarray, optional
+            X data for control field.
+        y_control : np.ndarray, optional
+            Y data for control field.
+
+        """
+
+        # Import
+        import matplotlib.pyplot as plt
+
+        # Create figure
+        if x_control is not None:
+            fig, ax = plt.subplots(nrows=1, ncols=2, figsize=[20, 10])
+        else:
+            fig, ax0 = plt.subplots(nrows=1, ncols=1, figsize=[10, 10])
+            ax = [ax0]
+
+        # Plot science field data
+        ax[0].scatter(x_science, y_science, s=5, c="black", lw=0)
+
+        # Plot control field data
+        if x_control is not None:
+            ax[1].scatter(x_control, y_control, s=5, c="black", lw=0)
+
+        # Plot fit
+        xd = np.arange(np.min(x_science) - 0.5, np.max(x_science) + 0.5, 1)
+        ax[0].plot(xd, beta * xd + ic)
+
+        # Show plot
+        plt.show()
 
 
 # ----------------------------------------------------------------------
