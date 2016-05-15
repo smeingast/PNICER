@@ -165,11 +165,11 @@ class Magnitudes(DataBase):
                                 np.ma.masked_invalid(control.features[l + 1]) for l in range(self.n_features - 1)])
 
             # Intrinsic colors
-            color_0 = [np.nanmean(control.features[l] - control.features[l + 1]) for l in range(control.n_features - 1)]
+            _color0 = [np.nanmean(control.features[l] - control.features[l + 1]) for l in range(control.n_features - 1)]
 
         # If no control field is given, set the matrix to 0 and the intrinsic colors manually
         elif color0 is not None:
-            cov_cf, color_0 = np.ma.zeros((self.n_features - 1, self.n_features - 1)), color0
+            cov_cf, _color0 = np.ma.zeros((self.n_features - 1, self.n_features - 1)), color0
 
             # Put manual color variance into matrix if given
             if color0_err is not None:
@@ -180,11 +180,11 @@ class Magnitudes(DataBase):
         else:
             raise ValueError("Must specify either control field or intrinsic colors")
 
+        # Set errors to large value for down-weighting
         errors = []
         for e in self.features_err:
-            a = e.copy()
-            a[~np.isfinite(a)] = 100
-            errors.append(a)
+            errors.append(e.copy())
+            errors[-1][~np.isfinite(errors[-1])] = 100
 
         # Calculate covariance matrix of errors in the science field
         cov_er = np.zeros([self.n_data, self.n_features - 1, self.n_features - 1])
@@ -197,11 +197,8 @@ class Magnitudes(DataBase):
             if i > 0:
                 cov_er[:, i, i - 1] = cov_er[:, i - 1, i] = -errors[i] ** 2
 
-        # Total covariance matrix
-        cov = cov_cf + cov_er
-
-        # Invert
-        cov_inv = np.linalg.inv(cov)
+        # Calculate total covariance matrix and invert
+        cov_inv = np.linalg.inv(cov_cf + cov_er)
 
         # Get b from the paper (equ. 12)
         upper = np.dot(cov_inv, k)
@@ -221,9 +218,9 @@ class Magnitudes(DataBase):
         scolors[:, bad_color] = np.nan
 
         # Calculate extinction (equation 13 in NICER paper)
-        ext = b[0, :] * (scolors[0, :] - color_0[0])
+        ext = b[0, :] * (scolors[0, :] - _color0[0])
         for i in range(1, self.n_features - 1):
-            ext += b[i, :] * (scolors[i, :] - color_0[i])
+            ext += b[i, :] * (scolors[i, :] - _color0[i])
 
         # Calculate variance
         var = 1 / lower
@@ -233,16 +230,16 @@ class Magnitudes(DataBase):
         # var = np.array([np.dot(b.data[:, idx], first[idx, :]) for idx in range(self.n_data)])
 
         # Generate intrinsic source color list
-        color_0 = np.repeat(color_0, self.n_data).reshape([len(color_0), self.n_data])
-        color_0[:, ~np.isfinite(ext)] = np.nan
+        color0_sources = np.repeat(_color0, self.n_data).reshape([len(_color0), self.n_data])
+        color0_sources[:, ~np.isfinite(ext)] = np.nan
 
         if min_features is not None:
             mask = np.where(np.sum(np.vstack(self._features_masks), axis=0, dtype=int) < min_features)[0]
-            ext[mask] = var[mask] = color_0[:, mask] = np.nan
+            ext[mask] = var[mask] = color0_sources[:, mask] = np.nan
 
         # ...and return :) Here, a Colors instance is returned!
         from pnicer.extinction import Extinction
-        return Extinction(db=self.mag2color(), extinction=ext.data, variance=var, color0=color_0)
+        return Extinction(db=self.mag2color(), extinction=ext.data, variance=var, color0=color0_sources)
 
     # ----------------------------------------------------------------------
     # noinspection PyPackageRequirements
