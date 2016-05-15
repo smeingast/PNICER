@@ -67,6 +67,22 @@ class Extinction:
         # Calculate de-reddened features
         self.features_dered = [f - self.extinction * v for f, v in zip(self.db.features, self.db.extvec.extvec)]
 
+    # ---------------------------------------------------------------------- #
+    #                              Magic methods                             #
+    # ---------------------------------------------------------------------- #
+
+    # ----------------------------------------------------------------------
+    def __len__(self):
+        return len(self.extinction)
+
+    # ----------------------------------------------------------------------
+    def __str__(self):
+        return str(self.extinction)
+
+    # ---------------------------------------------------------------------- #
+    #                            Instance methods                            #
+    # ---------------------------------------------------------------------- #
+
     # ----------------------------------------------------------------------
     def build_map(self, bandwidth, metric="median", frame="galactic", sampling=2, nicest=False, use_fwhm=False):
         """
