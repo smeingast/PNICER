@@ -579,7 +579,7 @@ def data2header(lon, lat, frame="icrs", proj_code="CAR", pixsize=1/3600, enlarge
 
     # Add size to header
     header["NAXIS1"], header["NAXIS2"] = naxis1, naxis2
-    header["CRPIX1"], header["CRPIX2"] = naxis1 / 2 - xdelta, naxis2 / 2 + ydelta
+    header["CRPIX1"], header["CRPIX2"] = naxis1 / 2 - xdelta, naxis2 / 2 - ydelta
 
     # Return Header
     return header

@@ -244,7 +244,7 @@ class ExtinctionMap:
         vmax = np.ceil(np.percentile(data[np.isfinite(data)], percentiles[1]) * r) / r
         return vmin, vmax
 
-        # ----------------------------------------------------------------------
+    # ----------------------------------------------------------------------
     def plot_map(self, path=None, figsize=10):
         """
         Method to plot extinction map.
@@ -287,11 +287,13 @@ class ExtinctionMap:
                 else:
                     fig.colorbar(im, cax=cax, label="Error (mag)")
 
+            # Plot source count map
             elif idx == 4:
                 vmin, vmax = self._get_vlim(data=self.num, percentiles=[1, 99], r=1)
                 im = ax.imshow(self.num, origin="lower", interpolation="nearest", cmap="binary", vmin=vmin, vmax=vmax)
                 fig.colorbar(im, cax=cax, label="N")
 
+            # Plot density map
             elif idx == 6:
                 vmin, vmax = self._get_vlim(data=self.rho, percentiles=[1, 99], r=10)
                 im = ax.imshow(self.rho, origin="lower", interpolation="nearest", cmap="binary", vmin=vmin, vmax=vmax)
