@@ -504,7 +504,7 @@ def centroid_sphere(lon, lat, units="radian"):
 
 
 # ----------------------------------------------------------------------
-def data2header(lon, lat, frame="icrs", proj_code="CAR", pixsize=1/3600, enlarge=1.05, **kwargs):
+def data2header(lon, lat, frame, proj_code="CAR", pixsize=1/3600, enlarge=1.05, **kwargs):
     """
     Create an astropy Header instance from a given dataset (longitude/latitude). The world coordinate system can be
     chosen between galactic and equatorial; all WCS projections are supported. Very useful for creating a quick WCS
@@ -517,7 +517,7 @@ def data2header(lon, lat, frame="icrs", proj_code="CAR", pixsize=1/3600, enlarge
     lat : list, np.array
         Input list or array of latitude coordinates in degrees.
     frame : str, optional
-        World coordinate system frame of input data ('icrs' or 'galactic')
+        World coordinate system frame of input data ('icrs' or 'galactic').
     proj_code : str, optional
         Projection code. (e.g. 'TAN', 'AIT', 'CAR', etc)
     pixsize : int, float, optional
@@ -583,3 +583,46 @@ def data2header(lon, lat, frame="icrs", proj_code="CAR", pixsize=1/3600, enlarge
 
     # Return Header
     return header
+
+
+# ----------------------------------------------------------------------
+def data2grid(lon, lat, frame, proj_code="CAR", pixsize=5. / 60, **kwargs):
+    """
+    Method to build a WCS grid with a valid projection given a pixel scale.
+
+    Parameters
+    ----------
+    lon : list, np.array
+        Input list or array of longitude coordinates in degrees.
+    lat : list, np.array
+        Input list or array of latitude coordinates in degrees.
+    frame : str, optional
+        World coordinate system frame of input data ('icrs' or 'galactic').
+    proj_code : str, optional
+        Any WCS projection code (e.g. CAR, TAN, etc.)
+    pixsize : int, float, optional
+        Pixel size of grid. Default is 10 arcminutes.
+    kwargs
+        Additioanl projection parameters if required (e.g. pv2_1=-30, pv2_2=0 for a given COE projection)
+
+    Returns
+    -------
+    tuple
+        Tuple containing the header and the world coordinate grids (lon and lat)
+
+    """
+
+    # Create header from data
+    header = data2header(lon=lon, lat=lat, frame=frame, proj_code=proj_code, pixsize=pixsize, **kwargs)
+
+    # Get WCS
+    mywcs = wcs.WCS(header=header)
+
+    # Create image coordinate grid
+    image_grid = np.meshgrid(np.arange(0, header["NAXIS1"], 1), np.arange(0, header["NAXIS2"], 1))
+
+    # Convert to world coordinates and get WCS grid for this projection
+    world_grid = mywcs.wcs_pix2world(image_grid[0], image_grid[1], 0)
+
+    # Return header and grid
+    return header, world_grid

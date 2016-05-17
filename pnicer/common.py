@@ -10,7 +10,8 @@ from itertools import combinations
 from sklearn.neighbors import NearestNeighbors
 
 # from pnicer.user import Magnitudes, Colors
-from pnicer.utils import weighted_avg, caxes, mp_kde, data2header, caxes_delete_ticklabels, round_partial
+from pnicer.utils import weighted_avg, caxes, mp_kde, data2grid, caxes_delete_ticklabels, round_partial, \
+    centroid_sphere, distance_sky
 
 
 # ---------------------------------------------------------------------- #
@@ -453,43 +454,6 @@ class DataBase:
         # Return list of combinations.
         return combination_instances
 
-    # ----------------------------------------------------------------------
-    def _build_wcs_grid(self, proj_code="CAR", pixsize=5. / 60, **kwargs):
-        """
-        Method to build a WCS grid with a valid projection given a pixel scale.
-
-        Parameters
-        ----------
-        proj_code : str, optional
-            Any WCS projection code (e.g. CAR, TAN, etc.)
-        pixsize : int, float, optional
-            Pixel size of grid. Default is 10 arcminutes.
-        kwargs
-            Additioanl projection parameters if required (e.g. pv2_1=-30, pv2_2=0 for a given COE projection)
-
-        Returns
-        -------
-        tuple
-            Tuple containing the header and the world coordinate grids (lon and lat)
-
-        """
-
-        # Create header from data
-        header = data2header(lon=self._lon, lat=self._lat, frame=self._frame, proj_code=proj_code, pixsize=pixsize,
-                             **kwargs)
-
-        # Get WCS
-        mywcs = wcs.WCS(header=header)
-
-        # Create image coordinate grid
-        image_grid = np.meshgrid(np.arange(0, header["NAXIS1"], 1), np.arange(0, header["NAXIS2"], 1))
-
-        # Convert to world coordinates and get WCS grid for this projection
-        world_grid = mywcs.wcs_pix2world(image_grid[0], image_grid[1], 0)
-
-        # Return header and grid
-        return header, world_grid
-
     # ---------------------------------------------------------------------- #
     #                            Plotting methods                            #
     # ---------------------------------------------------------------------- #
@@ -525,20 +489,19 @@ class DataBase:
         """
 
         # Build a wcs gruid with the defaults
-        header, _ = self._build_wcs_grid()
+        header, _ = self._build_wcs_grid(proj_code="CAR", pixsize=1/60)
 
         # Get footprint coordinates
         flon, flat = wcs.WCS(header=header).calc_footprint().T
 
         # Calculate centroid
-        from pnicer.utils import centroid_sphere, distance_sky
         clon, clat = centroid_sphere(lon=flon, lat=flat, units="degree")
 
         # Maximize distances to the field edges in longitude
         left = flon[:2][np.argmax(distance_sky(lon1=flon[:2], lat1=0, lon2=clon, lat2=0, unit="degree"))]
         right = flon[2:][np.argmax(distance_sky(lon1=flon[2:], lat1=0, lon2=clon, lat2=0, unit="degree"))]
 
-        # Maximize distances in latititude
+        # Maximize distances in latitude
         top, bottom = np.max(flat), np.min(flat)
 
         return [(left, right), (bottom, top)]
@@ -598,6 +561,30 @@ class DataBase:
         else:
             plt.savefig(path, bbox_inches='tight')
         plt.close()
+
+    # ----------------------------------------------------------------------
+    def _build_wcs_grid(self, proj_code="CAR", pixsize=10/60, **kwargs):
+        """
+        Generates a WCS grid.
+
+        Parameters
+        ----------
+        proj_code : str, optional
+            Projection code. Default is 'CAR'.
+        pixsize : int, float, optional
+            Pixel soze of grid.
+        kwargs
+            Any additional header arguments for the projection (e.g. PV2_1, ect.)
+
+        Returns
+        -------
+        tuple
+            Tuple holding an astropy fits header and the world coordinate grid
+
+        """
+
+        return data2grid(lon=self._lon, lat=self._lat, frame=self._frame, proj_code=proj_code, pixsize=pixsize,
+                         **kwargs)
 
     # ----------------------------------------------------------------------
     def _gridspec_world(self, pixsize, ax_size, proj_code):
@@ -1019,7 +1006,7 @@ class DataBase:
         Returns
         -------
         Extinction
-            Extinction instance with the calcualted extinction and errors.
+            Extinction instance with the calculated extinction and errors.
 
         """
 
