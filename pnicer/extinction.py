@@ -8,6 +8,7 @@ from astropy.io import fits
 from itertools import repeat
 from multiprocessing.pool import Pool
 
+from pnicer.common import Coordinates
 from pnicer.utils import distance_sky
 
 
@@ -16,14 +17,17 @@ from pnicer.utils import distance_sky
 # noinspection PyProtectedMember
 class Extinction:
 
-    def __init__(self, db, extinction, variance=None, color0=None):
+    # Useful constants
+    std2fwhm = 2 * np.sqrt(2 * np.log(2))
+
+    def __init__(self, coordinates, extinction, variance=None, color0=None):
         """
         Class for extinction measurements.
 
         Parameters
         ----------
-        db : pnicer.common.DataBase
-            Base class from which the extinction was derived.
+        coordinates : SkyCoord
+            Astropy SkyCoord instance.
         extinction : np.ndarray
             Extinction data.
         variance : np.ndarray, optional
@@ -33,15 +37,8 @@ class Extinction:
 
         """
 
-        # Avoid circular import
-        from pnicer.common import DataBase
-
-        # Check if db is really a DataBase instance
-        if not isinstance(db, DataBase):
-            raise ValueError("Passed instance database incompatible")
-
         # Set attributes
-        self.db = db
+        self.coordinates = Coordinates(coordinates=coordinates)
         self.extinction = extinction
         self.variance = np.zeros_like(extinction) if variance is None else variance
         self.color0 = np.zeros_like(extinction) if color0 is None else color0
@@ -80,25 +77,24 @@ class Extinction:
 
         return np.isfinite(self.extinction)
 
-    # ----------------------------------------------------------------------
-    @property
-    def features_dered(self):
-        """
-        Dereddened features.
-
-        Returns
-        -------
-        list
-
-        """
-
-        return [f - self.extinction * v for f, v in zip(self.db.features, self.db.extvec.extvec)]
+    # TODO: Move this to DataBase routine
+    # # ----------------------------------------------------------------------
+    # @property
+    # def features_dered(self):
+    #     """
+    #     Dereddened features.
+    #
+    #     Returns
+    #     -------
+    #     list
+    #
+    #     """
+    #
+    #     return [f - self.extinction * v for f, v in zip(self.db.features, self.db.extvec.extvec)]
 
     # ---------------------------------------------------------------------- #
     #                            Instance methods                            #
     # ---------------------------------------------------------------------- #
-
-    std2fwhm = 2 * np.sqrt(2 * np.log(2))
 
     # ----------------------------------------------------------------------
     def build_map(self, bandwidth, metric="median", sampling=2, nicest=False, use_fwhm=False):
@@ -138,7 +134,7 @@ class Extinction:
         pixsize = bandwidth / sampling
 
         # Create WCS grid
-        grid_header, (grid_lon, grid_lat) = self.db._build_wcs_grid(proj_code="CAR", pixsize=pixsize)
+        grid_header, (grid_lon, grid_lat) = self.coordinates.build_wcs_grid(proj_code="CAR", pixsize=pixsize)
 
         # Adjust bandwidth in case FWHM is to be used
         if use_fwhm:
@@ -153,10 +149,10 @@ class Extinction:
         # Run extinction mapping for each pixel
         with Pool() as pool:
             mp = pool.starmap(get_extinction_pixel,
-                              zip(grid_lon.ravel(), grid_lat.ravel(), repeat(self.db._lon[self._clean_index]),
-                                  repeat(self.db._lat[self._clean_index]), repeat(self.extinction[self._clean_index]),
-                                  repeat(self.variance[self._clean_index]), repeat(bandwidth), repeat(metric),
-                                  repeat(nicest)))
+                              zip(grid_lon.ravel(), grid_lat.ravel(), repeat(self.coordinates.lon[self._clean_index]),
+                                  repeat(self.coordinates.lat[self._clean_index]),
+                                  repeat(self.extinction[self._clean_index]), repeat(self.variance[self._clean_index]),
+                                  repeat(bandwidth), repeat(metric), repeat(nicest)))
 
         # Unpack results
         map_ext, map_var, map_num, map_rho = list(zip(*mp))
@@ -183,8 +179,8 @@ class Extinction:
         """
 
         # Create FITS columns
-        col1 = fits.Column(name="Lon", format="D", array=self.db._lon)
-        col2 = fits.Column(name="Lat", format="D", array=self.db._lat)
+        col1 = fits.Column(name="Lon", format="D", array=self.coordinates.lon)
+        col2 = fits.Column(name="Lat", format="D", array=self.coordinates.lat)
         col3 = fits.Column(name="Extinction", format="E", array=self.extinction)
         col4 = fits.Column(name="Variance", format="E", array=self.variance)
 
@@ -297,7 +293,7 @@ class ExtinctionMap:
             elif idx == 6:
                 vmin, vmax = self._get_vlim(data=self.rho, percentiles=[1, 99], r=10)
                 im = ax.imshow(self.rho, origin="lower", interpolation="nearest", cmap="binary", vmin=vmin, vmax=vmax)
-                fig.colorbar(im, cax=cax, label="N")
+                fig.colorbar(im, cax=cax, label=r"$\rho$")
 
             # Grab axes
             lon, lat = ax.coords[0], ax.coords[1]

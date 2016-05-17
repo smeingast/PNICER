@@ -45,7 +45,7 @@ class DataBase:
         self.extvec = ExtinctionVector(extvec=extvec)
 
         # Set coordinate attributes
-        self.coordinates = coordinates
+        self.coordinates = Coordinates(coordinates=coordinates)
 
         # Define combination properties determined while running PNICER
         # TODO: Where exactly is this used?
@@ -215,76 +215,6 @@ class DataBase:
         return np.prod(np.vstack([self._features_masks[i] for i in idx]), axis=0, dtype=bool)
 
     # ---------------------------------------------------------------------- #
-    #                          Coordinate properties                         #
-    # ---------------------------------------------------------------------- #
-
-    # ----------------------------------------------------------------------
-    @property
-    def _frame(self):
-        """
-        Coordinate frame type
-
-        Returns
-        -------
-        str
-
-        """
-
-        if self.coordinates is None:
-            return None
-        else:
-
-            # Get frame
-            frame = self.coordinates.frame.name
-
-            # Check coordinate system
-            if frame not in ["icrs", "galactic"]:
-                raise ValueError("Frame '{0:s}' not suppoerted".format(self._frame))
-
-            # Otherwise return
-            return self.coordinates.frame.name
-
-    # ----------------------------------------------------------------------
-    # noinspection PyUnresolvedReferences
-    @property
-    def _lon(self):
-        """
-        Longitude coordinate array.
-
-        Returns
-        -------
-        np.ndarray
-
-        """
-
-        if self._frame is None:
-            return None
-        elif self._frame == "galactic":
-            return self.coordinates.l.degree
-        elif self._frame == "icrs":
-            return self.coordinates.ra.degree
-
-    # ----------------------------------------------------------------------
-    # noinspection PyUnresolvedReferences
-    @property
-    def _lat(self):
-        """
-        Latitude coordinate array.
-
-        Returns
-        -------
-        np.ndarray
-
-        """
-
-        if self._frame is None:
-            return None
-        elif self._frame == "galactic":
-            return self.coordinates.b.degree
-        elif self._frame == "icrs":
-            return self.coordinates.dec.degree
-
-    # ---------------------------------------------------------------------- #
     #                             Helper methods                             #
     # ---------------------------------------------------------------------- #
 
@@ -412,7 +342,7 @@ class DataBase:
 
         # In case no coordinates are supplied they need to be masked
         if self.coordinates is not None:
-            coordinates = self.coordinates[self._strict_mask]
+            coordinates = self.coordinates.coordinates[self._strict_mask]
         else:
             coordinates = None
 
@@ -489,7 +419,7 @@ class DataBase:
         """
 
         # Build a wcs gruid with the defaults
-        header, _ = self._build_wcs_grid(proj_code="CAR", pixsize=1/60)
+        header, _ = self.coordinates.build_wcs_grid(proj_code="CAR", pixsize=1/60)
 
         # Get footprint coordinates
         flon, flat = wcs.WCS(header=header).calc_footprint().T
@@ -563,30 +493,6 @@ class DataBase:
         plt.close()
 
     # ----------------------------------------------------------------------
-    def _build_wcs_grid(self, proj_code="CAR", pixsize=10/60, **kwargs):
-        """
-        Generates a WCS grid.
-
-        Parameters
-        ----------
-        proj_code : str, optional
-            Projection code. Default is 'CAR'.
-        pixsize : int, float, optional
-            Pixel soze of grid.
-        kwargs
-            Any additional header arguments for the projection (e.g. PV2_1, ect.)
-
-        Returns
-        -------
-        tuple
-            Tuple holding an astropy fits header and the world coordinate grid
-
-        """
-
-        return data2grid(lon=self._lon, lat=self._lat, frame=self._frame, proj_code=proj_code, pixsize=pixsize,
-                         **kwargs)
-
-    # ----------------------------------------------------------------------
     def _gridspec_world(self, pixsize, ax_size, proj_code):
         """
         Creates all necessary instances for plotting with a grid in world coordinates.
@@ -610,7 +516,7 @@ class DataBase:
         from matplotlib.gridspec import GridSpec
 
         # Get a WCS grid
-        header, grid_world = self._build_wcs_grid(proj_code=proj_code, pixsize=pixsize)
+        header, grid_world = self.coordinates.build_wcs_grid(proj_code=proj_code, pixsize=pixsize)
 
         # Get aspect ratio of grid
         ar = header["NAXIS2"] / header["NAXIS1"]
@@ -630,7 +536,8 @@ class DataBase:
         axes = [plt.subplot(grid_plot[idx], projection=wcsaxes.WCS(header=header)) for idx in range(self.n_features)]
 
         # Generate labels
-        llon, llat = "GLON" if "gal" in self._frame else "RA", "GLAT" if "gal" in self._frame else "DEC"
+        llon, llat = "GLON" if "gal" in self.coordinates.frame else "RA", "GLAT" \
+            if "gal" in self.coordinates.frame else "DEC"
 
         # Add feature labels
         [axes[idx].annotate(self.features_names[idx], xy=[0.5, 1.01], xycoords="axes fraction",
@@ -777,8 +684,9 @@ class DataBase:
             # Grab axes
             ax = axes[idx]
 
-            ax.scatter(self._lon[self._features_masks[idx]][::skip], self._lat[self._features_masks[idx]][::skip],
-                       transform=ax.get_transform(self._frame), **kwargs)
+            ax.scatter(self.coordinates.lon[self._features_masks[idx]][::skip],
+                       self.coordinates.lat[self._features_masks[idx]][::skip],
+                       transform=ax.get_transform(self.coordinates.frame), **kwargs)
 
             # Set axes limits
             ax.set_xlim(lim[0])
@@ -820,8 +728,8 @@ class DataBase:
 
             # Get density
             xgrid = np.vstack([grid_world[0].ravel(), grid_world[1].ravel()]).T
-            data = np.vstack([self._lon[self._features_masks[idx]][::skip],
-                              self._lat[self._features_masks[idx]][::skip]]).T
+            data = np.vstack([self.coordinates.lon[self._features_masks[idx]][::skip],
+                              self.coordinates.lat[self._features_masks[idx]][::skip]]).T
             dens = mp_kde(grid=xgrid, data=data, bandwidth=bandwidth, shape=grid_world[0].shape, kernel=kernel,
                           norm=False)
 
@@ -987,6 +895,7 @@ class DataBase:
         return out_ext, out_var, out_col
 
     # ----------------------------------------------------------------------
+    # noinspection PyUnresolvedReferences
     def _pnicer_combinations(self, control, comb, sampling, kernel):
         """
         PNICER base implementation for combinations. Basically calls the pnicer_single implementation for all
@@ -1095,7 +1004,109 @@ class DataBase:
 
         # Return Extinction instance
         from pnicer.extinction import Extinction
-        return Extinction(db=self, extinction=ext, variance=var, color0=np.array(self._color0))
+        return Extinction(coordinates=self.coordinates, extinction=ext, variance=var, color0=np.array(self._color0))
+
+
+# ---------------------------------------------------------------------- #
+# ---------------------------------------------------------------------- #
+class Coordinates:
+
+    def __init__(self, coordinates):
+        """
+        Additional coordinates class to add a few convenient attributes to Sky coordinates.
+
+        Parameters
+        ----------
+        coordinates : SkyCoord
+            Astropy SkyCoord object.
+
+        """
+
+        self.coordinates = coordinates
+
+    # ----------------------------------------------------------------------
+    def __len__(self):
+        return len(self.coordinates)
+
+    # ----------------------------------------------------------------------
+    @property
+    def frame(self):
+        """
+        Coordinate frame type
+
+        Returns
+        -------
+        str
+
+        """
+
+        # Check coordinate system
+        if self.coordinates.frame.name not in ["icrs", "galactic"]:
+            raise ValueError("Frame '{0:s}' not supported".format(self.coordinates.frame.name))
+
+        # Otherwise return
+        return self.coordinates.frame.name
+
+    # ----------------------------------------------------------------------
+    @property
+    def lon(self):
+        """
+        Longitude coordinate array.
+
+        Returns
+        -------
+        np.ndarray
+
+        """
+
+        if self.frame is None:
+            return None
+        elif self.frame == "galactic":
+            return self.coordinates.l.degree
+        elif self.frame == "icrs":
+            return self.coordinates.ra.degree
+
+    # ----------------------------------------------------------------------
+    @property
+    def lat(self):
+        """
+        Latitude coordinate array.
+
+        Returns
+        -------
+        np.ndarray
+
+        """
+
+        if self.frame is None:
+            return None
+        elif self.frame == "galactic":
+            return self.coordinates.b.degree
+        elif self.frame == "icrs":
+            return self.coordinates.dec.degree
+
+    # ----------------------------------------------------------------------
+    def build_wcs_grid(self, proj_code="CAR", pixsize=10 / 60, **kwargs):
+        """
+        Generates a WCS grid.
+
+        Parameters
+        ----------
+        proj_code : str, optional
+            Projection code. Default is 'CAR'.
+        pixsize : int, float, optional
+            Pixel soze of grid.
+        kwargs
+            Any additional header arguments for the projection (e.g. PV2_1, ect.)
+
+        Returns
+        -------
+        tuple
+            Tuple holding an astropy fits header and the world coordinate grid
+
+        """
+
+        return data2grid(lon=self.lon, lat=self.lat, frame=self.frame, proj_code=proj_code, pixsize=pixsize, **kwargs)
 
 
 # ---------------------------------------------------------------------- #

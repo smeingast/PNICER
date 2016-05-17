@@ -237,9 +237,10 @@ class Magnitudes(DataBase):
             mask = np.where(np.sum(np.vstack(self._features_masks), axis=0, dtype=int) < min_features)[0]
             ext[mask] = var[mask] = color0_sources[:, mask] = np.nan
 
-        # ...and return :) Here, a Colors instance is returned!
+        # Return Extinction
         from pnicer.extinction import Extinction
-        return Extinction(db=self.mag2color(), extinction=ext.data, variance=var, color0=color0_sources)
+        return Extinction(coordinates=self.coordinates.coordinates, extinction=ext.data, variance=var,
+                          color0=color0_sources)
 
     # ----------------------------------------------------------------------
     # noinspection PyPackageRequirements
