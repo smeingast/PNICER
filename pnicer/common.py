@@ -419,7 +419,7 @@ class DataBase:
         """
 
         # Build a wcs gruid with the defaults
-        header, _ = self.coordinates.build_wcs_grid(proj_code="CAR", pixsize=1/60)
+        header, _ = self.coordinates.build_wcs_grid(proj_code="TAN", pixsize=1/60)
 
         # Get footprint coordinates
         flon, flat = wcs.WCS(header=header).calc_footprint().T
@@ -673,7 +673,7 @@ class DataBase:
         """
 
         # Get figure and axes
-        fig, axes, _, header = self._gridspec_world(pixsize=10 / 60, ax_size=ax_size, proj_code="CAR")
+        fig, axes, _, header = self._gridspec_world(pixsize=10 / 60, ax_size=ax_size, proj_code="TAN")
 
         # Get plot limits
         lim = wcs.WCS(header=header).wcs_world2pix(*self._plotrange_world, 0)
@@ -718,7 +718,7 @@ class DataBase:
         """
 
         # Get figure, axes, and wcs grid
-        fig, axes, grid_world, header = self._gridspec_world(pixsize=bandwidth / 2, ax_size=ax_size, proj_code="CAR")
+        fig, axes, grid_world, header = self._gridspec_world(pixsize=bandwidth / 2, ax_size=ax_size, proj_code="TAN")
 
         # To avoid editor warning
         scale = 1
@@ -1086,14 +1086,14 @@ class Coordinates:
             return self.coordinates.dec.degree
 
     # ----------------------------------------------------------------------
-    def build_wcs_grid(self, proj_code="CAR", pixsize=10 / 60, **kwargs):
+    def build_wcs_grid(self, proj_code="TAN", pixsize=10 / 60, **kwargs):
         """
         Generates a WCS grid.
 
         Parameters
         ----------
         proj_code : str, optional
-            Projection code. Default is 'CAR'.
+            Projection code. Default is 'TAN'.
         pixsize : int, float, optional
             Pixel soze of grid.
         kwargs

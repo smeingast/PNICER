@@ -504,7 +504,7 @@ def centroid_sphere(lon, lat, units="radian"):
 
 
 # ----------------------------------------------------------------------
-def data2header(lon, lat, frame, proj_code="CAR", pixsize=1/3600, enlarge=1.05, **kwargs):
+def data2header(lon, lat, frame, proj_code="TAN", pixsize=1/3600, enlarge=1.05, **kwargs):
     """
     Create an astropy Header instance from a given dataset (longitude/latitude). The world coordinate system can be
     chosen between galactic and equatorial; all WCS projections are supported. Very useful for creating a quick WCS
@@ -519,7 +519,7 @@ def data2header(lon, lat, frame, proj_code="CAR", pixsize=1/3600, enlarge=1.05, 
     frame : str, optional
         World coordinate system frame of input data ('icrs' or 'galactic').
     proj_code : str, optional
-        Projection code. (e.g. 'TAN', 'AIT', 'CAR', etc)
+        Projection code. (e.g. 'TAN', 'AIT', 'CAR', etc). Default is 'TAN'
     pixsize : int, float, optional
         Pixel size of generated header in degrees. Not so important for plots, but still required.
     enlarge : float, optional
@@ -574,6 +574,7 @@ def data2header(lon, lat, frame, proj_code="CAR", pixsize=1/3600, enlarge=1.05, 
     naxis2 = (np.ceil((y.max()) - np.floor(y.min())) * enlarge).astype(int)
 
     # Calculate pixel shift relative to centroid (caused by anisotropic distribution of sources)
+    # TODO: Check if this yields correct results
     xdelta = (x.min() + x.max()) / 2
     ydelta = (y.min() + y.max()) / 2
 
@@ -586,7 +587,7 @@ def data2header(lon, lat, frame, proj_code="CAR", pixsize=1/3600, enlarge=1.05, 
 
 
 # ----------------------------------------------------------------------
-def data2grid(lon, lat, frame, proj_code="CAR", pixsize=5. / 60, **kwargs):
+def data2grid(lon, lat, frame, proj_code="TAN", pixsize=5. / 60, **kwargs):
     """
     Method to build a WCS grid with a valid projection given a pixel scale.
 
@@ -599,7 +600,7 @@ def data2grid(lon, lat, frame, proj_code="CAR", pixsize=5. / 60, **kwargs):
     frame : str, optional
         World coordinate system frame of input data ('icrs' or 'galactic').
     proj_code : str, optional
-        Any WCS projection code (e.g. CAR, TAN, etc.)
+        Any WCS projection code (e.g. CAR, TAN, etc.). Default is 'TAN'.
     pixsize : int, float, optional
         Pixel size of grid. Default is 10 arcminutes.
     kwargs

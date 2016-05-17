@@ -134,7 +134,7 @@ class Extinction:
         pixsize = bandwidth / sampling
 
         # Create WCS grid
-        grid_header, (grid_lon, grid_lat) = self.coordinates.build_wcs_grid(proj_code="CAR", pixsize=pixsize)
+        grid_header, (grid_lon, grid_lat) = self.coordinates.build_wcs_grid(proj_code="TAN", pixsize=pixsize)
 
         # Adjust bandwidth in case FWHM is to be used
         if use_fwhm:
