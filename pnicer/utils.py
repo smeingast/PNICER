@@ -573,7 +573,7 @@ def data2header(lon, lat, frame, proj_code="CAR", pixsize=1/3600, enlarge=1.05, 
     naxis1 = (np.ceil((x.max()) - np.floor(x.min())) * enlarge).astype(int)
     naxis2 = (np.ceil((y.max()) - np.floor(y.min())) * enlarge).astype(int)
 
-    # Calculate pixel shift relative to centroid (caused by unisotropic distribution of sources)
+    # Calculate pixel shift relative to centroid (caused by anisotropic distribution of sources)
     xdelta = (x.min() + x.max()) / 2
     ydelta = (y.min() + y.max()) / 2
 

@@ -258,11 +258,11 @@ class ExtinctionMap:
         from matplotlib import pyplot as plt
         from matplotlib.gridspec import GridSpec
 
-        fig = plt.figure(figsize=[figsize, 4 * 0.9 * figsize * (self.shape[0] / self.shape[1])])
-        grid = GridSpec(ncols=2, nrows=4, bottom=0.1, top=0.9, left=0.1, right=0.9, hspace=0.08, wspace=0,
+        fig = plt.figure(figsize=[figsize, 3 * 0.9 * figsize * (self.shape[0] / self.shape[1])])
+        grid = GridSpec(ncols=2, nrows=3, bottom=0.1, top=0.9, left=0.1, right=0.9, hspace=0.08, wspace=0,
                         height_ratios=[1, 1, 1, 1], width_ratios=[1, 0.05])
 
-        for idx in range(0, 8, 2):
+        for idx in range(0, 6, 2):
 
             ax = plt.subplot(grid[idx], projection=wcsaxes.WCS(self.fits_header))
             cax = plt.subplot(grid[idx + 1])
@@ -289,22 +289,16 @@ class ExtinctionMap:
                 im = ax.imshow(self.num, origin="lower", interpolation="nearest", cmap="binary", vmin=vmin, vmax=vmax)
                 fig.colorbar(im, cax=cax, label="N")
 
-            # Plot density map
-            elif idx == 6:
-                vmin, vmax = self._get_vlim(data=self.rho, percentiles=[1, 99], r=10)
-                im = ax.imshow(self.rho, origin="lower", interpolation="nearest", cmap="binary", vmin=vmin, vmax=vmax)
-                fig.colorbar(im, cax=cax, label=r"$\rho$")
-
             # Grab axes
             lon, lat = ax.coords[0], ax.coords[1]
 
             # Add axes labels
-            if idx == 6:
+            if idx == 4:
                 lon.set_axislabel("Longitude")
             lat.set_axislabel("Latitude")
 
             # Hide tick labels
-            if idx != 6:
+            if idx != 4:
                 lon.set_ticklabel_position("")
 
         # Save or show figure
