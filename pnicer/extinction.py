@@ -4,6 +4,7 @@ import wcsaxes
 import warnings
 import numpy as np
 
+from copy import copy
 from astropy.io import fits
 from itertools import repeat
 from multiprocessing.pool import Pool
@@ -58,6 +59,11 @@ class Extinction:
     # ----------------------------------------------------------------------
     def __str__(self):
         return str(self.extinction)
+
+    # ----------------------------------------------------------------------
+    def __iter__(self):
+        for x in self.extinction:
+            yield x
 
     # ---------------------------------------------------------------------- #
     #                               Properties                               #
@@ -241,6 +247,7 @@ class ExtinctionMap:
         return vmin, vmax
 
     # ----------------------------------------------------------------------
+    # noinspection PyUnresolvedReferences
     def plot_map(self, path=None, figsize=10):
         """
         Method to plot extinction map.
@@ -255,12 +262,17 @@ class ExtinctionMap:
         """
 
         # Import
+        import matplotlib
         from matplotlib import pyplot as plt
         from matplotlib.gridspec import GridSpec
 
         fig = plt.figure(figsize=[figsize, 3 * 0.9 * figsize * (self.shape[0] / self.shape[1])])
         grid = GridSpec(ncols=2, nrows=3, bottom=0.1, top=0.9, left=0.1, right=0.9, hspace=0.08, wspace=0,
-                        height_ratios=[1, 1, 1, 1], width_ratios=[1, 0.05])
+                        height_ratios=[1, 1, 1], width_ratios=[1, 0.05])
+
+        # Set cmap
+        cmap = copy(matplotlib.cm.binary)
+        cmap.set_bad("#DC143C", 1.)
 
         for idx in range(0, 6, 2):
 
@@ -269,15 +281,15 @@ class ExtinctionMap:
 
             # Plot Extinction map
             if idx == 0:
-                vmin, vmax = self._get_vlim(data=self.map, percentiles=[1, 99], r=10)
-                im = ax.imshow(self.map, origin="lower", interpolation="nearest", cmap="binary", vmin=vmin, vmax=vmax)
+                vmin, vmax = self._get_vlim(data=self.map, percentiles=[0.1, 90], r=100)
+                im = ax.imshow(self.map, origin="lower", interpolation="nearest", vmin=vmin, vmax=vmax, cmap=cmap)
                 fig.colorbar(im, cax=cax, label="Extinction (mag)")
 
             # Plot error map
             elif idx == 2:
                 vmin, vmax = self._get_vlim(data=np.sqrt(self.var), percentiles=[1, 90], r=100)
-                im = ax.imshow(np.sqrt(self.var), origin="lower", interpolation="nearest", cmap="binary", vmin=vmin,
-                               vmax=vmax)
+                im = ax.imshow(np.sqrt(self.var), origin="lower", interpolation="nearest", vmin=vmin, vmax=vmax,
+                               cmap=cmap)
                 if self.metric == "median":
                     fig.colorbar(im, cax=cax, label="MAD (mag)")
                 else:
@@ -286,7 +298,7 @@ class ExtinctionMap:
             # Plot source count map
             elif idx == 4:
                 vmin, vmax = self._get_vlim(data=self.num, percentiles=[1, 99], r=1)
-                im = ax.imshow(self.num, origin="lower", interpolation="nearest", cmap="binary", vmin=vmin, vmax=vmax)
+                im = ax.imshow(self.num, origin="lower", interpolation="nearest", vmin=vmin, vmax=vmax, cmap=cmap)
                 fig.colorbar(im, cax=cax, label="N")
 
             # Grab axes
