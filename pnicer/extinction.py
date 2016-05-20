@@ -347,7 +347,17 @@ class ExtinctionMap:
 
 # ----------------------------------------------------------------------
 def _get_weight_func(metric, bandwidth):
-    # TODO: Add docstrings.
+    """
+    Defines the weight function for extinction mapping.
+
+    Parameters
+    ----------
+    metric : str
+        The mtric to be used. One of 'uniform', 'triangular', 'gaussian', 'epanechnikov'
+    bandwidth : int, float
+        Bandwidth of metric (kernel).
+
+    """
 
     if metric == "uniform":
         def wfunc(wdis):
@@ -355,20 +365,27 @@ def _get_weight_func(metric, bandwidth):
             Returns
             -------
             float, np.ndarray
+
             """
             return np.ones_like(wdis)
 
     elif metric == "triangular":
+        # noinspection PyUnresolvedReferences
         def wfunc(wdis):
-            return 1 - np.abs(wdis / bandwidth)
+            val = 1 - np.abs(wdis / bandwidth)
+            val[val < 0] = 0
+            return val
 
     elif metric == "gaussian":
         def wfunc(wdis):
             return np.exp(-0.5 * (wdis / bandwidth) ** 2)
 
     elif metric == "epanechnikov":
+        # noinspection PyUnresolvedReferences
         def wfunc(wdis):
-            return 1 - (wdis / bandwidth) ** 2
+            val = 1 - (wdis / bandwidth) ** 2
+            val[val < 0] = 0
+            return val
 
     else:
         raise TypeError("metric {0:s} not implemented".format(metric))
@@ -449,9 +466,6 @@ def get_extinction_pixel(lon_grid, lat_grid, lon_sources, lat_sources, ext, var,
 
     # Get spatial weights:
     weights_spatial = wfunc(wdis=dis)
-
-    # Set negativ weights to 0
-    weights_spatial[weights_spatial < 0] = 0
 
     # Get approximate integral and normalize weights
     dummy = np.arange(-100, 100, 0.01)
