@@ -44,7 +44,11 @@ def distance_sky(lon1, lat1, lon2, lat2, unit="radians"):
     b1, b2 = np.radians(lat1) if "deg" in unit else lat1, np.radians(lat2) if "deg" in unit else lat2
 
     # Return haversine distance
-    return 2 * np.arcsin(np.sqrt(np.sin((b1 - b2) / 2.) ** 2 + np.cos(b1) * np.cos(b2) * np.sin((l1 - l2) / 2.) ** 2))
+    dis = 2 * np.arcsin(np.sqrt(np.sin((b1 - b2) / 2.) ** 2 + np.cos(b1) * np.cos(b2) * np.sin((l1 - l2) / 2.) ** 2))
+    if "deg" in unit:
+        return np.rad2deg(dis)
+    else:
+        return dis
 
 
 # ----------------------------------------------------------------------
