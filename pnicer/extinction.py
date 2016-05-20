@@ -414,38 +414,23 @@ def get_extinction_pixel(lon_grid, lat_grid, lon_sources, lat_sources, ext, var,
     # In case the average or median is to be calculated, set the truncation scale equal to the bandwidth
     trunc_scale = bandwidth if (metric == "average") | (metric == "median") else 5 * bandwidth
 
-    # Truncate input data to a more managable size
-    index = (lon_sources > lon_grid - trunc_scale) & (lon_sources < lon_grid + trunc_scale) & \
-            (lat_sources > lat_grid - trunc_scale) & (lat_sources < lat_grid + trunc_scale)
-
-    # If we have nothing here, immediately return
-    if np.sum(index) == 0:
-        return bad_return
-
-    # Apply pre-filtering
-    ext, var, lon_sources, lat_sources = ext[index], var[index], lon_sources[index], lat_sources[index]
-
-    # Calculate the distance to the grid point in a spherical metric
+    # Calculate the distance to the grid point on a sphere
     dis = distance_sky(lon1=lon_sources, lat1=lat_sources, lon2=lon_grid, lat2=lat_grid, unit="degrees")
 
     # Get sources within truncation scale
     index = dis < trunc_scale / 2
 
-    # There must be at least two sources within the truncation scale which have extinction data
-    if np.sum(np.isfinite(ext[index])) < 2:
-        return bad_return
-
     # Calulate number of sources left over after truncation
     npixel = np.sum(index)
 
-    # If nothing remains, return empty pixel
-    if npixel == 0:
+    # If we have nothing here, immediately return; alos return if there are less than 2 sources with extinction
+    if (npixel == 0) | (np.sum(np.isfinite(ext[index])) < 2):
         return bad_return
 
     # Get data within truncation radius
     ext, var, dis = ext[index], var[index], dis[index]
 
-    # Based on chosen metric calculate extinction or spatial weights
+    # Choose metric
     if metric == "average":
         return np.nanmean(ext), np.sqrt(np.nansum(var)) / npixel, npixel, np.nan
 
@@ -465,6 +450,7 @@ def get_extinction_pixel(lon_grid, lat_grid, lon_sources, lat_sources, ext, var,
     # Get spatial weights:
     weights_spatial = wfunc(wdis=dis)
 
+    # Set negativ weights to 0
     weights_spatial[weights_spatial < 0] = 0
 
     # Get approximate integral and normalize weights
