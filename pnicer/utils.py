@@ -40,26 +40,11 @@ def distance_sky(lon1, lat1, lon2, lat2, unit="radians"):
 
     """
 
-    # Calculate distance on sphere
-    if "rad" in unit:
+    l1, l2 = np.radians(lon1) if "deg" in unit else lon1, np.radians(lon2) if "deg" in unit else lon2
+    b1, b2 = np.radians(lat1) if "deg" in unit else lat1, np.radians(lat2) if "deg" in unit else lat2
 
-        # Haversine distance (better for small numbers)
-        dis = 2 * np.arcsin(np.sqrt(np.sin((lat1 - lat2) / 2.) ** 2 +
-                                    np.cos(lat1) * np.cos(lat2) * np.sin((lon1 - lon2) / 2.) ** 2))
-
-    elif "deg" in unit:
-
-        # Haversine distance (better for small numbers)
-        dis = 2 * np.degrees(np.arcsin(np.sqrt(np.sin((np.radians(lat1) - np.radians(lat2)) / 2.) ** 2 +
-                                               np.cos(np.radians(lat1)) * np.cos(np.radians(lat2)) *
-                                               np.sin((np.radians(lon1) - np.radians(lon2)) / 2.) ** 2)))
-
-    # If given unit is not supported.
-    else:
-        raise ValueError("Unit {0:s} not supported".format(unit))
-
-    # Return distance
-    return dis
+    # Return haversine distance
+    return 2 * np.arcsin(np.sqrt(np.sin((b1 - b2) / 2.) ** 2 + np.cos(b1) * np.cos(b2) * np.sin((l1 - l2) / 2.) ** 2))
 
 
 # ----------------------------------------------------------------------
