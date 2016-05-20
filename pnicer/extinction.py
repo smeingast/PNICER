@@ -1,7 +1,6 @@
 # ----------------------------------------------------------------------
 # Import stuff
 import wcsaxes
-import warnings
 import numpy as np
 
 from copy import copy
@@ -266,15 +265,18 @@ class ExtinctionMap:
         from matplotlib import pyplot as plt
         from matplotlib.gridspec import GridSpec
 
-        fig = plt.figure(figsize=[figsize, 3 * 0.9 * figsize * (self.shape[0] / self.shape[1])])
-        grid = GridSpec(ncols=2, nrows=3, bottom=0.1, top=0.9, left=0.1, right=0.9, hspace=0.08, wspace=0,
-                        height_ratios=[1, 1, 1], width_ratios=[1, 0.05])
+        # If the density should be plotted, set to 4
+        nfig = 3
+
+        fig = plt.figure(figsize=[figsize, nfig * 0.9 * figsize * (self.shape[0] / self.shape[1])])
+        grid = GridSpec(ncols=2, nrows=nfig, bottom=0.1, top=0.9, left=0.1, right=0.9, hspace=0.08, wspace=0,
+                        height_ratios=[1] * nfig, width_ratios=[1, 0.05])
 
         # Set cmap
         cmap = copy(matplotlib.cm.binary)
         cmap.set_bad("#DC143C", 1.)
 
-        for idx in range(0, 6, 2):
+        for idx in range(0, nfig * 2, 2):
 
             ax = plt.subplot(grid[idx], projection=wcsaxes.WCS(self.fits_header))
             cax = plt.subplot(grid[idx + 1])
@@ -301,16 +303,21 @@ class ExtinctionMap:
                 im = ax.imshow(self.num, origin="lower", interpolation="nearest", vmin=vmin, vmax=vmax, cmap=cmap)
                 fig.colorbar(im, cax=cax, label="N")
 
+            elif idx == 6:
+                vmin, vmax = self._get_vlim(data=self.rho, percentiles=[1, 99], r=1)
+                im = ax.imshow(self.rho, origin="lower", interpolation="nearest", vmin=vmin, vmax=vmax, cmap=cmap)
+                fig.colorbar(im, cax=cax, label=r"$\rho$")
+
             # Grab axes
             lon, lat = ax.coords[0], ax.coords[1]
 
             # Add axes labels
-            if idx == 4:
+            if idx == (nfig - 1) * 2:
                 lon.set_axislabel("Longitude")
             lat.set_axislabel("Latitude")
 
             # Hide tick labels
-            if idx != 4:
+            if idx != (nfig - 1) * 2:
                 lon.set_ticklabel_position("")
 
         # Save or show figure
@@ -425,11 +432,8 @@ def get_extinction_pixel(lon_grid, lat_grid, lon_sources, lat_sources, ext, var,
 
     """
 
-    # Define bad pixel return
-    bad_return = (np.nan, np.nan, 0, np.nan)
-
     # In case the average or median is to be calculated, set the truncation scale equal to the bandwidth
-    trunc_scale = bandwidth if (metric == "average") | (metric == "median") else 5 * bandwidth
+    trunc_scale = bandwidth if (metric == "average") | (metric == "median") else 6 * bandwidth
 
     # Calculate the distance to the grid point on a sphere
     dis = distance_sky(lon1=lon_sources, lat1=lat_sources, lon2=lon_grid, lat2=lat_grid, unit="degrees")
@@ -442,7 +446,7 @@ def get_extinction_pixel(lon_grid, lat_grid, lon_sources, lat_sources, ext, var,
 
     # If we have nothing here, immediately return; alos return if there are less than 2 sources with extinction
     if (npixel == 0) | (np.sum(np.isfinite(ext[index])) < 2):
-        return bad_return
+        return np.nan, np.nan, 0, np.nan
 
     # Get data within truncation radius
     ext, var, dis = ext[index], var[index], dis[index]
@@ -464,46 +468,39 @@ def get_extinction_pixel(lon_grid, lat_grid, lon_sources, lat_sources, ext, var,
     alpha, k_lambda = 0.33, 1
     beta = np.log(10) * alpha * k_lambda
 
-    # Get spatial weights:
-    weights_spatial = wfunc(wdis=dis)
+    # Get weights:
+    w_theta = wfunc(wdis=dis)   # Spatial weight only
+    w_total = w_theta / var     # Weighted by variance of sources
 
     # Get approximate integral and normalize weights
-    dummy = np.arange(-100, 100, 0.01)
-    weights_spatial_norm = np.divide(weights_spatial, np.trapz(y=wfunc(dummy), x=dummy))
-
-    # TODO: Check if NICEST should modify this
-    # Get density map
-    rho = np.sum(weights_spatial_norm)
-
-    # Calculate total weight including the variance of the extinction measurement
-    weights = weights_spatial / var
+    w_theta = np.divide(w_theta, np.trapz(y=wfunc(np.arange(-100, 100, 0.01)), x=np.arange(-100, 100, 0.01)))
 
     # Modify weights for NICEST
     if nicest:
-        weights *= 10 ** (alpha * k_lambda * ext)
+        w_theta *= 10 ** (alpha * k_lambda * ext)
+        w_total *= 10 ** (alpha * k_lambda * ext)
 
-    # Ignore warnings for calculating the extinction and variance
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
+    # Get density
+    rho = np.sum(w_theta)
 
-        # Get extinction for this pixel based on weights
-        pixel_ext = np.nansum(weights * ext) / np.nansum(weights)
+    # Get extinction
+    pixel_ext = np.nansum(w_total * ext) / np.nansum(w_total)
 
-        # Calculate variance with NICEST weights
-        if nicest:
+    # Get variance
+    if nicest:
 
-            # Calculate correction factor (Equ. 34 in NICEST paper)
-            cor = beta * np.nansum(weights * var) / np.nansum(weights)
+        # Correction factor (Equ. 34 in NICEST paper)
+        cor = beta * np.nansum(w_total * var) / np.nansum(w_total)
 
-            # Calculate error for NICEST (private communication with M. Lombardi)
-            # TODO: Check if this makes sense
-            pixel_var = (np.sum((weights**2 * np.exp(2*beta*ext) * (1 + beta + ext)**2) / var) /
-                         np.sum(weights * np.exp(beta * ext) / var)**2)
+        # Calculate error for NICEST (private communication with M. Lombardi)
+        # TODO: Check if this makes sense
+        pixel_var = (np.sum((w_total ** 2 * np.exp(2 * beta * ext) * (1 + beta + ext) ** 2) / var) /
+                     np.sum(w_total * np.exp(beta * ext) / var) ** 2)
 
-        # Without NICEST the variance is a normal weighted error
-        else:
-            pixel_var = np.nansum(weights ** 2 * var) / np.nansum(weights) ** 2
-            cor = 0.
+    # Without NICEST the variance is a normal weighted error
+    else:
+        pixel_var = np.nansum(w_total ** 2 * var) / np.nansum(w_total) ** 2
+        cor = 0.
 
     # Return
     return pixel_ext - cor, pixel_var, npixel, rho
