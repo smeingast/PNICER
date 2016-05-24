@@ -4,6 +4,7 @@ import wcsaxes
 import numpy as np
 
 from copy import copy
+from astropy import wcs
 from astropy.io import fits
 from itertools import repeat
 from multiprocessing.pool import Pool
@@ -141,6 +142,12 @@ class Extinction:
         # Create WCS grid
         grid_header, (grid_lon, grid_lat) = self.coordinates.build_wcs_grid(proj_code="TAN", pixsize=pixsize)
 
+        # Create pixel grid
+        grid_x, grid_y = wcs.WCS(grid_header).wcs_world2pix(grid_lon, grid_lat, 0)
+
+        # Get pixel coordinates of sources
+        sources_x, sources_y = wcs.WCS(grid_header).wcs_world2pix(self.coordinates.lon, self.coordinates.lat, 0)
+
         # Adjust bandwidth in case FWHM is to be used
         if use_fwhm:
             grid_header["FWHM"] = (bandwidth, "FWHM of gaussian (degrees)")
@@ -154,8 +161,10 @@ class Extinction:
         # Run extinction mapping for each pixel
         with Pool() as pool:
             mp = pool.starmap(get_extinction_pixel,
-                              zip(grid_lon.ravel(), grid_lat.ravel(), repeat(self.coordinates.lon[self._clean_index]),
+                              zip(grid_lon.ravel(), grid_lat.ravel(), grid_x.ravel(), grid_y.ravel(), repeat(pixsize),
+                                  repeat(self.coordinates.lon[self._clean_index]),
                                   repeat(self.coordinates.lat[self._clean_index]),
+                                  repeat(sources_x[self._clean_index]), repeat(sources_y[self._clean_index]),
                                   repeat(self.extinction[self._clean_index]), repeat(self.variance[self._clean_index]),
                                   repeat(bandwidth), repeat(metric), repeat(nicest)))
 
@@ -401,7 +410,8 @@ def _get_weight_func(metric, bandwidth):
 
 
 # ----------------------------------------------------------------------
-def get_extinction_pixel(lon_grid, lat_grid, lon_sources, lat_sources, ext, var, bandwidth, metric, nicest):
+def get_extinction_pixel(lon_grid, lat_grid, x_grid, y_grid, pixsize, lon_sources, lat_sources, x_sources, y_sources,
+                         extinction, variance, bandwidth, metric, nicest):
     """
     Calculate extinction for a given grid point.
 
@@ -411,13 +421,23 @@ def get_extinction_pixel(lon_grid, lat_grid, lon_sources, lat_sources, ext, var,
         X grid point (longitude).
     lat_grid : int, float
         Y grid point (latitude).
+    x_grid : int, float
+        X grid point (x coordinate in grid).
+    y_grid : int, float
+        Y grid point (Y coordinate in grid).
+    pixsize : int, float
+        Pixel size in degrees.
     lon_sources : np.ndarray
         X data (longitudes for all sources).
     lat_sources : np.ndarray
         Y data (latitudes for all source).
-    ext : np.ndarray
+    x_sources : np.array
+        X data (X coordinates in grid).
+    y_sources : np.array
+        Y data (Y coordinates in grid).
+    extinction : np.ndarray
         Extinction data for each source.
-    var : np.ndarray
+    variance : np.ndarray
         Variance data for each source.
     bandwidth : int, float
         Bandwidth of kernel.
@@ -433,23 +453,31 @@ def get_extinction_pixel(lon_grid, lat_grid, lon_sources, lat_sources, ext, var,
     """
 
     # In case the average or median is to be calculated, set the truncation scale equal to the bandwidth
-    trunc_scale = bandwidth if (metric == "average") | (metric == "median") else 6 * bandwidth
+    trunc_deg = bandwidth if (metric == "average") | (metric == "median") else 6 * bandwidth
+    trunc_pix = trunc_deg / pixsize / 2
 
-    # Calculate the distance to the grid point on a sphere
-    dis = distance_sky(lon1=lon_sources, lat1=lat_sources, lon2=lon_grid, lat2=lat_grid, unit="degrees")
+    # Truncate input sources to manageable size with grid positions
+    idx = ((x_sources < x_grid + trunc_pix) & (x_sources > x_grid - trunc_pix) &
+           (y_sources < y_grid + trunc_pix) & (y_sources > y_grid - trunc_pix))
 
-    # Get sources within truncation scale
-    index = dis < trunc_scale / 2
+    # Apply pre-filtering to sky coordinates
+    lon, lat, ext, var = lon_sources[idx], lat_sources[idx], extinction[idx], variance[idx]
+
+    # Calculate the distance to the grid point on a sphere for the filtered sources
+    dis = distance_sky(lon1=lon, lat1=lat, lon2=lon_grid, lat2=lat_grid, unit="degrees")
+
+    # Get sources within truncation scale on the sky
+    idx = dis < trunc_deg / 2
 
     # Calulate number of sources left over after truncation
-    npixel = np.sum(index)
+    npixel = np.sum(idx)
 
-    # If we have nothing here, immediately return; alos return if there are less than 2 sources with extinction
-    if (npixel == 0) | (np.sum(np.isfinite(ext[index])) < 2):
+    # If we have nothing here, immediately return; also return if there are less than 2 sources with extinction
+    if (npixel == 0) | (np.sum(np.isfinite(ext[idx])) < 2):
         return np.nan, np.nan, 0, np.nan
 
-    # Get data within truncation radius
-    ext, var, dis = ext[index], var[index], dis[index]
+    # Get data within truncation radius on sky
+    ext, var, dis = ext[idx], var[idx], dis[idx]
 
     # Choose metric
     if metric == "average":
