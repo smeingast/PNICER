@@ -559,7 +559,6 @@ def data2header(lon, lat, frame, proj_code="TAN", pixsize=1/3600, enlarge=1.05, 
     naxis2 = (np.ceil((y.max()) - np.floor(y.min())) * enlarge).astype(int)
 
     # Calculate pixel shift relative to centroid (caused by anisotropic distribution of sources)
-    # TODO: Check if this yields correct results
     xdelta = (x.min() + x.max()) / 2
     ydelta = (y.min() + y.max()) / 2
 

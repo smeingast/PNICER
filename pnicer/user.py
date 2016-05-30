@@ -537,28 +537,31 @@ class Colors(DataBase):
 
     def __init__(self, mag, err, extvec, coordinates=None, names=None):
         """
-        Basically the same as magnitudes without NICER. Naturally the PNICER implementation does not allow to convert
-        to colors.
+        Same as magnitudes class without NICER.
 
         Parameters
         ----------
-        mag
-        err
-        extvec
-        coordinates
-        names
+        mag : list
+            List of color arrays. All arrays must have the same length.
+        err : list
+            List off color error arrays.
+        coordinates : SkyCoord, optional
+            Astropy SkyCoord instance.
+        extvec : list
+            List holding the extinction components for each color.
+        names : list, optional
+            List of color (feature) names.
 
         Returns
         -------
 
         """
-        # TODO: Add docstring
 
         # Call parent
         super(Colors, self).__init__(mag=mag, err=err, extvec=extvec, coordinates=coordinates, names=names)
 
         # Add attributes
-        self.colors_names = self.features_names
+        self.color_names = self.features_names
 
     # ----------------------------------------------------------------------
     def pnicer(self, control, sampling=2, kernel="epanechnikov"):

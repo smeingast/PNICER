@@ -931,8 +931,8 @@ class DataBase:
         all_ext, all_var, all_n, all_color0, names = [], [], [], [], []
 
         # Create intrinsic color dictionary
-        color0_dict = {k: [] for k in self.colors_names}
-        color0_weig = {k: [] for k in self.colors_names}
+        color0_dict = {k: [] for k in self.color_names}
+        color0_weig = {k: [] for k in self.color_names}
 
         # Here we loop over color combinations since this is faster
         i = 0
@@ -948,7 +948,7 @@ class DataBase:
                 ext, var, color0 = sc._pnicer_multivariate(control=cc, sampling=sampling, kernel=kernel)
 
             # Put the intrinsic color into the dictionary
-            for c, cidx in zip(sc.colors_names, range(len(sc.colors_names))):
+            for c, cidx in zip(sc.color_names, range(len(sc.color_names))):
                 try:
                     color0_dict[c].append(color0[cidx])
                     color0_weig[c].append(sc.n_features ** 2)
@@ -974,7 +974,7 @@ class DataBase:
 
         # Get final list of intrinsic colors while forcing the original order
         self._color0 = []
-        for key in self.colors_names:
+        for key in self.color_names:
             self._color0.append(color0_dict[key])
 
         # Convert to arrays and save combination data
