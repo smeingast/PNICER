@@ -535,8 +535,8 @@ class DataBase:
         axes = [plt.subplot(grid_plot[idx], projection=wcsaxes.WCS(header=header)) for idx in range(self.n_features)]
 
         # Generate labels
-        llon, llat = "GLON" if "gal" in self.coordinates.frame else "RA", "GLAT" \
-            if "gal" in self.coordinates.frame else "DEC"
+        llon, llat = "GLON" if "gal" in self.coordinates.frame_name else "RA", "GLAT" \
+            if "gal" in self.coordinates.frame_name else "DEC"
 
         # Add feature labels
         [axes[idx].annotate(self.features_names[idx], xy=[0.5, 1.01], xycoords="axes fraction",
@@ -685,7 +685,7 @@ class DataBase:
 
             ax.scatter(self.coordinates.lon[self._features_masks[idx]][::skip],
                        self.coordinates.lat[self._features_masks[idx]][::skip],
-                       transform=ax.get_transform(self.coordinates.frame), **kwargs)
+                       transform=ax.get_transform(self.coordinates.frame_name), **kwargs)
 
             # Set axes limits
             ax.set_xlim(lim[0])
@@ -886,7 +886,6 @@ class DataBase:
         return ext_full, var_full, int_full
 
     # ----------------------------------------------------------------------
-    # noinspection PyUnresolvedReferences
     def _pnicer_combinations(self, control, comb, sampling, kernel):
         """
         PNICER base implementation for combinations. Basically calls the pnicer_single implementation for all
@@ -921,9 +920,9 @@ class DataBase:
 
             # Depending on number of features, choose algorithm
             if sc.n_features == 1:
-                ext, var, intrinsic = sc._pnicer_univariate(control=cc)
+                ext, var, _ = sc._pnicer_univariate(control=cc)
             else:
-                ext, var, intrinsic = sc._pnicer_multivariate(control=cc, sampling=sampling, kernel=kernel)
+                ext, var, _ = sc._pnicer_multivariate(control=cc, sampling=sampling, kernel=kernel)
 
             # Append results to lists
             ext_combinations.append(ext)
@@ -945,7 +944,7 @@ class DataBase:
 
         # Return Extinction instance
         from pnicer.extinction import Extinction
-        return Extinction(coordinates=self.coordinates, extinction=ext, variance=var)
+        return Extinction(coordinates=self.coordinates.coordinates, extinction=ext, variance=var)
 
     # ----------------------------------------------------------------------
     def features_intrinsic(self, extinction):
@@ -990,7 +989,7 @@ class Coordinates:
 
     # ----------------------------------------------------------------------
     @property
-    def frame(self):
+    def frame_name(self):
         """
         Coordinate frame type
 
@@ -1019,11 +1018,11 @@ class Coordinates:
 
         """
 
-        if self.frame is None:
+        if self.frame_name is None:
             return None
-        elif self.frame == "galactic":
+        elif self.frame_name == "galactic":
             return self.coordinates.l.degree
-        elif self.frame == "icrs":
+        elif self.frame_name == "icrs":
             return self.coordinates.ra.degree
 
     # ----------------------------------------------------------------------
@@ -1038,11 +1037,11 @@ class Coordinates:
 
         """
 
-        if self.frame is None:
+        if self.frame_name is None:
             return None
-        elif self.frame == "galactic":
+        elif self.frame_name == "galactic":
             return self.coordinates.b.degree
-        elif self.frame == "icrs":
+        elif self.frame_name == "icrs":
             return self.coordinates.dec.degree
 
     # ----------------------------------------------------------------------
@@ -1066,7 +1065,8 @@ class Coordinates:
 
         """
 
-        return data2grid(lon=self.lon, lat=self.lat, frame=self.frame, proj_code=proj_code, pixsize=pixsize, **kwargs)
+        return data2grid(lon=self.lon, lat=self.lat, frame=self.frame_name, proj_code=proj_code, pixsize=pixsize,
+                         **kwargs)
 
 
 # ---------------------------------------------------------------------- #
