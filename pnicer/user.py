@@ -59,7 +59,7 @@ class Magnitudes(DataBase):
         color_extvec = [self.extvec.extvec[k - 1] - self.extvec.extvec[k] for k in range(1, self.n_features)]
 
         # Return Colors instance
-        return Colors(mag=colors, err=colors_error, extvec=color_extvec, coordinates=self.coordinates,
+        return Colors(mag=colors, err=colors_error, extvec=color_extvec, coordinates=self.coordinates.coordinates,
                       names=self.colors_names)
 
     # ----------------------------------------------------------------------
