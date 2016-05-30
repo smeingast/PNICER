@@ -1,7 +1,6 @@
 # ----------------------------------------------------------------------
 # Import stuff
 import wcsaxes
-import warnings
 import numpy as np
 
 from astropy import wcs
@@ -379,7 +378,7 @@ class DataBase:
             cnames = [self.features_names[idx] for idx in c]
             extvec = [self.extvec.extvec[idx] for idx in c]
             combination_instances.append(self.__class__(mag=cdata, err=cerror, extvec=extvec,
-                                                        coordinates=self.coordinates, names=cnames))
+                                                        coordinates=self.coordinates.coordinates, names=cnames))
 
         # Return list of combinations.
         return combination_instances
@@ -783,11 +782,11 @@ class DataBase:
         var = (self.features_err[0] ** 2 + cf_var) / self.extvec.extvec[0] ** 2
 
         # Intrinsic features
-        color0 = np.full_like(ext, fill_value=float(cf_mean))
-        color0[~np.isfinite(ext)] = np.nan
+        intrinsic = np.full_like(ext, fill_value=float(cf_mean))
+        intrinsic[~np.isfinite(ext)] = np.nan
 
         # Return Extinction, variance and intrinsic features
-        return ext, var, color0[np.newaxis, :]
+        return ext, var, intrinsic[np.newaxis, :]
 
     # ----------------------------------------------------------------------
     def _pnicer_multivariate(self, control, sampling, kernel):
@@ -815,10 +814,7 @@ class DataBase:
         if self.__class__ != control.__class__:
             raise ValueError("Input and control instance not compatible")
 
-        # Avoid circular import
-        from pnicer.user import Magnitudes
-
-        # Let's rotate the data spaces
+        # Rotate the data spaces
         science_rot, control_rot = self._rotate(), control._rotate()
 
         # Get bandwidth of kernel
@@ -849,12 +845,13 @@ class DataBase:
         grid_mean, grid_var = [], []
         for vec in dens_vectors:
 
-            # In case there are too few stars
+            # In case there are too few stars append NaN
             if np.sum(vec) < 3:
                 grid_mean.append(np.nan)
                 grid_var.append(np.nan)
+
+            # Otherwise get weighted average position along vector and the weighted variance
             else:
-                # Get weighted average position along vector and the weighted variance
                 a, b = weighted_avg(values=grid_ext, weights=vec)
                 grid_mean.append(a)
                 grid_var.append(b / self.extvec._extinction_norm)  # The normalisation converts this to extinction
@@ -871,28 +868,22 @@ class DataBase:
         # Inverse rotation of grid to get intrinsic features
         intrinsic = self.extvec._rotmatrix_inv.dot(np.vstack([grid_mean[indices], grid_data[:, indices]]))
 
-        # In case of Magnitudes we need to calculate the intinsic value
-        if isinstance(self, Magnitudes):
-            color0 = np.array([intrinsic[i] - intrinsic[i + 1] for i in range(self.n_features - 1)])
-        else:
-            color0 = intrinsic
-
-        # Now we have the instrisic colors for each vector and indices for all sources.
         # It's time to calculate the extinction. :)
         ext = (science_rot.features[0] - grid_mean[indices]) / self.extvec._extinction_norm
         var = grid_var[indices]
 
+        # Generate empty arrays for full results
+        ext_full = np.full(self.n_data, fill_value=np.nan, dtype=float)
+        var_full = np.full(self.n_data, fill_value=np.nan, dtype=float)
+        int_full = np.full([len(intrinsic), self.n_data], fill_value=np.nan, dtype=float)
+
         # Lastly we put all the extinction measurements back into a full array
-        out_ext = np.full(self.n_data, fill_value=np.nan, dtype=float)
-        out_var = np.full(self.n_data, fill_value=np.nan, dtype=float)
-        out_col = np.full([len(color0), self.n_data], fill_value=np.nan, dtype=float)
+        ext_full[self._strict_mask] = ext
+        var_full[self._strict_mask] = var
+        int_full[:, self._strict_mask] = intrinsic
 
-        # Output data for all sources
-        out_ext[self._strict_mask], out_var[self._strict_mask] = ext, var
-        out_col[:, self._strict_mask] = color0
-
-        # Return Extinction, variance and intrinsic features
-        return out_ext, out_var, out_col
+        # Return extinction, variance and intrinsic features
+        return ext_full, var_full, int_full
 
     # ----------------------------------------------------------------------
     # noinspection PyUnresolvedReferences
@@ -919,93 +910,42 @@ class DataBase:
 
         """
 
-        # Avoid circular import
-        from pnicer.user import Magnitudes, Colors
-
         # Check instances
         self._check_class(ccls=control)
 
-        # Dummy assertion for editor
-        assert (isinstance(self, Magnitudes) | isinstance(self, Colors))
+        # Create lists to hold results for all combinations
+        ext_combinations, var_combinations = [], []
 
-        # We loop over all combinations
-        all_ext, all_var, all_n, all_color0, names = [], [], [], [], []
-
-        # Create intrinsic color dictionary
-        color0_dict = {k: [] for k in self.color_names}
-        color0_weig = {k: [] for k in self.color_names}
-
-        # Here we loop over color combinations since this is faster
-        i = 0
+        # Here we loop over feature combinations since this is faster
         for sc, cc in comb:
-
-            # Type assertion to not raise editor warning
-            assert (isinstance(sc, Magnitudes) | isinstance(sc, Colors))
 
             # Depending on number of features, choose algorithm
             if sc.n_features == 1:
-                ext, var, color0 = sc._pnicer_univariate(control=cc)
+                ext, var, intrinsic = sc._pnicer_univariate(control=cc)
             else:
-                ext, var, color0 = sc._pnicer_multivariate(control=cc, sampling=sampling, kernel=kernel)
+                ext, var, intrinsic = sc._pnicer_multivariate(control=cc, sampling=sampling, kernel=kernel)
 
-            # Put the intrinsic color into the dictionary
-            for c, cidx in zip(sc.color_names, range(len(sc.color_names))):
-                try:
-                    color0_dict[c].append(color0[cidx])
-                    color0_weig[c].append(sc.n_features ** 2)
-                except KeyError:
-                    pass
-
-            # Append data
-            all_ext.append(ext)
-            all_var.append(var)
-            all_n.append(sc.n_features)
-            names.append("(" + ",".join(sc.features_names) + ")")
-            i += 1
-
-        # Loop through color0_dict and calculate average
-        for key in color0_dict.keys():
-            # Get weighted average
-            values = np.ma.masked_invalid(np.array(color0_dict[key]))
-            color0_dict[key] = np.ma.average(values, axis=0, weights=color0_weig[key]).data
-            # Optionally with a median
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                # color0_dict[key] = np.nanmedian(np.array(color0_dict[key]), axis=0)
-
-        # Get final list of intrinsic colors while forcing the original order
-        self._color0 = []
-        for key in self.color_names:
-            self._color0.append(color0_dict[key])
+            # Append results to lists
+            ext_combinations.append(ext)
+            var_combinations.append(var)
 
         # Convert to arrays and save combination data
-        all_ext = np.array(all_ext)
-        all_var = np.array(all_var)
+        ext_combinations = np.array(ext_combinations)
+        var_combinations = np.array(var_combinations)
 
-        # TODO: This is a leftover from older plots. May be removed in the future
-        self._ext_combinations = all_ext.copy()
-        self._var_combinations = all_var.copy()
-        self._combination_names = names
-        self._n_combinations = i
-
-        # Activate this for a weighted average
-        # Calculate weighted average
-        # weight = np.array(all_n)[:, None] / all_var
-        # ext = np.nansum(all_ext * weight, axis=0) / np.nansum(weight, axis=0)
-        # var = np.nansum(all_var * weight**2, axis=0) / np.nansum(weight, axis=0)**2
-        # return Extinction(db=db, extinction=ext, variance=var)
+        # Put large errors into entries without extinction
+        var_combinations[~np.isfinite(var_combinations)] = 10000.
 
         # Chose extinction as minimum error across all combinations
-        all_var[~np.isfinite(all_var)] = 100 * np.nanmax(all_var)
-        ext = all_ext[np.argmin(all_var, axis=0), np.arange(self.n_data)]
-        var = all_var[np.argmin(all_var, axis=0), np.arange(self.n_data)]
+        ext = ext_combinations[np.argmin(var_combinations, axis=0), np.arange(self.n_data)]
+        var = var_combinations[np.argmin(var_combinations, axis=0), np.arange(self.n_data)]
 
         # Make error cut
         ext[var > 10] = var[var > 10] = np.nan
 
         # Return Extinction instance
         from pnicer.extinction import Extinction
-        return Extinction(coordinates=self.coordinates, extinction=ext, variance=var, color0=np.array(self._color0))
+        return Extinction(coordinates=self.coordinates, extinction=ext, variance=var)
 
     # ----------------------------------------------------------------------
     def features_intrinsic(self, extinction):

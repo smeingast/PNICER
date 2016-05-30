@@ -101,6 +101,7 @@ class Magnitudes(DataBase):
 
         """
 
+        # Create combinations of features
         if add_colors:
 
             # To create a color, we need at least two features
@@ -225,22 +226,14 @@ class Magnitudes(DataBase):
         # Calculate variance
         var = 1 / lower
         var[~np.isfinite(ext)] = np.nan
-        # Old method (as in paper; has to be done in loop due to RAM issues!)
-        # first = np.array([np.dot(cov.data[idx, :, :], b.data[:, idx]) for idx in range(self.n_data)])
-        # var = np.array([np.dot(b.data[:, idx], first[idx, :]) for idx in range(self.n_data)])
-
-        # Generate intrinsic source color list
-        color0_sources = np.repeat(_color0, self.n_data).reshape([len(_color0), self.n_data])
-        color0_sources[:, ~np.isfinite(ext)] = np.nan
 
         if min_features is not None:
             mask = np.where(np.sum(np.vstack(self._features_masks), axis=0, dtype=int) < min_features)[0]
-            ext[mask] = var[mask] = color0_sources[:, mask] = np.nan
+            ext[mask] = var[mask] = np.nan
 
         # Return Extinction
         from pnicer.extinction import Extinction
-        return Extinction(coordinates=self.coordinates.coordinates, extinction=ext.data, variance=var,
-                          color0=color0_sources)
+        return Extinction(coordinates=self.coordinates.coordinates, extinction=ext.data, variance=var)
 
     # ----------------------------------------------------------------------
     # noinspection PyPackageRequirements
