@@ -987,8 +987,8 @@ class DataBase:
         self._combination_names = names
         self._n_combinations = i
 
-        # TODO: Weighted average or min?
-        # # calculate weighted average
+        # Activate this for a weighted average
+        # Calculate weighted average
         # weight = np.array(all_n)[:, None] / all_var
         # ext = np.nansum(all_ext * weight, axis=0) / np.nansum(weight, axis=0)
         # var = np.nansum(all_var * weight**2, axis=0) / np.nansum(weight, axis=0)**2
@@ -1005,6 +1005,25 @@ class DataBase:
         # Return Extinction instance
         from pnicer.extinction import Extinction
         return Extinction(coordinates=self.coordinates, extinction=ext, variance=var, color0=np.array(self._color0))
+
+    # ----------------------------------------------------------------------
+    def features_intrinsic(self, extinction):
+        """
+        Calculates the de-reddened features
+
+        Parameters
+        ----------
+        extinction : np.array
+            Extinction for each source in the same unit as the extinction vector for this instance.
+
+        Returns
+        -------
+        list
+            List of intrinsic features
+
+        """
+
+        return [f - extinction * v for f, v in zip(self.features, self.extvec.extvec)]
 
 
 # ---------------------------------------------------------------------- #

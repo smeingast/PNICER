@@ -65,10 +65,6 @@ class Extinction:
         for x in self.extinction:
             yield x
 
-    # ---------------------------------------------------------------------- #
-    #                               Properties                               #
-    # ---------------------------------------------------------------------- #
-
     # ----------------------------------------------------------------------
     @property
     def _clean_index(self):
@@ -82,21 +78,6 @@ class Extinction:
         """
 
         return np.isfinite(self.extinction)
-
-    # TODO: Move this to DataBase routine
-    # # ----------------------------------------------------------------------
-    # @property
-    # def features_dered(self):
-    #     """
-    #     Dereddened features.
-    #
-    #     Returns
-    #     -------
-    #     list
-    #
-    #     """
-    #
-    #     return [f - self.extinction * v for f, v in zip(self.db.features, self.db.extvec.extvec)]
 
     # ---------------------------------------------------------------------- #
     #                            Instance methods                            #
