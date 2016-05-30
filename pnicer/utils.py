@@ -316,7 +316,7 @@ def caxes_delete_ticklabels(axes, xfirst=False, xlast=False, yfirst=False, ylast
 
 
 # ----------------------------------------------------------------------
-def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", norm=False, absolute=False, sampling=None):
+def mp_kde(grid, data, bandwidth, kernel="epanechnikov", norm=False, absolute=False, sampling=None):
     """
     Kernel density estimation with parallelisation.
 
@@ -328,8 +328,6 @@ def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", norm=False,
         Input data
     bandwidth : int, float
         Bandwidth of kernel (in data units).
-    shape
-        If set, shape of ouput.
     kernel : str, optional
         Name of kernel for KDE. e.g. 'epanechnikov' or 'gaussian'. Default is 'epanechnikov'.
     norm : bool, optional
@@ -344,8 +342,6 @@ def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", norm=False,
     np.ndarray
 
     """
-
-    # TODO: remove shape parameter
 
     # If we want absolute values, we must specify the sampling
     if absolute:
@@ -386,11 +382,8 @@ def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", norm=False,
     elif norm == "sum":
         mp /= np.nansum(mp)
 
-    # Unpack results and return
-    if shape is None:
-        return mp
-    else:
-        return mp.reshape(shape)
+    # Return
+    return mp
 
 
 # ----------------------------------------------------------------------

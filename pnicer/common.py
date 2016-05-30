@@ -642,8 +642,8 @@ class DataBase:
             # Get kernel density
             data = np.vstack([self.features[idx[0]][mask], self.features[idx[1]][mask]]).T
             xgrid = np.vstack([x.ravel(), y.ravel()]).T
-            dens = mp_kde(grid=xgrid, data=data, bandwidth=grid_bw * 2, shape=x.shape, kernel=kernel, absolute=True,
-                          sampling=2)
+            dens = mp_kde(grid=xgrid, data=data, bandwidth=grid_bw * 2, kernel=kernel, absolute=True,
+                          sampling=2).reshape(x.shape)
 
             # Plot result
             ax.imshow(dens.T, origin="lower", interpolation="nearest", extent=[l, h, l, h], cmap=cmap)
@@ -730,8 +730,7 @@ class DataBase:
             xgrid = np.vstack([grid_world[0].ravel(), grid_world[1].ravel()]).T
             data = np.vstack([self.coordinates.lon[self._features_masks[idx]][::skip],
                               self.coordinates.lat[self._features_masks[idx]][::skip]]).T
-            dens = mp_kde(grid=xgrid, data=data, bandwidth=bandwidth, shape=grid_world[0].shape, kernel=kernel,
-                          norm=False)
+            dens = mp_kde(grid=xgrid, data=data, bandwidth=bandwidth, kernel=kernel, norm=False).reshape(grid_world[0].shape)
 
             # Norm and save scale (we want everything scaled to the same reference! In this case the first feature)
             if idx == 0:
