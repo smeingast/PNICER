@@ -329,7 +329,7 @@ def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", norm=False,
     bandwidth : int, float
         Bandwidth of kernel (in data units).
     shape
-        If set, shape out ouput.
+        If set, shape of ouput.
     kernel : str, optional
         Name of kernel for KDE. e.g. 'epanechnikov' or 'gaussian'. Default is 'epanechnikov'.
     norm : bool, optional
@@ -349,10 +349,12 @@ def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", norm=False,
 
     # If we want absolute values, we must specify the sampling
     if absolute:
-        assert sampling, "Sampling needs to be specified"
+        if not sampling:
+            raise ValueError("For absolute values, sampling needs to be specified")
 
     # Dimensions of grid and data must match
-    assert len(grid.shape) == len(data.shape), "Data and Grid dimensions must match"
+    if len(grid.shape) != len(data.shape):
+        raise ValueError("Data and Grid dimensions must match")
 
     # If only one dimension, extend
     if len(grid.shape) == 1:
@@ -362,9 +364,10 @@ def mp_kde(grid, data, bandwidth, shape=None, kernel="epanechnikov", norm=False,
     # Split for parallel processing
     grid_split = np.array_split(grid, multiprocessing.cpu_count(), axis=0)
 
-    # Define kernel according to Nyquist sampling
+    # Define kernel
     kde = KernelDensity(kernel=kernel, bandwidth=bandwidth)
 
+    # Run kernel density calculation
     with Pool() as pool:
         mp = pool.starmap(_mp_kde, zip(repeat(kde), repeat(data), grid_split))
 

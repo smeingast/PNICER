@@ -48,10 +48,6 @@ class Extinction:
         if len(self.extinction) != len(self.variance):
             raise ValueError("Extinction and variance arrays must have equal length")
 
-    # ---------------------------------------------------------------------- #
-    #                              Magic methods                             #
-    # ---------------------------------------------------------------------- #
-
     # ----------------------------------------------------------------------
     def __len__(self):
         return len(self.extinction)
