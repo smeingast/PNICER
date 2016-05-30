@@ -46,13 +46,6 @@ class DataBase:
         # Set coordinate attributes
         self.coordinates = Coordinates(coordinates=coordinates)
 
-        # Define combination properties determined while running PNICER
-        # TODO: This is a leftover from older plots. May be removed in the future
-        self._ext_combinations = None
-        self._var_combinations = None
-        self._combination_names = None
-        self._n_combinations = 0
-
         # Generate simple names for the magnitudes if not set
         if self.features_names is None:
             self.features_names = ["Mag" + str(idx + 1) for idx in range(self.n_features)]
