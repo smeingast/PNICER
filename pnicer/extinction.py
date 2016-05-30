@@ -135,7 +135,7 @@ class Extinction:
 
         # Run extinction mapping for each pixel
         with Pool() as pool:
-            mp = pool.starmap(get_extinction_pixel,
+            mp = pool.starmap(_get_extinction_pixel,
                               zip(grid_lon.ravel(), grid_lat.ravel(), grid_x.ravel(), grid_y.ravel(), repeat(pixsize),
                                   repeat(self.coordinates.lon[self._clean_index]),
                                   repeat(self.coordinates.lat[self._clean_index]),
@@ -424,8 +424,8 @@ def _get_weight_func(metric, bandwidth):
 
 
 # ----------------------------------------------------------------------
-def get_extinction_pixel(lon_grid, lat_grid, x_grid, y_grid, pixsize, lon_sources, lat_sources, x_sources, y_sources,
-                         extinction, variance, bandwidth, metric, nicest):
+def _get_extinction_pixel(lon_grid, lat_grid, x_grid, y_grid, pixsize, lon_sources, lat_sources, x_sources, y_sources,
+                          extinction, variance, bandwidth, metric, nicest):
     """
     Calculate extinction for a given grid point.
 
