@@ -120,6 +120,10 @@ class Extinction:
         # Determine pixel size
         pixsize = bandwidth / sampling
 
+        # Adjust bandwidth in case FWHM is to be used
+        if use_fwhm:
+            bandwidth /= self.std2fwhm
+
         # Create WCS grid
         grid_header, (grid_lon, grid_lat) = self.coordinates.build_wcs_grid(proj_code="TAN", pixsize=pixsize)
 
@@ -128,16 +132,6 @@ class Extinction:
 
         # Get pixel coordinates of sources
         sources_x, sources_y = wcs.WCS(grid_header).wcs_world2pix(self.coordinates.lon, self.coordinates.lat, 0)
-
-        # Adjust bandwidth in case FWHM is to be used
-        if use_fwhm:
-            grid_header["FWHM"] = (bandwidth, "FWHM of gaussian (degrees)")
-            bandwidth /= self.std2fwhm
-        elif metric == "gaussian":
-            grid_header["FWHM"] = (bandwidth * self.std2fwhm, "FWHM of gaussian (degrees)")
-
-        # Add bandwidth to header
-        grid_header["BWIDTH"] = (bandwidth, "Bandwidth of kernel (degrees)")
 
         # Run extinction mapping for each pixel
         with Pool() as pool:
@@ -152,14 +146,53 @@ class Extinction:
         # Unpack results
         map_ext, map_var, map_num, map_rho = list(zip(*mp))
 
-        # reshape
+        # Reshape and convert to 32bit
         map_ext = np.array(map_ext).reshape(grid_lon.shape).astype(np.float32)
         map_var = np.array(map_var).reshape(grid_lon.shape).astype(np.float32)
         map_num = np.array(map_num).reshape(grid_lon.shape).astype(np.uint32)
         map_rho = np.array(map_rho).reshape(grid_lon.shape).astype(np.float32)
 
+        # Create primary header for map with metric information
+        phdr = self._make_prime_header(bandwidth=bandwidth, metric=metric, sampling=sampling, nicest=nicest)
+
         # Return extinction map instance
-        return ExtinctionMap(ext=map_ext, var=map_var, num=map_num, rho=map_rho, header=grid_header)
+        return ExtinctionMap(ext=map_ext, var=map_var, num=map_num, rho=map_rho,
+                             wcs_header=grid_header, prime_header=phdr)
+
+    # ----------------------------------------------------------------------
+    @staticmethod
+    def _make_prime_header(bandwidth, metric, sampling, nicest):
+        """
+        Creates a header with information about extinction mapping.
+
+        Parameters
+        ----------
+        bandwidth : int, float
+            Bandwidth used to create the map.
+        metric : str
+            Metric used to create the map.
+        sampling : int
+            Sampling factor of map.
+        nicest : bool
+            Whether NICEST tuning was activated.
+
+        Returns
+        -------
+        fits.Header
+            Astropy Fits header instance.
+
+        """
+
+        # Create empty header
+        header = fits.Header()
+
+        # Add keywords
+        header["BWIDTH"] = (bandwidth, "Bandwidth of kernel (degrees)")
+        header["METRIC"] = (metric, "Metric used to create this map")
+        header["SAMPLING"] = (sampling, "Sampling factor of map")
+        header["NICEST"] = (nicest, "Whether NICEST was activated")
+
+        return header
 
     # ----------------------------------------------------------------------
     def save_fits(self, path):
@@ -193,7 +226,7 @@ class Extinction:
 # ---------------------------------------------------------------------- #
 class ExtinctionMap:
 
-    def __init__(self, ext, var, header, num=None, rho=None):
+    def __init__(self, ext, var, wcs_header, prime_header=None, num=None, rho=None):
         """
         Extinction map class.
 
@@ -203,7 +236,7 @@ class ExtinctionMap:
             2D Extintion map.
         var : np.ndarray
             2D Extinction variance map.
-        header : astropy.fits.Header
+        wcs_header : astropy.fits.Header
             Header of grid from which extinction map was built.
         num : np.ndarray, optional
             2D source count map.
@@ -216,7 +249,8 @@ class ExtinctionMap:
         self.map, self.var = ext, var
         self.num = np.full_like(self.map, fill_value=np.nan, dtype=np.uint32) if num is None else num
         self.rho = np.full_like(self.map, fill_value=np.nan, dtype=np.float32) if num is None else rho
-        self.fits_header = header
+        self.prime_header = fits.Header() if prime_header is None else prime_header
+        self.wcs_header = wcs_header
 
         # Sanity check for dimensions
         if (self.map.ndim != 2) | (self.var.ndim != 2) | (self.num.ndim != 2) | (self.rho.ndim != 2):
@@ -252,14 +286,13 @@ class ExtinctionMap:
         # Import
         import matplotlib
         from matplotlib import pyplot as plt
-        from matplotlib.gridspec import GridSpec
 
         # If the density should be plotted, set to 4
         nfig = 3
 
         fig = plt.figure(figsize=[figsize, nfig * 0.9 * figsize * (self.shape[0] / self.shape[1])])
-        grid = GridSpec(ncols=2, nrows=nfig, bottom=0.1, top=0.9, left=0.1, right=0.9, hspace=0.08, wspace=0,
-                        height_ratios=[1] * nfig, width_ratios=[1, 0.05])
+        grid = matplotlib.gridspec.GridSpec(ncols=2, nrows=nfig, bottom=0.1, top=0.9, left=0.1, right=0.9, hspace=0.08,
+                                            wspace=0, height_ratios=[1] * nfig, width_ratios=[1, 0.05])
 
         # Set cmap
         cmap = copy(matplotlib.cm.binary)
@@ -267,7 +300,7 @@ class ExtinctionMap:
 
         for idx in range(0, nfig * 2, 2):
 
-            ax = plt.subplot(grid[idx], projection=wcsaxes.WCS(self.fits_header))
+            ax = plt.subplot(grid[idx], projection=wcsaxes.WCS(self.wcs_header))
             cax = plt.subplot(grid[idx + 1])
 
             # Plot Extinction map
@@ -281,7 +314,7 @@ class ExtinctionMap:
                 vmin, vmax = self._get_vlim(data=np.sqrt(self.var), percentiles=[1, 90], r=100)
                 im = ax.imshow(np.sqrt(self.var), origin="lower", interpolation="nearest", vmin=vmin, vmax=vmax,
                                cmap=cmap)
-                if self.metric == "median":
+                if self.prime_header["METRIC"] == "median":
                     fig.colorbar(im, cax=cax, label="MAD (mag)")
                 else:
                     fig.colorbar(im, cax=cax, label="Error (mag)")
@@ -317,34 +350,29 @@ class ExtinctionMap:
         plt.close()
 
     # ----------------------------------------------------------------------
-    def save_fits(self, path):
+    def save_fits(self, path, clobber=True):
         """
         Save extinciton map as FITS file.
 
         Parameters
         ----------
         path : str
-            File path; e.g. "/path/to/table.fits"
+            File path. e.g. "/path/to/table.fits".
+        clobber : bool, optional
+            Whether to overwrite exisiting files. Default is True.
 
         """
 
-        # Create primary HDU
-        phdu = fits.PrimaryHDU()
-        phdu.header["A"] = 1
-
-        print(phdu.header)
-        exit()
-
         # Create HDU list
         # noinspection PyTypeChecker
-        hdulist = fits.HDUList([fits.PrimaryHDU(),
-                                fits.ImageHDU(data=self.map, header=self.fits_header),
-                                fits.ImageHDU(data=self.var, header=self.fits_header),
-                                fits.ImageHDU(data=self.num, header=self.fits_header),
-                                fits.ImageHDU(data=self.rho, header=self.fits_header)])
+        hdulist = fits.HDUList([fits.PrimaryHDU(header=self.prime_header),
+                                fits.ImageHDU(data=self.map, header=self.wcs_header),
+                                fits.ImageHDU(data=self.var, header=self.wcs_header),
+                                fits.ImageHDU(data=self.num, header=self.wcs_header),
+                                fits.ImageHDU(data=self.rho, header=self.wcs_header)])
 
         # Write
-        hdulist.writeto(path, clobber=True)
+        hdulist.writeto(path, clobber=clobber)
 
 
 # ----------------------------------------------------------------------
