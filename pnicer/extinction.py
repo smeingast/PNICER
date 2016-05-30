@@ -6,6 +6,7 @@ import numpy as np
 from copy import copy
 from astropy import wcs
 from astropy.io import fits
+from astropy.table import Table
 from itertools import repeat
 from multiprocessing.pool import Pool
 
@@ -21,7 +22,7 @@ class Extinction:
     # Useful constants
     std2fwhm = 2 * np.sqrt(2 * np.log(2))
 
-    def __init__(self, coordinates, extinction, variance=None, color0=None):
+    def __init__(self, coordinates, extinction, variance=None):
         """
         Class for extinction measurements.
 
@@ -33,8 +34,6 @@ class Extinction:
             Extinction data.
         variance : np.ndarray, optional
             Variance in extinction.
-        color0 : np.ndarray, optional
-            Intrisic color set for each source.
 
         """
 
@@ -42,7 +41,6 @@ class Extinction:
         self.coordinates = Coordinates(coordinates=coordinates)
         self.extinction = extinction
         self.variance = np.zeros_like(extinction) if variance is None else variance
-        self.color0 = np.zeros_like(extinction) if color0 is None else color0
 
         # Sanity checks
         if len(self.extinction) != len(self.variance):
@@ -54,7 +52,8 @@ class Extinction:
 
     # ----------------------------------------------------------------------
     def __str__(self):
-        return str(self.extinction)
+        return Table([np.around(self.extinction, 3), np.around(np.sqrt(self.variance), 3)],
+                     names=("Extinction", "Error")).__str__()
 
     # ----------------------------------------------------------------------
     def __iter__(self):
