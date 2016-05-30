@@ -313,8 +313,7 @@ class Magnitudes(DataBase):
         return beta, ic
 
     # ----------------------------------------------------------------------
-    def color_excess_ratio(self, x_keys, y_keys, method="lines", control=None, kappa=1, sigma=3, err_iter=100,
-                           qc=True):
+    def color_excess_ratio(self, x_keys, y_keys, method="ols", control=None, kappa=1, sigma=3, err_iter=100, qc=True):
         """
         Calculates the selective color excess rations (e.g.: E(J-H)/E(H-K)) for a given combinations of magnitudes. This
         slope is derived via different methods (LINES, BCES, OLS, or ODR).
