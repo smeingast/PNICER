@@ -233,7 +233,8 @@ class Magnitudes(DataBase):
 
         # Return Extinction
         from pnicer.extinction import Extinction
-        return Extinction(coordinates=self.coordinates.coordinates, extinction=ext.data, variance=var)
+        return Extinction(coordinates=self.coordinates.coordinates, extinction=ext.data, variance=var,
+                          extvec=self.extvec)
 
     # ----------------------------------------------------------------------
     # noinspection PyPackageRequirements

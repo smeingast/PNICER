@@ -22,7 +22,7 @@ class Extinction:
     # Useful constants
     std2fwhm = 2 * np.sqrt(2 * np.log(2))
 
-    def __init__(self, coordinates, extinction, variance=None):
+    def __init__(self, coordinates, extinction, variance=None, extvec=None):
         """
         Class for extinction measurements.
 
@@ -34,6 +34,8 @@ class Extinction:
             Extinction data.
         variance : np.ndarray, optional
             Variance in extinction.
+        extvec : ExtinctionVector, optional
+            Extinction Vector instance.
 
         """
 
@@ -41,6 +43,7 @@ class Extinction:
         self.coordinates = Coordinates(coordinates=coordinates)
         self.extinction = extinction
         self.variance = np.zeros_like(extinction) if variance is None else variance
+        self.extvec = extvec
 
         # Sanity checks
         if len(self.extinction) != len(self.variance):
@@ -128,6 +131,9 @@ class Extinction:
         # Get pixel coordinates of sources
         sources_x, sources_y = wcs.WCS(grid_header).wcs_world2pix(self.coordinates.lon, self.coordinates.lat, 0)
 
+        # Set alpha and k_lambda for nicest
+        alpha, k_lambda = 1 / 3, np.max(self.extvec.extvec) if self.extvec is not None else 1
+
         # Run extinction mapping for each pixel
         with Pool() as pool:
             mp = pool.starmap(_get_extinction_pixel,
@@ -136,7 +142,7 @@ class Extinction:
                                   repeat(self.coordinates.lat[self._clean_index]),
                                   repeat(sources_x[self._clean_index]), repeat(sources_y[self._clean_index]),
                                   repeat(self.extinction[self._clean_index]), repeat(self.variance[self._clean_index]),
-                                  repeat(bandwidth), repeat(metric), repeat(nicest)))
+                                  repeat(bandwidth), repeat(metric), repeat(nicest), repeat(alpha), repeat(k_lambda)))
 
         # Unpack results
         map_ext, map_var, map_num, map_rho = list(zip(*mp))
@@ -420,7 +426,7 @@ def _get_weight_func(metric, bandwidth):
 
 # ----------------------------------------------------------------------
 def _get_extinction_pixel(lon_grid, lat_grid, x_grid, y_grid, pixsize, lon_sources, lat_sources, x_sources, y_sources,
-                          extinction, variance, bandwidth, metric, nicest):
+                          extinction, variance, bandwidth, metric, nicest, alpha, k_lambda):
     """
     Calculate extinction for a given grid point.
 
@@ -454,6 +460,10 @@ def _get_extinction_pixel(lon_grid, lat_grid, x_grid, y_grid, pixsize, lon_sourc
         Method to be used. e.g. 'median', 'gaussian', 'epanechnikov', 'uniform', 'triangular'.
     nicest : bool
         Wether or not to use NICEST weight adjustment.
+    alpha : int, float
+        Slope of source counts (NICEST equation 2).
+    k_lambda : int, float
+        Extinction law in considered band (NICEST equation 2).
 
     Returns
     -------
@@ -501,8 +511,6 @@ def _get_extinction_pixel(lon_grid, lat_grid, x_grid, y_grid, pixsize, lon_sourc
         wfunc = _get_weight_func(metric=metric, bandwidth=bandwidth)
 
     # Set parameters for density correction
-    # TODO: This needs to be generalised
-    alpha, k_lambda = 0.33, 1
     beta = np.log(10) * alpha * k_lambda
 
     # Get weights:
@@ -530,7 +538,7 @@ def _get_extinction_pixel(lon_grid, lat_grid, x_grid, y_grid, pixsize, lon_sourc
         cor = beta * np.nansum(w_total * var) / np.nansum(w_total)
 
         # Calculate error for NICEST (private communication with M. Lombardi)
-        # TODO: Check if this makes sense
+        # TODO: Check if this formula is actually correct
         pixel_var = (np.sum((w_total ** 2 * np.exp(2 * beta * ext) * (1 + beta + ext) ** 2) / var) /
                      np.sum(w_total * np.exp(beta * ext) / var) ** 2)
 

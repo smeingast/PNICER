@@ -944,7 +944,7 @@ class DataBase:
 
         # Return Extinction instance
         from pnicer.extinction import Extinction
-        return Extinction(coordinates=self.coordinates.coordinates, extinction=ext, variance=var)
+        return Extinction(coordinates=self.coordinates.coordinates, extinction=ext, variance=var, extvec=self.extvec)
 
     # ----------------------------------------------------------------------
     def features_intrinsic(self, extinction):
