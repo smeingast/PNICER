@@ -48,7 +48,7 @@ class DataBase:
         self.coordinates = Coordinates(coordinates=coordinates)
 
         # Define combination properties determined while running PNICER
-        # TODO: Where exactly is this used?
+        # TODO: This is a leftover from older plots. May be removed in the future
         self._ext_combinations = None
         self._var_combinations = None
         self._combination_names = None
@@ -730,7 +730,8 @@ class DataBase:
             xgrid = np.vstack([grid_world[0].ravel(), grid_world[1].ravel()]).T
             data = np.vstack([self.coordinates.lon[self._features_masks[idx]][::skip],
                               self.coordinates.lat[self._features_masks[idx]][::skip]]).T
-            dens = mp_kde(grid=xgrid, data=data, bandwidth=bandwidth, kernel=kernel, norm=False).reshape(grid_world[0].shape)
+            dens = mp_kde(grid=xgrid, data=data, bandwidth=bandwidth, kernel=kernel,
+                          norm=False).reshape(grid_world[0].shape)
 
             # Norm and save scale (we want everything scaled to the same reference! In this case the first feature)
             if idx == 0:
@@ -981,6 +982,7 @@ class DataBase:
         all_ext = np.array(all_ext)
         all_var = np.array(all_var)
 
+        # TODO: This is a leftover from older plots. May be removed in the future
         self._ext_combinations = all_ext.copy()
         self._var_combinations = all_var.copy()
         self._combination_names = names
