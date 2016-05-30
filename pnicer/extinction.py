@@ -159,7 +159,7 @@ class Extinction:
         map_rho = np.array(map_rho).reshape(grid_lon.shape).astype(np.float32)
 
         # Return extinction map instance
-        return ExtinctionMap(ext=map_ext, var=map_var, num=map_num, rho=map_rho, header=grid_header, metric=metric)
+        return ExtinctionMap(ext=map_ext, var=map_var, num=map_num, rho=map_rho, header=grid_header)
 
     # ----------------------------------------------------------------------
     def save_fits(self, path):
@@ -193,7 +193,7 @@ class Extinction:
 # ---------------------------------------------------------------------- #
 class ExtinctionMap:
 
-    def __init__(self, ext, var, header, metric=None, num=None, rho=None):
+    def __init__(self, ext, var, header, num=None, rho=None):
         """
         Extinction map class.
 
@@ -205,8 +205,6 @@ class ExtinctionMap:
             2D Extinction variance map.
         header : astropy.fits.Header
             Header of grid from which extinction map was built.
-        metric : str, optional
-            Metric used to create the map.
         num : np.ndarray, optional
             2D source count map.
         rho : np.ndarray, optional
@@ -215,20 +213,21 @@ class ExtinctionMap:
         """
 
         # Set instance attributes
-        self.map = ext
-        self.var = var
+        self.map, self.var = ext, var
         self.num = np.full_like(self.map, fill_value=np.nan, dtype=np.uint32) if num is None else num
         self.rho = np.full_like(self.map, fill_value=np.nan, dtype=np.float32) if num is None else rho
-
-        # Other parameters
-        self.metric = metric
-        self.shape = self.map.shape
         self.fits_header = header
 
-        # Sanity check
+        # Sanity check for dimensions
         if (self.map.ndim != 2) | (self.var.ndim != 2) | (self.num.ndim != 2) | (self.rho.ndim != 2):
             raise TypeError("Input must be 2D arrays")
 
+    # ----------------------------------------------------------------------
+    @property
+    def shape(self):
+        return self.map.shape
+
+    # ----------------------------------------------------------------------
     @staticmethod
     def _get_vlim(data, percentiles, r=10):
         vmin = np.floor(np.percentile(data[np.isfinite(data)], percentiles[0]) * r) / r
@@ -328,7 +327,13 @@ class ExtinctionMap:
             File path; e.g. "/path/to/table.fits"
 
         """
-        # TODO: Add some header information
+
+        # Create primary HDU
+        phdu = fits.PrimaryHDU()
+        phdu.header["A"] = 1
+
+        print(phdu.header)
+        exit()
 
         # Create HDU list
         # noinspection PyTypeChecker
