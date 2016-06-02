@@ -408,20 +408,30 @@ class Magnitudes(DataBase):
         # Dummy mask for first iteration
         smask = np.arange(len(xc_science))
 
+        # Get boolean array for all features
+        good_idx = smask.copy()
+
         # Start iterations
         beta, ic = 0., 0.
-        for _ in range(kappa + 1):
+        for i in range(kappa + 1):
 
             # Mask data (used for iterations)
             xc_science, yc_science = xc_science[smask], yc_science[smask]
             x1_sc_err, x2_sc_err = x1_sc_err[smask], x2_sc_err[smask]
             y1_sc_err, y2_sc_err = y1_sc_err[smask], y2_sc_err[smask]
 
+            # Remove all bad data
+            good_idx = good_idx[smask]
+
             # Determine covariance matrix of errors for science field
             beta_dict["science_err_covar"] = get_color_covar(x1_sc_err, x2_sc_err, y1_sc_err, y2_sc_err, *x_idx, *y_idx)
 
             # Determine slope and intercept
             beta, ic = self._get_beta(method=method, xdata=xc_science, ydata=yc_science, **beta_dict)
+
+            # Break here if the last iteration is reached
+            if i == kappa:
+                break
 
             # Get orthogonal distance to the fit
             dis = np.abs(beta * xc_science - yc_science + ic) / np.sqrt(beta ** 2 + 1)
@@ -474,7 +484,7 @@ class Magnitudes(DataBase):
                                         x_control=xc_control, y_control=yc_control)
 
         # Return fit and data values
-        return beta, beta_err, ic
+        return beta, beta_err, ic, good_idx
 
     # ----------------------------------------------------------------------
     @staticmethod
