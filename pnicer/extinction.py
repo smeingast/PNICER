@@ -82,7 +82,7 @@ class Extinction:
     # ---------------------------------------------------------------------- #
 
     # ----------------------------------------------------------------------
-    def build_map(self, bandwidth, metric="median", sampling=2, nicest=False, use_fwhm=False):
+    def build_map(self, bandwidth, metric="median", sampling=2, nicest=False, alpha=1/3, use_fwhm=False):
         """
         Method to build an extinction map.
 
@@ -96,6 +96,8 @@ class Extinction:
             Sampling of data. i.e. how many pixels per bandwidth. Default is 2.
         nicest : bool, optional
             Whether to activate the NICEST correction factor.
+        alpha : float, optional
+            The slope in the number counts (NICEST equation 2). Default is 1/3.
         use_fwhm : bool, optional
             If set, the bandwidth parameter represents the gaussian FWHM instead of its standard deviation. Only
             available when using a gaussian weighting.
@@ -131,8 +133,8 @@ class Extinction:
         # Get pixel coordinates of sources
         sources_x, sources_y = wcs.WCS(grid_header).wcs_world2pix(self.coordinates.lon, self.coordinates.lat, 0)
 
-        # Set alpha and k_lambda for nicest
-        alpha, k_lambda = 1 / 3, np.max(self.extvec.extvec) if self.extvec is not None else 1
+        # Set k_lambda for nicest
+        k_lambda = np.max(self.extvec.extvec) if self.extvec is not None else 1
 
         # Run extinction mapping for each pixel
         with Pool() as pool:

@@ -330,7 +330,7 @@ def mp_kde(grid, data, bandwidth, kernel="epanechnikov", norm=False, absolute=Fa
         Bandwidth of kernel (in data units).
     kernel : str, optional
         Name of kernel for KDE. e.g. 'epanechnikov' or 'gaussian'. Default is 'epanechnikov'.
-    norm : bool, optional
+    norm : str, optional
         Whether to normalize the result (density estimate from 0 to 1). Default is False.
     absolute : bool, optional
         Whether to return absolute numbers.

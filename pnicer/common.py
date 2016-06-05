@@ -76,7 +76,7 @@ class DataBase:
             raise ValueError("Input arrays must have equal size")
 
         # Coordinates must be supplied for all data if set
-        if self.coordinates is not None:
+        if coordinates is not None:
             if len(self.coordinates) != len(self.features[0]):
                 raise ValueError("Input coordinates do not match to data!")
 
