@@ -538,7 +538,7 @@ def _get_extinction_pixel(lon_grid, lat_grid, x_grid, y_grid, pixsize, lon_sourc
     sigfil = np.abs(ext - pixel_ext) < 3 * np.nanstd(ext)
 
     # Apply sigma clipping to all variables
-    ext, var, w_theta, w_total = ext[sigfil], var[sigfil], w_theta[sigfil], w_total[sigfil]
+    ext, var, w_theta, w_total, npixel = ext[sigfil], var[sigfil], w_theta[sigfil], w_total[sigfil], np.sum(sigfil)
 
     # Get final extinction
     pixel_ext = np.nansum(w_total * ext) / np.nansum(w_total)
