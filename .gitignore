@@ -5,7 +5,7 @@
 *pyc
 
 # Notebook stuff
-notebooks/
+notebooks/.ipynb_checkpoints
 
 # Other
 my_stuff.py

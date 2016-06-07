@@ -1,6 +1,5 @@
 # ----------------------------------------------------------------------
 # Import stuff
-import wcsaxes
 import numpy as np
 
 from astropy import wcs
@@ -525,7 +524,7 @@ class DataBase:
                              hspace=0.25, wspace=0.25)
 
         # Add axes
-        axes = [plt.subplot(grid_plot[idx], projection=wcsaxes.WCS(header=header)) for idx in range(self.n_features)]
+        axes = [plt.subplot(grid_plot[idx], projection=wcs.WCS(header=header)) for idx in range(self.n_features)]
 
         # Generate labels
         llon, llat = "GLON" if "gal" in self.coordinates.frame_name else "RA", "GLAT" \
@@ -723,7 +722,7 @@ class DataBase:
             data = np.vstack([self.coordinates.lon[self._features_masks[idx]][::skip],
                               self.coordinates.lat[self._features_masks[idx]][::skip]]).T
             dens = mp_kde(grid=xgrid, data=data, bandwidth=bandwidth, kernel=kernel,
-                          norm=False).reshape(grid_world[0].shape)
+                          norm=None).reshape(grid_world[0].shape)
 
             # Norm and save scale (we want everything scaled to the same reference! In this case the first feature)
             if idx == 0:

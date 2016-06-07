@@ -1,6 +1,5 @@
 # ----------------------------------------------------------------------
 # Import stuff
-import wcsaxes
 import numpy as np
 
 from copy import copy
@@ -303,7 +302,7 @@ class ExtinctionMap:
 
         for idx in range(0, nfig * 2, 2):
 
-            ax = plt.subplot(grid[idx], projection=wcsaxes.WCS(self.wcs_header))
+            ax = plt.subplot(grid[idx], projection=wcs.WCS(self.wcs_header))
             cax = plt.subplot(grid[idx + 1])
 
             # Plot Extinction map

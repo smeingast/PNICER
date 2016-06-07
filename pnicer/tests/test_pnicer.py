@@ -41,27 +41,20 @@ with fits.open(science_path) as science, fits.open(control_path) as control:
 
 
 # ----------------------------------------------------------------------
-# Initialize PNICER
+# Initialize pnicer
 science = Magnitudes(mag=sci_phot, err=sci_err, extvec=feature_extinction, coordinates=sci_coo, names=feature_names)
 control = Magnitudes(mag=con_phot, err=con_err, extvec=feature_extinction, coordinates=con_coo, names=feature_names)
 
 
 # ----------------------------------------------------------------------
-# Run PNICER
+# Run extinction codes
 pnicer = science.pnicer(control=control, add_colors=False)
-
-
-# ----------------------------------------------------------------------
-# Also run NICER
-# nicer = science.nicer(control=control)
+nicer = science.nicer(control=control)
 
 # ----------------------------------------------------------------------
-# Create the extinction maps without any crazy setup
-pnicer_emap = pnicer.build_map(bandwidth=3 / 60, metric="gaussian", frame="galactic",
-                               sampling=2, nicest=False, use_fwhm=False)
-
-# nicer_emap = pnicer.build_map(bandwidth=2 / 60, metric="gaussian", frame="galactic",
-#                               sampling=2, nicest=False, use_fwhm=False)
+# Test making extinction maps
+pnicer_emap = pnicer.build_map(bandwidth=5 / 60, metric="gaussian", nicest=False, use_fwhm=False)
+nicer_emap = pnicer.build_map(bandwidth=5 / 60, metric="gaussian", sampling=2, nicest=False, use_fwhm=False)
 
 
 # ----------------------------------------------------------------------

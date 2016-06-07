@@ -316,7 +316,7 @@ def caxes_delete_ticklabels(axes, xfirst=False, xlast=False, yfirst=False, ylast
 
 
 # ----------------------------------------------------------------------
-def mp_kde(grid, data, bandwidth, kernel="epanechnikov", norm=False, absolute=False, sampling=None):
+def mp_kde(grid, data, bandwidth, kernel="epanechnikov", norm=None, absolute=False, sampling=None):
     """
     Kernel density estimation with parallelisation.
 
