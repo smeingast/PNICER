@@ -427,6 +427,7 @@ def _get_weight_func(metric, bandwidth):
 
 
 # ----------------------------------------------------------------------
+# noinspection PyTypeChecker
 def _get_extinction_pixel(lon_grid, lat_grid, x_grid, y_grid, pixsize, lon_sources, lat_sources, x_sources, y_sources,
                           extinction, variance, bandwidth, metric, nicest, alpha, k_lambda):
     """
@@ -502,7 +503,12 @@ def _get_extinction_pixel(lon_grid, lat_grid, x_grid, y_grid, pixsize, lon_sourc
 
     # Choose metric
     if metric == "average":
-        return np.nanmean(ext), np.sqrt(np.nansum(var)) / npixel, npixel, np.nan
+
+        # 3 sig filter
+        sigfil = np.abs(ext - np.nanmean(ext)) < 3 * np.nanstd(ext)
+
+        # Return
+        return np.nanmean(ext[sigfil]), np.sqrt(np.nansum(var[sigfil])) / np.sum(sigfil), np.sum(sigfil), np.nan
 
     elif metric == "median":
         pixel_ext = np.nanmedian(ext)
@@ -527,11 +533,18 @@ def _get_extinction_pixel(lon_grid, lat_grid, x_grid, y_grid, pixsize, lon_sourc
         w_theta *= 10 ** (alpha * k_lambda * ext)
         w_total *= 10 ** (alpha * k_lambda * ext)
 
+    # Do sigma clipping in extinction
+    pixel_ext = np.nansum(w_total * ext) / np.nansum(w_total)
+    sigfil = np.abs(ext - pixel_ext) < 3 * np.nanstd(ext)
+
+    # Apply sigma clipping to all variables
+    ext, var, w_theta, w_total = ext[sigfil], var[sigfil], w_theta[sigfil], w_total[sigfil]
+
+    # Get final extinction
+    pixel_ext = np.nansum(w_total * ext) / np.nansum(w_total)
+
     # Get density
     rho = np.sum(w_theta)
-
-    # Get extinction
-    pixel_ext = np.nansum(w_total * ext) / np.nansum(w_total)
 
     # Get variance
     if nicest:
