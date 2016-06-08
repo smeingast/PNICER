@@ -473,13 +473,17 @@ def _get_extinction_pixel(lon_grid, lat_grid, x_grid, y_grid, pixsize, lon_sourc
 
     """
 
-    # In case the average or median is to be calculated, set the truncation scale equal to the bandwidth
+    # Set truncation scale
     trunc_deg = bandwidth if (metric == "average") | (metric == "median") else 6 * bandwidth
     trunc_pix = trunc_deg / pixsize / 2
 
-    # Truncate input sources to manageable size with grid positions
+    # Truncate input sources to a more manageable size
     idx = ((x_sources < x_grid + trunc_pix) & (x_sources > x_grid - trunc_pix) &
-           (y_sources < y_grid + trunc_pix) & (y_sources > y_grid - trunc_pix))
+           (y_sources < y_grid + trunc_pix) & (y_sources > y_grid - trunc_pix) & np.isfinite(extinction))
+
+    # Return if no data
+    if np.sum(idx) == 0:
+        return np.nan, np.nan, 0, np.nan
 
     # Apply pre-filtering to sky coordinates
     lon, lat, ext, var = lon_sources[idx], lat_sources[idx], extinction[idx], variance[idx]
@@ -490,28 +494,29 @@ def _get_extinction_pixel(lon_grid, lat_grid, x_grid, y_grid, pixsize, lon_sourc
     # Get sources within truncation scale on the sky
     idx = dis < trunc_deg / 2
 
-    # Calulate number of sources left over after truncation
-    npixel = np.sum(idx)
+    # Calulate remaining number of sources after truncation
+    nsources = np.sum(idx)
 
-    # If we have nothing here, immediately return; also return if there are less than 2 sources with extinction
-    if (npixel == 0) | (np.sum(np.isfinite(ext[idx])) < 2):
+    # Return for bad data (no data at all or less than two extinction measurements)
+    if (nsources == 0) | (np.sum(np.isfinite(ext[idx])) < 2):
         return np.nan, np.nan, 0, np.nan
 
     # Get data within truncation radius on sky
     ext, var, dis = ext[idx], var[idx], dis[idx]
 
-    # Choose metric
+    # Conditional choice for different metrics
     if metric == "average":
 
         # 3 sig filter
-        sigfil = np.abs(ext - np.nanmean(ext)) < 3 * np.nanstd(ext)
+        sigfil = np.abs(ext - np.mean(ext)) < 3 * np.std(ext)
 
         # Return
-        return np.nanmean(ext[sigfil]), np.sqrt(np.nansum(var[sigfil])) / np.sum(sigfil), np.sum(sigfil), np.nan
+        return np.mean(ext[sigfil]), np.sqrt(np.sum(var[sigfil])) / np.sum(sigfil), np.sum(sigfil), np.nan
 
     elif metric == "median":
-        pixel_ext = np.nanmedian(ext)
-        return pixel_ext, np.median(np.abs(ext - pixel_ext)), npixel, np.nan
+        pixel_ext = np.median(ext)
+        pixel_mad = np.median(np.abs(ext - pixel_ext))
+        return pixel_ext, pixel_mad, nsources, np.nan
 
     # If not median or average, fetch weight function
     else:
@@ -533,14 +538,14 @@ def _get_extinction_pixel(lon_grid, lat_grid, x_grid, y_grid, pixsize, lon_sourc
         w_total *= 10 ** (alpha * k_lambda * ext)
 
     # Do sigma clipping in extinction
-    pixel_ext = np.nansum(w_total * ext) / np.nansum(w_total)
-    sigfil = np.abs(ext - pixel_ext) < 3 * np.nanstd(ext)
+    pixel_ext = np.sum(w_total * ext) / np.sum(w_total)
+    sigfil = np.abs(ext - pixel_ext) < 3 * np.std(ext)
 
     # Apply sigma clipping to all variables
-    ext, var, w_theta, w_total, npixel = ext[sigfil], var[sigfil], w_theta[sigfil], w_total[sigfil], np.sum(sigfil)
+    ext, var, w_theta, w_total, nsources = ext[sigfil], var[sigfil], w_theta[sigfil], w_total[sigfil], np.sum(sigfil)
 
     # Get final extinction
-    pixel_ext = np.nansum(w_total * ext) / np.nansum(w_total)
+    pixel_ext = np.sum(w_total * ext) / np.sum(w_total)
 
     # Get density
     rho = np.sum(w_theta)
@@ -549,7 +554,7 @@ def _get_extinction_pixel(lon_grid, lat_grid, x_grid, y_grid, pixsize, lon_sourc
     if nicest:
 
         # Correction factor (Equ. 34 in NICEST paper)
-        cor = beta * np.nansum(w_total * var) / np.nansum(w_total)
+        cor = beta * np.sum(w_total * var) / np.sum(w_total)
 
         # Calculate error for NICEST (private communication with M. Lombardi)
         # TODO: Check if this formula is actually correct
@@ -558,8 +563,8 @@ def _get_extinction_pixel(lon_grid, lat_grid, x_grid, y_grid, pixsize, lon_sourc
 
     # Without NICEST the variance is a normal weighted error
     else:
-        pixel_var = np.nansum(w_total ** 2 * var) / np.nansum(w_total) ** 2
+        pixel_var = np.sum(w_total ** 2 * var) / np.sum(w_total) ** 2
         cor = 0.
 
     # Return
-    return pixel_ext - cor, pixel_var, npixel, rho
+    return pixel_ext - cor, pixel_var, nsources, rho
