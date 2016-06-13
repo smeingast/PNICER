@@ -497,8 +497,8 @@ def _get_extinction_pixel(lon_grid, lat_grid, x_grid, y_grid, pixsize, lon_sourc
     # Calulate remaining number of sources after truncation
     nsources = np.sum(idx)
 
-    # Return for bad data (no data at all or less than two extinction measurements)
-    if (nsources == 0) | (np.sum(np.isfinite(ext[idx])) < 2):
+    # Return if there are less than 2 sources after filtering
+    if nsources < 2:
         return np.nan, np.nan, 0, np.nan
 
     # Get data within truncation radius on sky
@@ -509,9 +509,10 @@ def _get_extinction_pixel(lon_grid, lat_grid, x_grid, y_grid, pixsize, lon_sourc
 
         # 3 sig filter
         sigfil = np.abs(ext - np.mean(ext)) < 3 * np.std(ext)
+        nsources = np.sum(sigfil)
 
         # Return
-        return np.mean(ext[sigfil]), np.sqrt(np.sum(var[sigfil])) / np.sum(sigfil), np.sum(sigfil), np.nan
+        return np.mean(ext[sigfil]), np.sqrt(np.sum(var[sigfil])) / nsources, nsources, np.nan
 
     elif metric == "median":
         pixel_ext = np.median(ext)
@@ -557,11 +558,10 @@ def _get_extinction_pixel(lon_grid, lat_grid, x_grid, y_grid, pixsize, lon_sourc
         cor = beta * np.sum(w_total * var) / np.sum(w_total)
 
         # Calculate error for NICEST (private communication with M. Lombardi)
-        # TODO: Check if this formula is actually correct
-        pixel_var = (np.sum((w_total ** 2 * np.exp(2 * beta * ext) * (1 + beta + ext) ** 2) / var) /
+        pixel_var = (np.sum((w_total ** 2 * np.exp(2 * beta * ext) * (1 + beta * ext) ** 2) / var) /
                      np.sum(w_total * np.exp(beta * ext) / var) ** 2)
 
-    # Without NICEST the variance is a normal weighted error
+    # Without NICEST the variance is calculated as a normal weighted error
     else:
         pixel_var = np.sum(w_total ** 2 * var) / np.sum(w_total) ** 2
         cor = 0.
