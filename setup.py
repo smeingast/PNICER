@@ -4,7 +4,7 @@ setup(
     name="PNICER",
     version="0.1",
     packages=["pnicer"],
-    package_dir={"pnicer": "PNICER/pnicer"},
+    package_dir={"pnicer": "pnicer"},
     package_data={"pnicer": ["tests_resources/*.fits"]},
     install_requires=["numpy", "scikit-learn", "matplotlib", "astropy", "wcsaxes"],
     url="",
