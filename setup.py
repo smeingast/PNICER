@@ -5,7 +5,7 @@ setup(
     version="0.1",
     packages=["pnicer", "pnicer.tests", "pnicer.tests_resources"],
     package_dir={"pnicer": "pnicer"},
-    package_data={"pnicer": ["tests_resources/*.fits"], "notebooks": ["*.ipynb"]},
+    package_data={"pnicer": ["tests_resources/*.fits"]},
     install_requires=["numpy", "scikit-learn", "matplotlib", "astropy", "wcsaxes"],
     url="",
     license="",
