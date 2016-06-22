@@ -3,7 +3,7 @@ from distutils.core import setup
 setup(
     name="PNICER",
     version="0.1",
-    packages=["pnicer"],
+    packages=["pnicer", "pnicer.tests", "pnicer.tests_resources"],
     install_requires=["numpy", "scikit-learn", "matplotlib", "astropy", "wcsaxes"],
     url="",
     license="",
