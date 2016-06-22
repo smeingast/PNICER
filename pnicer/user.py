@@ -426,7 +426,8 @@ class Magnitudes(DataBase):
             good_idx = good_idx[smask]
 
             # Determine covariance matrix of errors for science field
-            beta_dict["science_err_covar"] = get_color_covar(x1_sc_err, x2_sc_err, y1_sc_err, y2_sc_err, *x_idx, *y_idx)
+            beta_dict["science_err_covar"] = get_color_covar(x1_sc_err, x2_sc_err, y1_sc_err, y2_sc_err,
+                                                             x_idx[0], x_idx[1], y_idx[0], y_idx[1])
 
             # Determine slope and intercept
             beta, ic = self._get_beta(method=method, xdata=xc_science, ydata=yc_science, **beta_dict)
