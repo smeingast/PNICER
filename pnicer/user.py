@@ -394,9 +394,11 @@ class Magnitudes(DataBase):
             yc_control = control.features[y_idx[0]][cmask] - control.features[y_idx[1]][cmask]
 
             # Determine control field error covariance matrix
-            beta_dict["control_err_covar"] = get_color_covar(*[control.features_err[x_idx[i]][cmask] for i in range(2)],
-                                                             *[control.features_err[y_idx[i]][cmask] for i in range(2)],
-                                                             *x_idx, *y_idx)
+            beta_dict["control_err_covar"] = get_color_covar(control.features_err[x_idx[0]][cmask],
+                                                             control.features_err[x_idx[1]][cmask],
+                                                             control.features_err[y_idx[0]][cmask],
+                                                             control.features_err[y_idx[1]][cmask],
+                                                             x_idx[0], x_idx[1], y_idx[0], y_idx[1])
 
             # And sample covariance
             beta_dict["var_control"] = np.var(xc_control)
