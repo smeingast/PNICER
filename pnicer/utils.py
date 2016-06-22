@@ -99,6 +99,14 @@ def get_sample_covar(xi, yi):
 
     """
 
+    # Sample size must be equal
+    if len(xi) != len(yi):
+        raise ValueError("X and Y sample size must be equal.")
+
+    # Check for NaNs
+    if (np.sum(~np.isfinite(xi)) > 0) | (np.sum(~np.isfinite(yi)) > 0):
+        raise ValueError("Sample contains NaN entries")
+
     return np.sum((xi - np.mean(xi)) * (yi - np.mean(yi))) / len(xi)
 
 
