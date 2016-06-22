@@ -464,7 +464,7 @@ class Magnitudes(DataBase):
             y1_sc_err_split, y2_sc_err_split = [y1_sc_err[i] for i in ridx], [y2_sc_err[i] for i in ridx]
 
             # Calculate covariance matrices
-            cov_sc_err_split = [get_color_covar(a, b, c, d, *x_idx, *y_idx) for a, b, c, d in
+            cov_sc_err_split = [get_color_covar(a, b, c, d, x_idx[0], x_idx[1], y_idx[0], y_idx[1]) for a, b, c, d in
                                 zip(x1_sc_err_split, x2_sc_err_split, y1_sc_err_split, y2_sc_err_split)]
 
             # ...and put them into the dictionaries

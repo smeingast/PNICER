@@ -400,11 +400,11 @@ class DataBase:
     @property
     def _plotrange_world(self):
         """
-        Convenience property to calcualte the plot range in world coordinates
+        Convenience property to calculate the plot range in world coordinates.
 
         Returns
         -------
-        list
+        iterable
             List with (left, right) and (bottom, top) tuple entries
 
         """
@@ -667,7 +667,7 @@ class DataBase:
         fig, axes, _, header = self._gridspec_world(pixsize=10 / 60, ax_size=ax_size, proj_code="TAN")
 
         # Get plot limits
-        lim = wcs.WCS(header=header).wcs_world2pix(*self._plotrange_world, 0)
+        lim = wcs.WCS(header=header).wcs_world2pix(self._plotrange_world[0], self._plotrange_world[1], 0)
 
         # Loop over features and plot
         for idx in range(self.n_features):
