@@ -332,7 +332,7 @@ class DataBase:
         extvec = self.extvec._extinction_rot
 
         # In case no coordinates are supplied they need to be masked
-        if self.coordinates is not None:
+        if self.coordinates.coordinates is not None:
             coordinates = self.coordinates.coordinates[self._strict_mask]
         else:
             coordinates = None
@@ -955,6 +955,7 @@ class DataBase:
 
         """
 
+        # TODO: Automatically detect extinction class (for now only accepts arrays)
         return [f - extinction * v for f, v in zip(self.features, self.extvec.extvec)]
 
 
