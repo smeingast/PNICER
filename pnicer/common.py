@@ -924,7 +924,8 @@ class DataBase:
         ext_combinations = np.array(ext_combinations)
         var_combinations = np.array(var_combinations)
 
-        # TODO: Save combinations in instance attribute
+        self._ext_combinations = ext_combinations
+        self._var_combinations = var_combinations
 
         # Put large errors into entries without extinction
         var_combinations[~np.isfinite(var_combinations)] = 10000.

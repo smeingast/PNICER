@@ -507,6 +507,9 @@ def _get_extinction_pixel(lon_grid, lat_grid, x_grid, y_grid, pixsize, lon_sourc
     # Conditional choice for different metrics
     if metric == "average":
 
+        # TODO: Check error calculations
+        # return np.nanmean(ext), np.nanvar(ext), nsources, np.nan
+
         # 3 sig filter
         sigfil = np.abs(ext - np.mean(ext)) < 3 * np.std(ext)
         nsources = np.sum(sigfil)
