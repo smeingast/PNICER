@@ -1,4 +1,10 @@
+import sys
 from distutils.core import setup
+
+# Require Python 3
+if sys.version_info < (3, 4):
+    sys.exit("Sorry, Python < 3.4 is not supported")
+
 
 setup(
     name="PNICER",
