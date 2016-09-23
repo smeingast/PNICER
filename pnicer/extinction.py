@@ -159,7 +159,7 @@ class Extinction:
 
         # Return extinction map instance
         return ExtinctionMap(ext=map_ext, var=map_var, num=map_num, rho=map_rho,
-                             wcs_header=grid_header, prime_header=phdr)
+                             map_header=grid_header, prime_header=phdr)
 
     # ----------------------------------------------------------------------
     @staticmethod
@@ -228,7 +228,7 @@ class Extinction:
 # ---------------------------------------------------------------------- #
 class ExtinctionMap:
 
-    def __init__(self, ext, var, wcs_header, prime_header=None, num=None, rho=None):
+    def __init__(self, ext, var, map_header, prime_header=None, num=None, rho=None):
         """
         Extinction map class.
 
@@ -238,7 +238,7 @@ class ExtinctionMap:
             2D Extintion map.
         var : np.ndarray
             2D Extinction variance map.
-        wcs_header : astropy.fits.Header
+        map_header : astropy.fits.Header
             Header of grid from which extinction map was built.
         num : np.ndarray, optional
             2D source count map.
@@ -250,12 +250,12 @@ class ExtinctionMap:
         # Set instance attributes
         self.map, self.var = ext, var
         self.num = np.full_like(self.map, fill_value=np.nan, dtype=np.uint32) if num is None else num
-        self._rho = np.full_like(self.map, fill_value=np.nan, dtype=np.float32) if num is None else rho
+        self.rho = np.full_like(self.map, fill_value=np.nan, dtype=np.float32) if num is None else rho
         self.prime_header = fits.Header() if prime_header is None else prime_header
-        self.wcs_header = wcs_header
+        self.map_header = map_header
 
         # Sanity check for dimensions
-        if (self.map.ndim != 2) | (self.var.ndim != 2) | (self.num.ndim != 2) | (self._rho.ndim != 2):
+        if (self.map.ndim != 2) | (self.var.ndim != 2) | (self.num.ndim != 2) | (self.rho.ndim != 2):
             raise TypeError("Input must be 2D arrays")
 
     # ----------------------------------------------------------------------
@@ -302,7 +302,7 @@ class ExtinctionMap:
 
         for idx in range(0, nfig * 2, 2):
 
-            ax = plt.subplot(grid[idx], projection=wcs.WCS(self.wcs_header))
+            ax = plt.subplot(grid[idx], projection=wcs.WCS(self.map_header))
             cax = plt.subplot(grid[idx + 1])
 
             # Plot Extinction map
@@ -328,8 +328,8 @@ class ExtinctionMap:
                 fig.colorbar(im, cax=cax, label="N")
 
             elif idx == 6:
-                vmin, vmax = self._get_vlim(data=self._rho, percentiles=[1, 99], r=1)
-                im = ax.imshow(self._rho, origin="lower", interpolation="nearest", vmin=vmin, vmax=vmax, cmap=cmap)
+                vmin, vmax = self._get_vlim(data=self.rho, percentiles=[1, 99], r=1)
+                im = ax.imshow(self.rho, origin="lower", interpolation="nearest", vmin=vmin, vmax=vmax, cmap=cmap)
                 fig.colorbar(im, cax=cax, label=r"$\rho$")
 
             # Grab axes
@@ -368,10 +368,10 @@ class ExtinctionMap:
         # Create HDU list
         # noinspection PyTypeChecker
         hdulist = fits.HDUList([fits.PrimaryHDU(header=self.prime_header),
-                                fits.ImageHDU(data=self.map, header=self.wcs_header),
-                                fits.ImageHDU(data=self.var, header=self.wcs_header),
-                                fits.ImageHDU(data=self.num, header=self.wcs_header),
-                                fits.ImageHDU(data=self._rho, header=self.wcs_header)])
+                                fits.ImageHDU(data=self.map, header=self.map_header),
+                                fits.ImageHDU(data=self.var, header=self.map_header),
+                                fits.ImageHDU(data=self.num, header=self.map_header),
+                                fits.ImageHDU(data=self.rho, header=self.map_header)])
 
         # Write
         hdulist.writeto(path, clobber=clobber)
