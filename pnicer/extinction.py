@@ -10,16 +10,13 @@ from itertools import repeat
 from multiprocessing.pool import Pool
 
 from pnicer.common import Coordinates
-from pnicer.utils import distance_sky
+from pnicer.utils import distance_sky, std2fwhm
 
 
 # ----------------------------------------------------------------------
 # ----------------------------------------------------------------------
 # noinspection PyProtectedMember
 class Extinction:
-
-    # Useful constants
-    std2fwhm = 2 * np.sqrt(2 * np.log(2))
 
     def __init__(self, coordinates, extinction, variance=None, extvec=None):
         """
@@ -121,7 +118,7 @@ class Extinction:
 
         # Adjust bandwidth in case FWHM is to be used
         if use_fwhm:
-            bandwidth /= self.std2fwhm
+            bandwidth /= std2fwhm
 
         # Create WCS grid
         grid_header, (grid_lon, grid_lat) = self.coordinates.build_wcs_grid(proj_code="TAN", pixsize=pixsize)

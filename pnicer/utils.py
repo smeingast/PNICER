@@ -13,6 +13,9 @@ from itertools import combinations, repeat
 # noinspection PyPackageRequirements
 from sklearn.neighbors import KernelDensity
 
+# Useful constants
+std2fwhm = 2 * np.sqrt(2 * np.log(2))
+
 
 # ----------------------------------------------------------------------
 def distance_sky(lon1, lat1, lon2, lat2, unit="radians"):
