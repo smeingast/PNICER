@@ -32,10 +32,6 @@ class Magnitudes(DataBase):
         # Call parent
         super(Magnitudes, self).__init__(mag=mag, err=err, extvec=extvec, coordinates=coordinates, names=names)
 
-        # Create color names
-        self.colors_names = [self.features_names[k - 1] + "-" + self.features_names[k]
-                             for k in range(1, self.n_features)]
-
     # ----------------------------------------------------------------------
     def mag2color(self):
         """
@@ -58,9 +54,12 @@ class Magnitudes(DataBase):
         # Color names
         color_extvec = [self.extvec.extvec[k - 1] - self.extvec.extvec[k] for k in range(1, self.n_features)]
 
+        # Generate color names
+        names = [self.features_names[k - 1] + "-" + self.features_names[k] for k in range(1, self.n_features)]
+
         # Return Colors instance
         return Colors(mag=colors, err=colors_error, extvec=color_extvec, coordinates=self.coordinates.coordinates,
-                      names=self.colors_names)
+                      names=names)
 
     # ----------------------------------------------------------------------
     def _color_combinations(self):
@@ -565,9 +564,6 @@ class Colors(DataBase):
 
         # Call parent
         super(Colors, self).__init__(mag=mag, err=err, extvec=extvec, coordinates=coordinates, names=names)
-
-        # Add attributes
-        self.color_names = self.features_names
 
     # ----------------------------------------------------------------------
     def pnicer(self, control, sampling=2, kernel="epanechnikov"):
