@@ -1,4 +1,4 @@
-# ----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Import stuff
 import numpy as np
 
@@ -13,8 +13,8 @@ from pnicer.common import Coordinates
 from pnicer.utils import distance_sky, std2fwhm
 
 
-# ----------------------------------------------------------------------
-# ----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # noinspection PyProtectedMember
 class Extinction:
 
@@ -45,21 +45,21 @@ class Extinction:
         if len(self.extinction) != len(self.variance):
             raise ValueError("Extinction and variance arrays must have equal length")
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     def __len__(self):
         return len(self.extinction)
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     def __str__(self):
         return Table([np.around(self.extinction, 3), np.around(np.sqrt(self.variance), 3)],
                      names=("Extinction", "Error")).__str__()
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     def __iter__(self):
         for x in self.extinction:
             yield x
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     @property
     def _clean_index(self):
         """
@@ -73,11 +73,7 @@ class Extinction:
 
         return np.isfinite(self.extinction)
 
-    # ---------------------------------------------------------------------- #
-    #                            Instance methods                            #
-    # ---------------------------------------------------------------------- #
-
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     def build_map(self, bandwidth, metric="median", sampling=2, nicest=False, alpha=1/3, use_fwhm=False):
         """
         Method to build an extinction map.
@@ -158,7 +154,7 @@ class Extinction:
         return ExtinctionMap(ext=map_ext, var=map_var, num=map_num, rho=map_rho,
                              map_header=grid_header, prime_header=phdr)
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     @staticmethod
     def _make_prime_header(bandwidth, metric, sampling, nicest):
         """
@@ -193,7 +189,7 @@ class Extinction:
 
         return header
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     def save_fits(self, path):
         """
         Write the extinction data to a FITS table file.
@@ -221,8 +217,8 @@ class Extinction:
         tbhdu.writeto(path, clobber=True)
 
 
-# ---------------------------------------------------------------------- #
-# ---------------------------------------------------------------------- #
+# ----------------------------------------------------------------------------- #
+# ----------------------------------------------------------------------------- #
 class ExtinctionMap:
 
     def __init__(self, ext, var, map_header, prime_header=None, num=None, rho=None):
@@ -255,19 +251,19 @@ class ExtinctionMap:
         if (self.map.ndim != 2) | (self.var.ndim != 2) | (self.num.ndim != 2) | (self.rho.ndim != 2):
             raise TypeError("Input must be 2D arrays")
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     @property
     def shape(self):
         return self.map.shape
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     @staticmethod
     def _get_vlim(data, percentiles, r=10):
         vmin = np.floor(np.percentile(data[np.isfinite(data)], percentiles[0]) * r) / r
         vmax = np.ceil(np.percentile(data[np.isfinite(data)], percentiles[1]) * r) / r
         return vmin, vmax
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # noinspection PyUnresolvedReferences
     def plot_map(self, path=None, figsize=10):
         """
@@ -348,7 +344,7 @@ class ExtinctionMap:
             plt.savefig(path, bbox_inches="tight")
         plt.close()
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     def save_fits(self, path, clobber=True):
         """
         Save extinciton map as FITS file.
@@ -374,7 +370,7 @@ class ExtinctionMap:
         hdulist.writeto(path, clobber=clobber)
 
 
-# ----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def _get_weight_func(metric, bandwidth):
     """
     Defines the weight function for extinction mapping.
@@ -422,7 +418,7 @@ def _get_weight_func(metric, bandwidth):
     return wfunc
 
 
-# ----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # noinspection PyTypeChecker
 def _get_extinction_pixel(lon_grid, lat_grid, x_grid, y_grid, pixsize, lon_sources, lat_sources, x_sources, y_sources,
                           extinction, variance, bandwidth, metric, nicest, alpha, k_lambda):

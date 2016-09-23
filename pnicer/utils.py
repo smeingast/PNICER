@@ -1,4 +1,4 @@
-# ----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Import stuff
 import os
 import sys
@@ -17,7 +17,7 @@ from sklearn.neighbors import KernelDensity
 std2fwhm = 2 * np.sqrt(2 * np.log(2))
 
 
-# ----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def distance_sky(lon1, lat1, lon2, lat2, unit="radians"):
     """
     Returns the distance between two objects on a sphere along the connecting great circle. Also works with arrays.
@@ -54,7 +54,7 @@ def distance_sky(lon1, lat1, lon2, lat2, unit="radians"):
         return dis
 
 
-# ----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def weighted_avg(values, weights):
     """
     Calculates weighted mean and standard deviation.
@@ -83,7 +83,7 @@ def weighted_avg(values, weights):
     return average, variance
 
 
-# ----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def get_sample_covar(xi, yi):
     """
     Calculate sample covariance (can not contain NaNs!).
@@ -113,7 +113,7 @@ def get_sample_covar(xi, yi):
     return np.sum((xi - np.mean(xi)) * (yi - np.mean(yi))) / len(xi)
 
 
-# ----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def get_color_covar(magerr1, magerr2, magerr3, magerr4, name1, name2, name3, name4):
     """
     Calculate the error covariance matrix for color combinations of four magnitudes.
@@ -181,7 +181,7 @@ def get_color_covar(magerr1, magerr2, magerr3, magerr4, name1, name2, name3, nam
     return cmatrix
 
 
-# ----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def round_partial(data, precision):
     """
     Simple static method to round data to arbitrary precision.
@@ -203,7 +203,7 @@ def round_partial(data, precision):
     return np.around(data / precision) * precision
 
 
-# ----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def caxes(ndim, ax_size=None, labels=None):
     """
     Creates a grid of axes to plot all combinations of data.
@@ -278,7 +278,7 @@ def caxes(ndim, ax_size=None, labels=None):
     return fig, axes_out
 
 
-# ----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def caxes_delete_ticklabels(axes, xfirst=False, xlast=False, yfirst=False, ylast=False):
     """
     Deletes tick labels from a combination axes list.
@@ -326,7 +326,7 @@ def caxes_delete_ticklabels(axes, xfirst=False, xlast=False, yfirst=False, ylast
                 yticks[-1].set_visible(False)
 
 
-# ----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def mp_kde(grid, data, bandwidth, kernel="epanechnikov", norm=None, absolute=False, sampling=None):
     """
     Kernel density estimation with parallelisation.
@@ -397,7 +397,7 @@ def mp_kde(grid, data, bandwidth, kernel="epanechnikov", norm=None, absolute=Fal
     return mp
 
 
-# ----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def _mp_kde(kde, data, grid):
     """
     Parallelisation routine for kernel density estimation.
@@ -420,7 +420,7 @@ def _mp_kde(kde, data, grid):
     return np.exp(kde.fit(data).score_samples(grid))
 
 
-# ----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def get_resource_path(package, resource):
     """
     Returns the path to an included resource.
@@ -446,7 +446,7 @@ def get_resource_path(package, resource):
     return os.path.join(os.path.dirname(sys.modules[package].__file__), resource)
 
 
-# ----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def centroid_sphere(lon, lat, units="radian"):
     """
     Calcualte the centroid on a sphere. Strictly valid only for a unit sphere and for a coordinate system with latitudes
@@ -499,7 +499,7 @@ def centroid_sphere(lon, lat, units="radian"):
         return outlon, outlat
 
 
-# ----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def data2header(lon, lat, frame, proj_code="TAN", pixsize=1/3600, enlarge=1.05, **kwargs):
     """
     Create an astropy Header instance from a given dataset (longitude/latitude). The world coordinate system can be
@@ -581,7 +581,7 @@ def data2header(lon, lat, frame, proj_code="TAN", pixsize=1/3600, enlarge=1.05, 
     return header
 
 
-# ----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def data2grid(lon, lat, frame, proj_code="TAN", pixsize=5. / 60, **kwargs):
     """
     Method to build a WCS grid with a valid projection given a pixel scale.

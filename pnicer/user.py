@@ -1,4 +1,4 @@
-# ----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # import stuff
 import numpy as np
 
@@ -6,7 +6,7 @@ from pnicer.common import DataBase
 from pnicer.utils import get_sample_covar, get_color_covar
 
 
-# ----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # noinspection PyProtectedMember
 class Magnitudes(DataBase):
 
@@ -32,7 +32,7 @@ class Magnitudes(DataBase):
         # Call parent
         super(Magnitudes, self).__init__(mag=mag, err=err, extvec=extvec, coordinates=coordinates, names=names)
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     def mag2color(self):
         """
         Method to convert magnitude to color instances.
@@ -61,7 +61,7 @@ class Magnitudes(DataBase):
         return Colors(mag=colors, err=colors_error, extvec=color_extvec, coordinates=self.coordinates.coordinates,
                       names=names)
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     def _color_combinations(self):
         """
         Calculates a list of Colors instances for all combinations.
@@ -76,7 +76,7 @@ class Magnitudes(DataBase):
         # Get all colors and then all combinations of colors
         return self.mag2color()._all_combinations(idxstart=1)
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     def pnicer(self, control, sampling=2, kernel="epanechnikov", add_colors=False):
         """
         Main PNICER method for magnitudes. Includes options to use combinations for input features, or convert them
@@ -118,7 +118,7 @@ class Magnitudes(DataBase):
         # Call PNICER
         return self._pnicer_combinations(control=control, comb=comb, sampling=sampling, kernel=kernel)
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     def nicer(self, control=None, color0=None, color0_err=None, min_features=None):
         """
         NICER routine as descibed in Lombardi & Alves 2001. Generalized for arbitrary input magnitudes
@@ -235,7 +235,7 @@ class Magnitudes(DataBase):
         return Extinction(coordinates=self.coordinates.coordinates, extinction=ext.data, variance=var,
                           extvec=self.extvec)
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # noinspection PyPackageRequirements
     @staticmethod
     def _get_beta(method, xdata, ydata, **kwargs):
@@ -311,7 +311,7 @@ class Magnitudes(DataBase):
         # noinspection PyUnboundLocalVariable
         return beta, ic
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     def color_excess_ratio(self, x_keys, y_keys, method="ols", control=None, kappa=1, sigma=3, err_iter=100, qc=True):
         """
         Calculates the selective color excess rations (e.g.: E(J-H)/E(H-K)) for a given combinations of magnitudes. This
@@ -488,7 +488,7 @@ class Magnitudes(DataBase):
         # Return fit and data values
         return beta, beta_err, ic, good_idx
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     @staticmethod
     def _plot_extinction_ratio(beta, ic, x_science, y_science, x_control=None, y_control=None):
         """
@@ -536,7 +536,7 @@ class Magnitudes(DataBase):
         plt.show()
 
 
-# ----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # noinspection PyProtectedMember
 class Colors(DataBase):
 
@@ -565,7 +565,7 @@ class Colors(DataBase):
         # Call parent
         super(Colors, self).__init__(mag=mag, err=err, extvec=extvec, coordinates=coordinates, names=names)
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     def pnicer(self, control, sampling=2, kernel="epanechnikov"):
         """
         PNICER call method for colors.

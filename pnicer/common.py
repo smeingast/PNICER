@@ -1,4 +1,4 @@
-# ----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Import stuff
 import numpy as np
 
@@ -12,8 +12,8 @@ from pnicer.utils import weighted_avg, caxes, mp_kde, data2grid, caxes_delete_ti
     centroid_sphere, distance_sky
 
 
-# ---------------------------------------------------------------------- #
-# ---------------------------------------------------------------------- #
+# ----------------------------------------------------------------------------- #
+# ----------------------------------------------------------------------------- #
 # noinspection PyProtectedMember
 class DataBase:
 
@@ -55,7 +55,7 @@ class DataBase:
             self.dict[self.features_names[i]] = self.features[i]
             self.dict[self.features_names[i] + "_err"] = self.features_err[i]
 
-        # ----------------------------------------------------------------------
+        # -----------------------------------------------------------------------------
         # Do some input checks
 
         # Dimensions of extinction vector must be equal to dimensions of data
@@ -79,11 +79,11 @@ class DataBase:
             if len(self.coordinates) != len(self.features[0]):
                 raise ValueError("Input coordinates do not match to data!")
 
-    # ---------------------------------------------------------------------- #
-    #                         Some useful properties                         #
-    # ---------------------------------------------------------------------- #
+    # ----------------------------------------------------------------------------- #
+    #                            Some useful properties                             #
+    # ----------------------------------------------------------------------------- #
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     @property
     def n_features(self):
         """
@@ -97,7 +97,7 @@ class DataBase:
 
         return len(self.features)
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     @property
     def n_data(self):
         """
@@ -111,7 +111,7 @@ class DataBase:
 
         return self.features[0].size
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     @property
     def _features_masks(self):
         """
@@ -127,11 +127,11 @@ class DataBase:
 
         return [np.isfinite(m) & np.isfinite(e) for m, e in zip(self.features, self.features_err)]
 
-    # ---------------------------------------------------------------------- #
-    #                                  Masks                                 #
-    # ---------------------------------------------------------------------- #
+    # ----------------------------------------------------------------------------- #
+    #                                     Masks                                     #
+    # ----------------------------------------------------------------------------- #
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     def _loose_mask(self, max_bad_features):
         """
         Returns a mask where entries are masked when given 'max_bad_features' bad entries. When e.g. set to 0, no bad
@@ -151,7 +151,7 @@ class DataBase:
         """
         return self.n_features - np.sum(np.vstack(self._features_masks), axis=0) <= max_bad_features
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     @property
     def _strict_mask(self):
         """
@@ -169,7 +169,7 @@ class DataBase:
         # Would be the same:
         # return self._loose_mask(max_bad_features=0)
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     def _custom_strict_mask(self, idx=None, names=None):
         """
         Creates a custom mask for a given set of combined features. Any entry that has a single NaN in any of the
@@ -205,11 +205,11 @@ class DataBase:
         # Return combined mask
         return np.prod(np.vstack([self._features_masks[i] for i in idx]), axis=0, dtype=bool)
 
-    # ---------------------------------------------------------------------- #
-    #                             Helper methods                             #
-    # ---------------------------------------------------------------------- #
+    # ----------------------------------------------------------------------------- #
+    #                                 Helper methods                                #
+    # ----------------------------------------------------------------------------- #
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     def _index2name(self, idx):
         """
         Returns the name (or names) of features based on their index entry.
@@ -232,7 +232,7 @@ class DataBase:
         else:
             raise ValueError("Index must be integer or list")
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     def _name2index(self, name):
         """
         Returns the index (or indices) of features based on their name.
@@ -255,7 +255,7 @@ class DataBase:
         else:
             raise ValueError("Name must be given as a string or a list")
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     @staticmethod
     def _build_feature_grid(data, precision):
         """
@@ -284,7 +284,7 @@ class DataBase:
 
         return grid_data[np.sort(idx)].T
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     @classmethod
     def _check_class(cls, ccls):
         """
@@ -305,11 +305,11 @@ class DataBase:
         if cls != ccls.__class__:
             raise ValueError("Instance and control class do not match")
 
-    # ---------------------------------------------------------------------- #
-    #                            Instance methods                            #
-    # ---------------------------------------------------------------------- #
+    # ----------------------------------------------------------------------------- #
+    #                                Instance methods                               #
+    # ----------------------------------------------------------------------------- #
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     def _rotate(self):
         """
         Method to rotate data space with the given extinction vector. Only finite data are transmitted intp the new
@@ -343,7 +343,7 @@ class DataBase:
                               extvec=extvec, coordinates=coordinates,
                               names=[x + "_rot" for x in self.features_names])
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     def _all_combinations(self, idxstart):
         """
         Method to get all combinations of input features
@@ -375,11 +375,11 @@ class DataBase:
         # Return list of combinations.
         return combination_instances
 
-    # ---------------------------------------------------------------------- #
-    #                            Plotting methods                            #
-    # ---------------------------------------------------------------------- #
+    # ----------------------------------------------------------------------------- #
+    #                                Plotting methods                               #
+    # ----------------------------------------------------------------------------- #
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     # noinspection PyTypeChecker
     @property
     def _plotrange_features(self):
@@ -396,7 +396,7 @@ class DataBase:
         return [(np.floor(np.percentile(x[m], 0.01)), np.ceil(np.percentile(x[m], 99.99)))
                 for x, m in zip(self.features, self._features_masks)]
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     @property
     def _plotrange_world(self):
         """
@@ -427,7 +427,7 @@ class DataBase:
 
         return [(left, right), (bottom, top)]
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     @staticmethod
     def _get_plot_axsize(size):
         """
@@ -460,7 +460,7 @@ class DataBase:
         else:
             raise ValueError("Axis size must be given either with a single number or a list with two entries")
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     @staticmethod
     def _finalize_plot(path=None):
         """
@@ -483,7 +483,7 @@ class DataBase:
             plt.savefig(path, bbox_inches='tight')
         plt.close()
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     def _gridspec_world(self, pixsize, ax_size, proj_code):
         """
         Creates all necessary instances for plotting with a grid in world coordinates.
@@ -553,7 +553,7 @@ class DataBase:
 
         return fig, axes, grid_world, header
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     def plot_combinations_scatter(self, path=None, ax_size=None, skip=1, **kwargs):
         """
         2D Scatter plot of combinations.
@@ -592,7 +592,7 @@ class DataBase:
         # Save or show figure
         self._finalize_plot(path=path)
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     def plot_combinations_kde(self, path=None, ax_size=None, grid_bw=0.1, kernel="epanechnikov", cmap="gist_heat_r"):
         """
         KDE for all 2D combinations of features
@@ -645,7 +645,7 @@ class DataBase:
         # Save or show figure
         self._finalize_plot(path=path)
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     def plot_sources_scatter(self, path=None, ax_size=10, skip=1, **kwargs):
         """
         Plot source coordinates in a scatter plot.
@@ -686,7 +686,7 @@ class DataBase:
         # Finalize plot
         self._finalize_plot(path=path)
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     def plot_sources_kde(self, path=None, bandwidth=10 / 60, ax_size=10, kernel="epanechnikov", skip=1, **kwargs):
         """
         Plot source densities for features
@@ -738,11 +738,11 @@ class DataBase:
         # Save or show figure
         self._finalize_plot(path=path)
 
-    # ---------------------------------------------------------------------- #
-    #                          Main PNICER routines                          #
-    # ---------------------------------------------------------------------- #
+    # ----------------------------------------------------------------------------- #
+    #                              Main PNICER routines                             #
+    # ----------------------------------------------------------------------------- #
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     def _pnicer_univariate(self, control):
         """
         Univariate implementation of PNICER.
@@ -780,7 +780,7 @@ class DataBase:
         # Return Extinction, variance and intrinsic features
         return ext, var, intrinsic[np.newaxis, :]
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     def _pnicer_multivariate(self, control, sampling, kernel):
         """
         Main PNICER routine to get extinction. This will return only the extinction values for data for which all
@@ -877,7 +877,7 @@ class DataBase:
         # Return extinction, variance and intrinsic features
         return ext_full, var_full, int_full
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     def _pnicer_combinations(self, control, comb, sampling, kernel):
         """
         PNICER base implementation for combinations. Basically calls the pnicer_single implementation for all
@@ -941,7 +941,7 @@ class DataBase:
         from pnicer.extinction import Extinction
         return Extinction(coordinates=self.coordinates.coordinates, extinction=ext, variance=var, extvec=self.extvec)
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     def features_intrinsic(self, extinction):
         """
         Calculates the de-reddened features
@@ -962,8 +962,8 @@ class DataBase:
         return [f - extinction * v for f, v in zip(self.features, self.extvec.extvec)]
 
 
-# ---------------------------------------------------------------------- #
-# ---------------------------------------------------------------------- #
+# ----------------------------------------------------------------------------- #
+# ----------------------------------------------------------------------------- #
 class Coordinates:
 
     def __init__(self, coordinates):
@@ -979,11 +979,11 @@ class Coordinates:
 
         self.coordinates = coordinates
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     def __len__(self):
         return len(self.coordinates)
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     @property
     def frame_name(self):
         """
@@ -1002,7 +1002,7 @@ class Coordinates:
         # Otherwise return
         return self.coordinates.frame.name
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     @property
     def lon(self):
         """
@@ -1021,7 +1021,7 @@ class Coordinates:
         elif self.frame_name == "icrs":
             return self.coordinates.ra.degree
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     @property
     def lat(self):
         """
@@ -1040,7 +1040,7 @@ class Coordinates:
         elif self.frame_name == "icrs":
             return self.coordinates.dec.degree
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     def build_wcs_grid(self, proj_code="TAN", pixsize=10 / 60, **kwargs):
         """
         Generates a WCS grid.
@@ -1065,8 +1065,8 @@ class Coordinates:
                          **kwargs)
 
 
-# ---------------------------------------------------------------------- #
-# ---------------------------------------------------------------------- #
+# ----------------------------------------------------------------------------- #
+# ----------------------------------------------------------------------------- #
 class ExtinctionVector:
 
     def __init__(self, extvec):
@@ -1083,7 +1083,7 @@ class ExtinctionVector:
         # Set attributes
         self.extvec = extvec
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     @property
     def n_dimensions(self):
         """
@@ -1097,7 +1097,7 @@ class ExtinctionVector:
 
         return len(self.extvec)
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     @staticmethod
     def _unit_vectors(n_dimensions):
         """
@@ -1117,7 +1117,7 @@ class ExtinctionVector:
 
         return [np.array([1.0 if i == l else 0.0 for i in range(n_dimensions)]) for l in range(n_dimensions)]
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     @staticmethod
     def _get_rotmatrix(vector):
         """
@@ -1175,7 +1175,7 @@ class ExtinctionVector:
 
         return rotmatrix
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     @property
     def _rotmatrix(self):
         """
@@ -1190,7 +1190,7 @@ class ExtinctionVector:
 
         return ExtinctionVector._get_rotmatrix(self.extvec)
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     @property
     def _rotmatrix_inv(self):
         """
@@ -1204,7 +1204,7 @@ class ExtinctionVector:
 
         return self._rotmatrix.T
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     @property
     def _extinction_rot(self):
         """
@@ -1218,7 +1218,7 @@ class ExtinctionVector:
 
         return self._rotmatrix.dot(self.extvec)
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     @property
     def _extinction_norm(self):
         """
