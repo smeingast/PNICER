@@ -16,3 +16,4 @@ __pycache__/
 pnicer/__pycache__/
 pnicer/tests/__pycache__/
 pnicer/tests_resources/__pycache__/
+PNICER.egg-info/
