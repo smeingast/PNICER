@@ -1,5 +1,7 @@
 # -----------------------------------------------------------------------------
 # Import stuff
+import sys
+import time
 import numpy as np
 
 from copy import copy
@@ -10,7 +12,7 @@ from itertools import repeat
 from multiprocessing.pool import Pool
 
 from pnicer.common import Coordinates
-from pnicer.utils import distance_sky, std2fwhm
+from pnicer.utils import distance_sky, std2fwhm, centroid_sphere
 
 
 # -----------------------------------------------------------------------------
@@ -74,7 +76,18 @@ class Extinction:
         return np.isfinite(self.extinction)
 
     # -----------------------------------------------------------------------------
-    def build_map(self, bandwidth, metric="median", sampling=2, nicest=False, alpha=1/3, use_fwhm=False):
+    @staticmethod
+    def __build_map_print(silent):
+        if not silent:
+            print("{:<45}".format("Building extinction map"))
+            print("{:-<45}".format(""))
+            print("{0:<15}{1:<15}{2:<15}".format("Progress (%)", "Elapsed (s)", "ETA (s)"))
+        else:
+            pass
+
+    # -----------------------------------------------------------------------------
+    def build_map(self, bandwidth, metric="median", sampling=2, nicest=False, alpha=1/3, use_fwhm=False, silent=False,
+                  **kwargs):
         """
         Method to build an extinction map.
 
@@ -93,6 +106,8 @@ class Extinction:
         use_fwhm : bool, optional
             If set, the bandwidth parameter represents the gaussian FWHM instead of its standard deviation. Only
             available when using a gaussian weighting.
+        silent : bool, optional
+            Whether information on the progress should be printed.
 
         Returns
         -------
@@ -116,42 +131,138 @@ class Extinction:
         if use_fwhm:
             bandwidth /= std2fwhm
 
-        # Create WCS grid
-        grid_header, (grid_lon, grid_lat) = self.coordinates.build_wcs_grid(proj_code="TAN", pixsize=pixsize)
-
-        # Create pixel grid
-        grid_x, grid_y = wcs.WCS(grid_header).wcs_world2pix(grid_lon, grid_lat, 0)
-
-        # Get pixel coordinates of sources
-        sources_x, sources_y = wcs.WCS(grid_header).wcs_world2pix(self.coordinates.lon, self.coordinates.lat, 0)
+        # Set default projection
+        if "proj_code" not in kwargs:
+            kwargs["proj_code"] = "TAN"
 
         # Set k_lambda for nicest
         k_lambda = np.max(self.extvec.extvec) if self.extvec is not None else 1
 
-        # Run extinction mapping for each pixel
-        with Pool() as pool:
-            mp = pool.starmap(_get_extinction_pixel,
-                              zip(grid_lon.ravel(), grid_lat.ravel(), grid_x.ravel(), grid_y.ravel(), repeat(pixsize),
-                                  repeat(self.coordinates.lon[self._clean_index]),
-                                  repeat(self.coordinates.lat[self._clean_index]),
-                                  repeat(sources_x[self._clean_index]), repeat(sources_y[self._clean_index]),
-                                  repeat(self.extinction[self._clean_index]), repeat(self.variance[self._clean_index]),
-                                  repeat(bandwidth), repeat(metric), repeat(nicest), repeat(alpha), repeat(k_lambda)))
+        # Create WCS grid
+        grid_header, (grid_lon, grid_lat) = self.coordinates.build_wcs_grid(pixsize=pixsize, **kwargs)
 
-        # Unpack results
-        map_ext, map_var, map_num, map_rho = list(zip(*mp))
+        # Create pixel grid
+        grid_x, grid_y = wcs.WCS(grid_header).wcs_world2pix(grid_lon, grid_lat, 0)
 
-        # Reshape and convert to 32bit
-        map_ext = np.array(map_ext).reshape(grid_lon.shape).astype(np.float32)
-        map_var = np.array(map_var).reshape(grid_lon.shape).astype(np.float32)
-        map_num = np.array(map_num).reshape(grid_lon.shape).astype(np.uint32)
-        map_rho = np.array(map_rho).reshape(grid_lon.shape).astype(np.float32)
+        # Grid shape
+        grid_shape = grid_x.shape
+
+        # Get pixel coordinates of sources
+        sources_x, sources_y = wcs.WCS(grid_header).wcs_world2pix(self.coordinates.lon, self.coordinates.lat, 0)
+
+        # Split into a minimum of ~1x1 deg2 patches
+        n = np.ceil(np.min(grid_shape) * pixsize)
+
+        # Determine patch size in pixels
+        patch_size = np.ceil(np.min(grid_shape) / n).astype(np.int)
+
+        # Set minimum to 100 pix for effective parallelisation
+        if patch_size < 100:
+            patch_size = 100
+
+        # But it can't exceed 5 degrees to keep a reasonable number of sources per patch
+        if patch_size * pixsize > 5:
+            patch_size = 5 / pixsize
+
+        # Number of patches in each dimension of the grid
+        np0, np1 = np.int(np.ceil(grid_shape[0] / patch_size)), np.int(np.ceil(grid_shape[1] / patch_size))
+
+        # Create patches
+        grid_x_patches = [np.array_split(p, np1, axis=1) for p in np.array_split(grid_x, np0, axis=0)]
+        grid_y_patches = [np.array_split(p, np1, axis=1) for p in np.array_split(grid_y, np0, axis=0)]
+        grid_lon_patches = [np.array_split(p, np1, axis=1) for p in np.array_split(grid_lon, np0, axis=0)]
+        grid_lat_patches = [np.array_split(p, np1, axis=1) for p in np.array_split(grid_lat, np0, axis=0)]
+
+        # Determine total number of patches
+        n_patches = len([item for sublist in grid_x_patches for item in sublist])
+
+        # Print info
+        self.__build_map_print(silent)
+
+        # Loop over patch rows
+        tstart, stack, i, progress = time.time(), [], 0, 0
+        for row_x, row_y, row_lon, row_lat in zip(grid_x_patches, grid_y_patches, grid_lon_patches, grid_lat_patches):
+
+            # Loop over patch columns in row
+            row = []
+            for px, py, plon, plat in zip(row_x, row_y, row_lon, row_lat):
+
+                # Patch shape
+                pshape = px.shape
+
+                # Get center of patch
+                center_plon, center_plat = centroid_sphere(lon=plon, lat=plat, units="degree")
+
+                # Get maximum distance in patch grid
+                pmax = np.max(distance_sky(lon1=center_plon, lat1=center_plat, lon2=plon, lat2=plat, unit="degree"))
+
+                # Extend with kernel bandwidth
+                pmax += 3.01 * bandwidth     # This scale connects to the truncation scale in _get_extinction_pixel!!!
+
+                # Get all sources within patch range
+                pfil = distance_sky(lon1=center_plon, lat1=center_plat,
+                                    lon2=self.coordinates.lon[self._clean_index],
+                                    lat2=self.coordinates.lat[self._clean_index], unit="degree") < pmax
+
+                # Filter data
+                splon = self.coordinates.lon[self._clean_index][pfil]
+                splat = self.coordinates.lat[self._clean_index][pfil]
+                sx, sy = sources_x[self._clean_index][pfil], sources_y[self._clean_index][pfil]
+                pext, pvar = self.extinction[self._clean_index][pfil], self.variance[self._clean_index][pfil]
+
+                # Run extinction estimation for each pixel
+                with Pool() as pool:
+                    mp = pool.starmap(_get_extinction_pixel,
+                                      zip(plon.ravel(), plat.ravel(), px.ravel(), py.ravel(), repeat(pixsize),
+                                          repeat(splon), repeat(splat), repeat(sx), repeat(sy), repeat(pext),
+                                          repeat(pvar), repeat(bandwidth), repeat(metric), repeat(nicest),
+                                          repeat(alpha), repeat(k_lambda)))
+
+                # Reshape and convert
+                row.append([np.array(x).reshape(pshape).astype(d) for
+                            x, d in zip(list(zip(*mp)), [np.float32, np.float32, np.uint32, np.float32])])
+
+                # Calcualte ETA
+                i += 1
+                progress, telapsed = i / n_patches, time.time() - tstart
+                remaining = 1 - progress
+                tremaining = (telapsed / progress) * remaining
+
+                # Report progress
+                try:
+                    # Test for notebook
+                    # noinspection PyUnresolvedReferences
+                    if get_ipython().__class__.__name__ == "ZMQInteractiveShell":
+
+                        # noinspection PyPackageRequirements
+                        from IPython.display import display, clear_output
+                        clear_output(wait=True)
+                        self.__build_map_print(silent)
+                        if not silent:
+                            print("{0:<15.1f}{1:<15.1f}{2:<15.1f}".format(100 * progress, telapsed, tremaining))
+                        sys.stdout.flush()
+                    else:
+                        raise NameError
+                except NameError:
+                    end = "" if i < n_patches else "\n"
+                    if not silent:
+                        print("\r{0:<15.1f}{1:<15.1f}{2:<15.1f}".format(100 * progress, telapsed, tremaining), end=end)
+
+            # Stack into full row
+            stack.append([np.hstack(x) for x in list(zip(*row))])
+
+        # Stack into full maps
+        full = [np.vstack(x) for x in list(zip(*stack))]
 
         # Create primary header for map with metric information
         phdr = self._make_prime_header(bandwidth=bandwidth, metric=metric, sampling=sampling, nicest=nicest)
 
+        # Final print
+        if not silent:
+            print("All done in {0:0.1f}s".format(time.time() - tstart))
+
         # Return extinction map instance
-        return ExtinctionMap(ext=map_ext, var=map_var, num=map_num, rho=map_rho,
+        return ExtinctionMap(ext=full[0], var=full[1], num=full[2], rho=full[3],
                              map_header=grid_header, prime_header=phdr)
 
     # -----------------------------------------------------------------------------
