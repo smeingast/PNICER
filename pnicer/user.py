@@ -2,36 +2,35 @@
 # import stuff
 import numpy as np
 
-from pnicer.common import DataBase
+from pnicer.common import Data
 from pnicer.utils import get_sample_covar, get_color_covar
 
 
-# -----------------------------------------------------------------------------
-# noinspection PyProtectedMember
-class Magnitudes(DataBase):
+# ----------------------------------------------------------------------------- #
+# ----------------------------------------------------------------------------- #
+class Magnitudes(Data):
 
-    # -----------------------------------------------------------------------------
-    def __init__(self, mag, err, extvec, coordinates=None, names=None):
+    def __init__(self, magnitudes, errors, extvec, coordinates=None, names=None):
         """
-        Main class for users. Includes PNICER and NICER.
+        Generic magnitude data class.
 
         Parameters
         ----------
-        mag : list
+        magnitudes : list
             List of magnitude arrays. All arrays must have the same length.
-        err : list
+        errors : list
             List off magnitude error arrays.
-        coordinates : SkyCoord, optional
-            Astropy SkyCoord instance.
         extvec : list
             List holding the extinction components for each magnitude.
+        coordinates : SkyCoord, optional
+            Astropy SkyCoord instance.
         names : list, optional
             List of magnitude (feature) names.
 
         """
 
-        # Call parent
-        super(Magnitudes, self).__init__(mag=mag, err=err, extvec=extvec, coordinates=coordinates, names=names)
+        super(Magnitudes, self).__init__(features=magnitudes, feature_err=errors, feature_extvec=extvec,
+                                         feature_names=names, feature_coordinates=coordinates)
 
     # -----------------------------------------------------------------------------
     def mag2color(self):
@@ -40,7 +39,7 @@ class Magnitudes(DataBase):
 
         Returns
         -------
-        Colors
+        ApparentColors
             Colors instance.
 
         """
@@ -59,8 +58,46 @@ class Magnitudes(DataBase):
         names = [self.features_names[k - 1] + "-" + self.features_names[k] for k in range(1, self.n_features)]
 
         # Return Colors instance
-        return Colors(mag=colors, err=colors_error, extvec=color_extvec, coordinates=self.coordinates.coordinates,
-                      names=names)
+        return ApparentColors(colors=colors, errors=colors_error, extvec=color_extvec,
+                              coordinates=self.coordinates.coordinates, names=names)
+
+
+# ----------------------------------------------------------------------------- #
+# ----------------------------------------------------------------------------- #
+class Colors(Data):
+    def __init__(self, colors, errors, extvec, coordinates=None, names=None):
+        super(Colors, self).__init__(features=colors, feature_err=errors, feature_extvec=extvec, feature_names=names,
+                                     feature_coordinates=coordinates)
+
+
+# ----------------------------------------------------------------------------- #
+# ----------------------------------------------------------------------------- #
+# noinspection PyProtectedMember
+class ApparentMagnitudes(Magnitudes):
+
+    # -----------------------------------------------------------------------------
+    def __init__(self, magnitudes, errors, extvec, coordinates=None, names=None):
+        """
+        Main class for users with magnitude data. Includes PNICER and NICER.
+
+        Parameters
+        ----------
+        magnitudes : list
+            List of magnitude arrays. All arrays must have the same length.
+        errors : list
+            List off magnitude error arrays.
+        extvec : list
+            List holding the extinction components for each magnitude.
+        coordinates : SkyCoord, optional
+            Astropy SkyCoord instance.
+        names : list, optional
+            List of magnitude (feature) names.
+
+        """
+
+        # Call parent
+        super(ApparentMagnitudes, self).__init__(magnitudes=magnitudes, errors=errors, extvec=extvec,
+                                                 coordinates=coordinates, names=names)
 
     # -----------------------------------------------------------------------------
     def _color_combinations(self):
@@ -236,8 +273,9 @@ class Magnitudes(DataBase):
 
         # Return Intrinsic instance
         from pnicer.intrinsic import IntrinsicMagnitudes
-        return IntrinsicMagnitudes(coordinates=self.coordinates.coordinates, intrinsic=intrinsic, extinction=ext.data,
-                                   variance=var, extvec=self.extvec)
+        return IntrinsicMagnitudes(magnitudes=intrinsic, errors=self.features_err, extinction=ext,
+                                   extinction_variance=var, extvec=self.extvec.extvec,
+                                   coordinates=self.coordinates.coordinates, names=self.features_names)
 
     # -----------------------------------------------------------------------------
     # noinspection PyPackageRequirements
@@ -540,20 +578,21 @@ class Magnitudes(DataBase):
         plt.show()
 
 
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- #
+# ----------------------------------------------------------------------------- #
 # noinspection PyProtectedMember
-class Colors(DataBase):
+class ApparentColors(Colors):
 
     # -----------------------------------------------------------------------------
-    def __init__(self, mag, err, extvec, coordinates=None, names=None):
+    def __init__(self, colors, errors, extvec, coordinates=None, names=None):
         """
-        Same as magnitudes class without NICER.
+        Main class for users with color data.
 
         Parameters
         ----------
-        mag : list
+        colors : list
             List of color arrays. All arrays must have the same length.
-        err : list
+        errors : list
             List off color error arrays.
         coordinates : SkyCoord, optional
             Astropy SkyCoord instance.
@@ -568,7 +607,8 @@ class Colors(DataBase):
         """
 
         # Call parent
-        super(Colors, self).__init__(mag=mag, err=err, extvec=extvec, coordinates=coordinates, names=names)
+        super(ApparentColors, self).__init__(colors=colors, errors=errors, extvec=extvec, coordinates=coordinates,
+                                             names=names)
 
     # -----------------------------------------------------------------------------
     def pnicer(self, control, sampling=2, kernel="epanechnikov"):

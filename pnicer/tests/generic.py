@@ -4,7 +4,7 @@ def orion():
     from astropy.io import fits
     from astropy.coordinates import SkyCoord
 
-    from pnicer import Magnitudes
+    from pnicer import ApparentMagnitudes
     from pnicer.utils import get_resource_path
 
     """ This file goes through a typical PNICER session and creates an extinction map of Orion A from 2MASS data. """
@@ -33,12 +33,18 @@ def orion():
         sci_err, con_err = [sci[n] for n in error_names], [con[n] for n in error_names]
 
     # Initialize pnicer
-    science = Magnitudes(mag=sci_phot, err=sci_err, extvec=feature_extinction, coordinates=sci_coo, names=feature_names)
-    control = Magnitudes(mag=con_phot, err=con_err, extvec=feature_extinction, coordinates=con_coo, names=feature_names)
+    science = ApparentMagnitudes(magnitudes=sci_phot, errors=sci_err, extvec=feature_extinction, coordinates=sci_coo,
+                                 names=feature_names)
+    control = ApparentMagnitudes(magnitudes=con_phot, errors=con_err, extvec=feature_extinction, coordinates=con_coo,
+                                 names=feature_names)
 
-    # Test PNICER
+    print(science)
+    exit()
+
+
+    # Test PNICER on both magnitudes and colors
+    science.pnicer(control=control)
     pnicer = science.mag2color().pnicer(control=control.mag2color())
-    # pnicer = science.pnicer(control=control)
 
     # Test NICER
     science.nicer(control=control)

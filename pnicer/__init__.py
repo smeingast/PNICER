@@ -1,1 +1,1 @@
-from pnicer.user import Colors, Magnitudes
+from pnicer.user import ApparentColors, ApparentMagnitudes

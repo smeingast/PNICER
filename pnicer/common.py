@@ -3,11 +3,10 @@
 import numpy as np
 
 from astropy import wcs
+from astropy.table import Table
 from itertools import combinations
 # noinspection PyPackageRequirements
 from sklearn.neighbors import NearestNeighbors
-
-# from pnicer.user import Magnitudes, Colors
 from pnicer.utils import weighted_avg, caxes, mp_kde, data2grid, caxes_delete_ticklabels, round_partial, \
     centroid_sphere, distance_sky
 
@@ -15,36 +14,36 @@ from pnicer.utils import weighted_avg, caxes, mp_kde, data2grid, caxes_delete_ti
 # ----------------------------------------------------------------------------- #
 # ----------------------------------------------------------------------------- #
 # noinspection PyProtectedMember
-class DataBase:
+class Data:
 
     # -----------------------------------------------------------------------------
-    def __init__(self, mag, err, extvec, coordinates=None, names=None):
+    def __init__(self, features, feature_err, feature_extvec, feature_names=None, feature_coordinates=None):
         """
         Basic Data class which provides the foundation for extinction measurements.
 
         Parameters
         ----------
-        mag : iterable
-            List of magnitude arrays. All arrays must have the same length!
-        err : iterable
-            List off magnitude error arrays.
-        extvec : iterable
-            List holding the extinction components for each magnitude.
-        coordinates : astropy.coordinates.SkyCoord, optional
+        features : iterable
+            List of feature arrays. All arrays must have the same length!
+        feature_err : iterable
+            List off feature error arrays.
+        feature_extvec : iterable
+            List holding the extinction components for each feature (extinction vector).
+        feature_coordinates : astropy.coordinates.SkyCoord, optional
             Astropy SkyCoord instance.
-        names : list
-            List of magnitude (feature) names.
+        feature_names : list
+            List of feature names.
 
         """
 
         # Set features
-        self.features = mag
-        self.features_err = err
-        self.features_names = names
-        self.extvec = ExtinctionVector(extvec=extvec)
+        self.features = features
+        self.features_err = feature_err
+        self.features_names = feature_names
+        self.extvec = ExtinctionVector(extvec=feature_extvec)
 
         # Set coordinate attributes
-        self.coordinates = Coordinates(coordinates=coordinates)
+        self.coordinates = Coordinates(coordinates=feature_coordinates)
 
         # Generate simple names for the magnitudes if not set
         if self.features_names is None:
@@ -76,9 +75,22 @@ class DataBase:
             raise ValueError("Input arrays must have equal size")
 
         # Coordinates must be supplied for all data if set
-        if coordinates is not None:
+        if feature_coordinates is not None:
             if len(self.coordinates) != len(self.features[0]):
                 raise ValueError("Input coordinates do not match to data!")
+
+    # -----------------------------------------------------------------------------
+    def __len__(self):
+        return self.features_err.__len__()
+
+    # -----------------------------------------------------------------------------
+    def __str__(self):
+        return Table([np.around(x, 3) for x in self.features], names=self.features_names).__str__()
+
+    # -----------------------------------------------------------------------------
+    def __iter__(self):
+        for x in self.features:
+            yield x
 
     # ----------------------------------------------------------------------------- #
     #                            Some useful properties                             #
@@ -339,10 +351,10 @@ class DataBase:
             coordinates = None
 
         # Return
-        return self.__class__(mag=[rotdata[idx, :] for idx in range(self.n_features)],
-                              err=[err[idx, :] for idx in range(self.n_features)],
-                              extvec=extvec, coordinates=coordinates,
-                              names=[x + "_rot" for x in self.features_names])
+        # noinspection PyTypeChecker
+        return self.__class__([rotdata[idx, :] for idx in range(self.n_features)],
+                              [err[idx, :]for idx in range(self.n_features)],
+                              extvec, coordinates, [x + "_rot" for x in self.features_names])
 
     # -----------------------------------------------------------------------------
     def _all_combinations(self, idxstart):
@@ -365,13 +377,21 @@ class DataBase:
                                       for p in range(idxstart, self.n_features + 1)]
                  for item in sublist]
 
+        # Import
+        from pnicer.user import ApparentColors, ApparentMagnitudes
+
         combination_instances = []
         for c in all_c:
             cdata, cerror = [self.features[idx] for idx in c], [self.features_err[idx] for idx in c]
             cnames = [self.features_names[idx] for idx in c]
             extvec = [self.extvec.extvec[idx] for idx in c]
-            combination_instances.append(self.__class__(mag=cdata, err=cerror, extvec=extvec,
-                                                        coordinates=self.coordinates.coordinates, names=cnames))
+
+            if isinstance(self, ApparentMagnitudes):
+                combination_instances.append(self.__class__(magnitudes=cdata, errors=cerror, extvec=extvec,
+                                                            coordinates=self.coordinates.coordinates, names=cnames))
+            elif isinstance(self, ApparentColors):
+                combination_instances.append(self.__class__(colors=cdata, errors=cerror, extvec=extvec,
+                                                            coordinates=self.coordinates.coordinates, names=cnames))
 
         # Return list of combinations.
         return combination_instances
@@ -817,7 +837,7 @@ class DataBase:
         bin_grid = bin_ext = np.float(bandwidth / sampling)
 
         # Now we build a grid from the rotated data for all components but the first
-        grid_data = DataBase._build_feature_grid(data=np.vstack(science_rot.features)[1:, :], precision=bin_grid)
+        grid_data = Data._build_feature_grid(data=np.vstack(science_rot.features)[1:, :], precision=bin_grid)
 
         # Create a grid to evaluate along the reddening vector
         grid_ext = np.arange(start=np.floor(min(control_rot.features[0])),
@@ -943,20 +963,21 @@ class DataBase:
         intrinsic = [self.features[idx] - self.extvec.extvec[idx] * ext for idx in range(self.n_features)]
 
         # Import
-        from pnicer.user import Magnitudes, Colors
+        from pnicer.user import ApparentMagnitudes, ApparentColors
         from pnicer.intrinsic import IntrinsicMagnitudes, IntrinsicColors
 
         # Choose which instance to return
-        if isinstance(self, Magnitudes):
-            cls = IntrinsicMagnitudes
-        elif isinstance(self, Colors):
-            cls = IntrinsicColors
+        if isinstance(self, ApparentMagnitudes):
+            return IntrinsicMagnitudes(magnitudes=intrinsic, errors=self.features_err, extinction=ext,
+                                       extinction_variance=var, extvec=self.extvec.extvec,
+                                       coordinates=self.coordinates.coordinates, names=self.features_names)
+
+        elif isinstance(self, ApparentColors):
+            return IntrinsicColors(colors=intrinsic, errors=self.features_err, extinction=ext, extinction_variance=var,
+                                   extvec=self.extvec.extvec, coordinates=self.coordinates.coordinates,
+                                   names=self.features_names)
         else:
             raise ValueError("Invalid instance")
-
-        # Return
-        return cls(coordinates=self.coordinates.coordinates, intrinsic=intrinsic, extinction=ext, variance=var,
-                   extvec=self.extvec)
 
     # -----------------------------------------------------------------------------
     def features_intrinsic(self, extinction):
@@ -1101,6 +1122,19 @@ class ExtinctionVector:
 
         # Set attributes
         self.extvec = extvec
+
+    # -----------------------------------------------------------------------------
+    def __len__(self):
+        return len(self.extvec)
+
+    # -----------------------------------------------------------------------------
+    def __str__(self):
+        return self.extvec.__str__()
+
+    # -----------------------------------------------------------------------------
+    def __iter__(self):
+        for x in self.extvec:
+            yield x
 
     # -----------------------------------------------------------------------------
     @property

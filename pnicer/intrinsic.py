@@ -7,18 +7,19 @@ import numpy as np
 from copy import copy
 from astropy import wcs
 from astropy.io import fits
-from astropy.table import Table
 from itertools import repeat
+from astropy.table import Table
 from multiprocessing.pool import Pool
 
 from pnicer.common import Coordinates
+from pnicer.user import Magnitudes, Colors
 from pnicer.utils import distance_sky, std2fwhm, centroid_sphere
 
 
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
 # noinspection PyProtectedMember
-class Intrinsic:
+class Intrinsic(object):
 
     # -----------------------------------------------------------------------------
     def __init__(self, coordinates, extinction, variance=None, extvec=None):
@@ -137,7 +138,7 @@ class Intrinsic:
             kwargs["proj_code"] = "TAN"
 
         # Set k_lambda for nicest
-        k_lambda = np.max(self.extvec.extvec) if self.extvec is not None else 1
+        k_lambda = np.max(self.extvec) if self.extvec is not None else 1
 
         # Create WCS grid
         grid_header, (grid_lon, grid_lat) = self.coordinates.build_wcs_grid(pixsize=pixsize, **kwargs)
@@ -331,66 +332,71 @@ class Intrinsic:
 
 # ----------------------------------------------------------------------------- #
 # ----------------------------------------------------------------------------- #
-class IntrinsicMagnitudes(Intrinsic):
+class IntrinsicMagnitudes(Magnitudes, Intrinsic):
 
     # -----------------------------------------------------------------------------
-    def __init__(self, coordinates, intrinsic, extinction, variance=None, extvec=None):
+    def __init__(self, magnitudes, errors, extinction, extinction_variance, extvec, coordinates=None, names=None):
         """
-        Class for intrinsic magnitudes.
+        Intrinsic magnitude data class.
 
         Parameters
         ----------
-        coordinates : SkyCoord
-            Astropy SkyCoord instance.
-        intrinsic : list
-            List of arrays for intrinsic magnitudes.
+        magnitudes : list
+            List of magnitude arrays. All arrays must have the same length.
+        errors : list
+            List off magnitude error arrays.
         extinction : np.ndarray
             Extinction data.
-        variance : np.ndarray, optional
+        extinction_variance : np.ndarray, optional
             Variance in extinction.
-        extvec : ExtinctionVector, optional
-            Extinction Vector instance.
+        extvec : list
+            List holding the extinction components for each magnitude.
+        coordinates : SkyCoord, optional
+            Astropy SkyCoord instance.
+        names : list, optional
+            List of magnitude (feature) names.
 
         """
 
-        # Call parent
-        super(IntrinsicMagnitudes, self).__init__(coordinates=coordinates, extinction=extinction, variance=variance,
-                                                  extvec=extvec)
-
-        # Assign instrinsic magnitudes to attribute
-        self.intrinsic_magnitudes = intrinsic
+        # Call the constructors explicitly without super
+        Magnitudes.__init__(self, magnitudes=magnitudes, errors=errors, extvec=extvec, coordinates=coordinates,
+                            names=names)
+        Intrinsic.__init__(self, coordinates=coordinates, extinction=extinction, variance=extinction_variance,
+                           extvec=extvec)
 
 
 # ----------------------------------------------------------------------------- #
 # ----------------------------------------------------------------------------- #
-class IntrinsicColors(Intrinsic):
+class IntrinsicColors(Intrinsic, Colors):
 
     # -----------------------------------------------------------------------------
-    def __init__(self, coordinates, intrinsic, extinction, variance=None, extvec=None):
+    def __init__(self, colors, errors, extinction, extinction_variance, extvec, coordinates=None, names=None):
         """
-        Class for intrinsic colors.
+        Intrinsic color data class.
 
         Parameters
         ----------
-        coordinates : SkyCoord
-            Astropy SkyCoord instance.
-        intrinsic : list
-            List of arrays for intrinsic magnitudes.
+        colors : list
+            List of magnitude arrays. All arrays must have the same length.
+        errors : list
+            List off magnitude error arrays.
         extinction : np.ndarray
             Extinction data.
-        variance : np.ndarray, optional
+        extinction_variance : np.ndarray, optional
             Variance in extinction.
-        extvec : ExtinctionVector, optional
-            Extinction Vector instance.
+        extvec : list
+            List holding the extinction components for each magnitude.
+        coordinates : SkyCoord, optional
+            Astropy SkyCoord instance.
+        names : list, optional
+            List of magnitude (feature) names.
 
         """
 
-        # Call parent
-        super(IntrinsicColors, self).__init__(coordinates=coordinates, extinction=extinction, variance=variance,
-                                              extvec=extvec)
-
-        # Assign instrinsic colors to attribute
-        self.intrinsic_color = intrinsic
+        # Call the constructors explicitly without super
+        Colors.__init__(self, colors=colors, errors=errors, extvec=extvec, coordinates=coordinates, names=names)
+        Intrinsic.__init__(self, coordinates=coordinates, extinction=extinction, variance=extinction_variance,
+                           extvec=extvec)
 
 
 # ----------------------------------------------------------------------------- #
