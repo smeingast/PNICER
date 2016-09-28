@@ -18,11 +18,12 @@ from pnicer.utils import distance_sky, std2fwhm, centroid_sphere
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
 # noinspection PyProtectedMember
-class Extinction:
+class Intrinsic:
 
+    # -----------------------------------------------------------------------------
     def __init__(self, coordinates, extinction, variance=None, extvec=None):
         """
-        Class for extinction measurements.
+        Class for Intrisic features and extinction.
 
         Parameters
         ----------
@@ -330,8 +331,73 @@ class Extinction:
 
 # ----------------------------------------------------------------------------- #
 # ----------------------------------------------------------------------------- #
+class IntrinsicMagnitudes(Intrinsic):
+
+    # -----------------------------------------------------------------------------
+    def __init__(self, coordinates, intrinsic, extinction, variance=None, extvec=None):
+        """
+        Class for intrinsic magnitudes.
+
+        Parameters
+        ----------
+        coordinates : SkyCoord
+            Astropy SkyCoord instance.
+        intrinsic : list
+            List of arrays for intrinsic magnitudes.
+        extinction : np.ndarray
+            Extinction data.
+        variance : np.ndarray, optional
+            Variance in extinction.
+        extvec : ExtinctionVector, optional
+            Extinction Vector instance.
+
+        """
+
+        # Call parent
+        super(IntrinsicMagnitudes, self).__init__(coordinates=coordinates, extinction=extinction, variance=variance,
+                                                  extvec=extvec)
+
+        # Assign instrinsic magnitudes to attribute
+        self.intrinsic_magnitudes = intrinsic
+
+
+# ----------------------------------------------------------------------------- #
+# ----------------------------------------------------------------------------- #
+class IntrinsicColors(Intrinsic):
+
+    # -----------------------------------------------------------------------------
+    def __init__(self, coordinates, intrinsic, extinction, variance=None, extvec=None):
+        """
+        Class for intrinsic colors.
+
+        Parameters
+        ----------
+        coordinates : SkyCoord
+            Astropy SkyCoord instance.
+        intrinsic : list
+            List of arrays for intrinsic magnitudes.
+        extinction : np.ndarray
+            Extinction data.
+        variance : np.ndarray, optional
+            Variance in extinction.
+        extvec : ExtinctionVector, optional
+            Extinction Vector instance.
+
+        """
+
+        # Call parent
+        super(IntrinsicColors, self).__init__(coordinates=coordinates, extinction=extinction, variance=variance,
+                                              extvec=extvec)
+
+        # Assign instrinsic colors to attribute
+        self.intrinsic_color = intrinsic
+
+
+# ----------------------------------------------------------------------------- #
+# ----------------------------------------------------------------------------- #
 class ExtinctionMap:
 
+    # -----------------------------------------------------------------------------
     def __init__(self, ext, var, map_header, prime_header=None, num=None, rho=None):
         """
         Extinction map class.

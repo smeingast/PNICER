@@ -37,7 +37,8 @@ def orion():
     control = Magnitudes(mag=con_phot, err=con_err, extvec=feature_extinction, coordinates=con_coo, names=feature_names)
 
     # Test PNICER
-    pnicer = science.pnicer(control=control, add_colors=False)
+    pnicer = science.mag2color().pnicer(control=control.mag2color())
+    # pnicer = science.pnicer(control=control)
 
     # Test NICER
     science.nicer(control=control)

@@ -10,6 +10,7 @@ from pnicer.utils import get_sample_covar, get_color_covar
 # noinspection PyProtectedMember
 class Magnitudes(DataBase):
 
+    # -----------------------------------------------------------------------------
     def __init__(self, mag, err, extvec, coordinates=None, names=None):
         """
         Main class for users. Includes PNICER and NICER.
@@ -95,7 +96,7 @@ class Magnitudes(DataBase):
 
         Returns
         -------
-        pnicer.extinction.Extinction
+        pnicer.intrinsic.Intrinsic
             Extinction instance with the calcualted extinction and errors.
 
         """
@@ -138,7 +139,7 @@ class Magnitudes(DataBase):
 
         Returns
         -------
-        pnicer.extinction.Extinction
+        pnicer.intrinsic.Intrinsic
             Extinction instance with the calcualted extinction and errors.
 
         """
@@ -230,10 +231,13 @@ class Magnitudes(DataBase):
             mask = np.where(np.sum(np.vstack(self._features_masks), axis=0, dtype=int) < min_features)[0]
             ext[mask] = var[mask] = np.nan
 
-        # Return Extinction
-        from pnicer.extinction import Extinction
-        return Extinction(coordinates=self.coordinates.coordinates, extinction=ext.data, variance=var,
-                          extvec=self.extvec)
+        # Calculate intrinsic magnitudes
+        intrinsic = [self.features[idx] - self.extvec.extvec[idx] * ext for idx in range(self.n_features)]
+
+        # Return Intrinsic instance
+        from pnicer.intrinsic import IntrinsicMagnitudes
+        return IntrinsicMagnitudes(coordinates=self.coordinates.coordinates, intrinsic=intrinsic, extinction=ext.data,
+                                   variance=var, extvec=self.extvec)
 
     # -----------------------------------------------------------------------------
     # noinspection PyPackageRequirements
@@ -540,6 +544,7 @@ class Magnitudes(DataBase):
 # noinspection PyProtectedMember
 class Colors(DataBase):
 
+    # -----------------------------------------------------------------------------
     def __init__(self, mag, err, extvec, coordinates=None, names=None):
         """
         Same as magnitudes class without NICER.

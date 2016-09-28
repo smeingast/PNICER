@@ -17,6 +17,7 @@ from pnicer.utils import weighted_avg, caxes, mp_kde, data2grid, caxes_delete_ti
 # noinspection PyProtectedMember
 class DataBase:
 
+    # -----------------------------------------------------------------------------
     def __init__(self, mag, err, extvec, coordinates=None, names=None):
         """
         Basic Data class which provides the foundation for extinction measurements.
@@ -938,9 +939,24 @@ class DataBase:
         # Make error cut
         ext[var > 10] = var[var > 10] = np.nan
 
-        # Return Extinction instance
-        from pnicer.extinction import Extinction
-        return Extinction(coordinates=self.coordinates.coordinates, extinction=ext, variance=var, extvec=self.extvec)
+        # Calculate intrinsic features
+        intrinsic = [self.features[idx] - self.extvec.extvec[idx] * ext for idx in range(self.n_features)]
+
+        # Import
+        from pnicer.user import Magnitudes, Colors
+        from pnicer.intrinsic import IntrinsicMagnitudes, IntrinsicColors
+
+        # Choose which instance to return
+        if isinstance(self, Magnitudes):
+            cls = IntrinsicMagnitudes
+        elif isinstance(self, Colors):
+            cls = IntrinsicColors
+        else:
+            raise ValueError("Invalid instance")
+
+        # Return
+        return cls(coordinates=self.coordinates.coordinates, intrinsic=intrinsic, extinction=ext, variance=var,
+                   extvec=self.extvec)
 
     # -----------------------------------------------------------------------------
     def features_intrinsic(self, extinction):
@@ -967,6 +983,7 @@ class DataBase:
 # ----------------------------------------------------------------------------- #
 class Coordinates:
 
+    # -----------------------------------------------------------------------------
     def __init__(self, coordinates):
         """
         Additional coordinates class to add a few convenient attributes to Sky coordinates.
@@ -1070,6 +1087,7 @@ class Coordinates:
 # ----------------------------------------------------------------------------- #
 class ExtinctionVector:
 
+    # -----------------------------------------------------------------------------
     def __init__(self, extvec):
         """
         Class for extinction vectors.
