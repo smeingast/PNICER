@@ -2,13 +2,13 @@
 # import stuff
 import numpy as np
 
-from pnicer.common import Data
+from pnicer.common import Features
 from pnicer.utils import get_sample_covar, get_color_covar
 
 
 # ----------------------------------------------------------------------------- #
 # ----------------------------------------------------------------------------- #
-class Magnitudes(Data):
+class Magnitudes(Features):
 
     def __init__(self, magnitudes, errors, extvec, coordinates=None, names=None):
         """
@@ -64,7 +64,7 @@ class Magnitudes(Data):
 
 # ----------------------------------------------------------------------------- #
 # ----------------------------------------------------------------------------- #
-class Colors(Data):
+class Colors(Features):
     def __init__(self, colors, errors, extvec, coordinates=None, names=None):
         super(Colors, self).__init__(features=colors, feature_err=errors, feature_extvec=extvec, feature_names=names,
                                      feature_coordinates=coordinates)

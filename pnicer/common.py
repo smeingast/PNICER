@@ -14,7 +14,7 @@ from pnicer.utils import weighted_avg, caxes, mp_kde, data2grid, caxes_delete_ti
 # ----------------------------------------------------------------------------- #
 # ----------------------------------------------------------------------------- #
 # noinspection PyProtectedMember
-class Data:
+class Features:
 
     # -----------------------------------------------------------------------------
     def __init__(self, features, feature_err, feature_extvec, feature_names=None, feature_coordinates=None):
@@ -837,7 +837,7 @@ class Data:
         bin_grid = bin_ext = np.float(bandwidth / sampling)
 
         # Now we build a grid from the rotated data for all components but the first
-        grid_data = Data._build_feature_grid(data=np.vstack(science_rot.features)[1:, :], precision=bin_grid)
+        grid_data = Features._build_feature_grid(data=np.vstack(science_rot.features)[1:, :], precision=bin_grid)
 
         # Create a grid to evaluate along the reddening vector
         grid_ext = np.arange(start=np.floor(min(control_rot.features[0])),
