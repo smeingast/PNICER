@@ -12,6 +12,7 @@ from multiprocessing.pool import Pool
 from itertools import combinations, repeat
 # noinspection PyPackageRequirements
 from sklearn.neighbors import KernelDensity
+from sklearn.mixture.gaussian_mixture import GaussianMixture
 
 # Useful constants
 std2fwhm = 2 * np.sqrt(2 * np.log(2))
@@ -418,6 +419,26 @@ def _mp_kde(kde, data, grid):
     """
 
     return np.exp(kde.fit(data).score_samples(grid))
+
+
+# -----------------------------------------------------------------------------
+def mp_gmm(data, n_components):
+
+    # Determine gaussian mixture model
+    with Pool() as pool:
+        mp = pool.starmap(_mp_gmm, zip(data, repeat(n_components)))
+
+    return mp
+
+
+# -----------------------------------------------------------------------------
+def _mp_gmm(data, n_components):
+
+    try:
+        return GaussianMixture(n_components=n_components, covariance_type="full",
+                               tol=1E-3, warm_start=False).fit(X=data)
+    except ValueError:
+        return np.nan
 
 
 # -----------------------------------------------------------------------------
