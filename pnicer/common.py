@@ -3,12 +3,14 @@
 import numpy as np
 
 from astropy import wcs
-from astropy.table import Table
 from itertools import combinations
+from pnicer.utils import weighted_avg, caxes, mp_kde, data2grid, caxes_delete_ticklabels, round_partial, \
+    centroid_sphere, distance_sky, mp_gmm
+
 # noinspection PyPackageRequirements
 from sklearn.neighbors import NearestNeighbors
-from pnicer.utils import weighted_avg, caxes, mp_kde, data2grid, caxes_delete_ticklabels, round_partial, \
-    centroid_sphere, distance_sky
+# noinspection PyPackageRequirements
+from sklearn.mixture import GaussianMixture
 
 
 # ----------------------------------------------------------------------------- #
@@ -84,8 +86,8 @@ class Features:
         return self.features_err.__len__()
 
     # -----------------------------------------------------------------------------
-    def __str__(self):
-        return Table([np.around(x, 3) for x in self.features], names=self.features_names).__str__()
+    # def __str__(self):
+    #     return Table([np.around(x, 3) for x in self.features], names=self.features_names).__str__()
 
     # -----------------------------------------------------------------------------
     def __iter__(self):
@@ -126,6 +128,24 @@ class Features:
 
     # -----------------------------------------------------------------------------
     @property
+    def _n_data_strict_mask(self):
+        """
+        Number of sources which have data in all features.
+
+        Returns
+        -------
+        int
+
+        """
+
+        return np.sum(self._strict_mask)
+
+    # ----------------------------------------------------------------------------- #
+    #                                     Masks                                     #
+    # ----------------------------------------------------------------------------- #
+
+    # -----------------------------------------------------------------------------
+    @property
     def _features_masks(self):
         """
         Provides a list with masks for each given feature. True (1) entries are good, False (0) are bad.
@@ -139,10 +159,6 @@ class Features:
         """
 
         return [np.isfinite(m) & np.isfinite(e) for m, e in zip(self.features, self.features_err)]
-
-    # ----------------------------------------------------------------------------- #
-    #                                     Masks                                     #
-    # ----------------------------------------------------------------------------- #
 
     # -----------------------------------------------------------------------------
     def _loose_mask(self, max_bad_features):
@@ -764,142 +780,110 @@ class Features:
     # ----------------------------------------------------------------------------- #
 
     # -----------------------------------------------------------------------------
-    def _pnicer_univariate(self, control):
-        """
-        Univariate implementation of PNICER.
+    def _pnicer_univariate(self, control, n_components):
 
-        Parameters
-        ----------
-        control
-            Control field instance.
+        # Define and fit Gaussian Mixture Model
+        gmm = GaussianMixture(n_components=n_components, covariance_type="full",
+                              tol=1E-3, warm_start=False).fit(X=np.expand_dims(control.features[0], 1))
 
-        Returns
-        -------
-        tuple
-            Tuple containing extinction, variance and de-reddened features.
+        # Determine variance
+        var = np.var(control.features[0])
 
-        """
-
-        # Some dummy checks
-        self._check_class(ccls=control)
-        if (self.n_features != 1) | (control.n_features != 1):
-            raise ValueError("Only one feature allowed for this method")
-
-        # Get mean and variance of control field
-        cf_mean, cf_var = np.nanmean(control.features[0]), np.nanvar(control.features[0])
-
-        # Calculate extinction for each source
-        ext = (self.features[0] - cf_mean) / self.extvec.extvec[0]
-
-        # Also the variance
-        var = (self.features_err[0] ** 2 + cf_var) / self.extvec.extvec[0] ** 2
-
-        # Intrinsic features
-        intrinsic = np.full_like(ext, fill_value=float(cf_mean))
-        intrinsic[~np.isfinite(ext)] = np.nan
-
-        # Return Extinction, variance and intrinsic features
-        return ext, var, intrinsic[np.newaxis, :]
+        # Return
+        return (np.array([gmm for _ in range(self.n_data)], dtype=object),
+                np.full(self.n_data, fill_value=float(var), dtype=np.float32))
 
     # -----------------------------------------------------------------------------
-    def _pnicer_multivariate(self, control, sampling, kernel):
-        """
-        Main PNICER routine to get extinction. This will return only the extinction values for data for which all
-        features are available.
-
-        Parameters
-        ----------
-        control
-            Instance of control field data.
-        sampling : int
-            Sampling of grid relative to bandwidth of kernel.
-        kernel : str
-            Name of kernel to be used for density estimation. e.g. "epanechnikov" or "gaussian".
-
-        Returns
-        -------
-        tuple(np.ndarray, np.ndarray, np.ndarray)
-            Tuple containing extinction, variance and de-reddened features.
-
-        """
-
-        # Check instances
-        if self.__class__ != control.__class__:
-            raise ValueError("Input and control instance not compatible")
+    def _pnicer_multivariate(self, control, n_components, sampling):
 
         # Rotate the data spaces
         science_rot, control_rot = self._rotate(), control._rotate()
 
-        # Get bandwidth of kernel
+        # Get bandwidth from photometric errors
         bandwidth = np.round(np.mean(np.nanmean(self.features_err, axis=1)), 2)
 
         # Determine bin widths for grid according to bandwidth and sampling
-        bin_grid = bin_ext = np.float(bandwidth / sampling)
+        bin_grid = np.float(bandwidth / sampling)
 
         # Now we build a grid from the rotated data for all components but the first
         grid_data = Features._build_feature_grid(data=np.vstack(science_rot.features)[1:, :], precision=bin_grid)
 
-        # Create a grid to evaluate along the reddening vector
-        grid_ext = np.arange(start=np.floor(min(control_rot.features[0])),
-                             stop=np.ceil(max(control_rot.features[0])), step=bin_ext)
-
-        # Now we combine those to get _all_ grid points
-        xgrid = np.column_stack([np.tile(grid_ext, grid_data.shape[1]),
-                                 np.repeat(grid_data, len(grid_ext), axis=1).T])
-
-        # With our grid, we evaluate the density on it for the control field (!)
-        dens = mp_kde(grid=xgrid, data=np.vstack(control_rot.features).T, bandwidth=bandwidth, kernel=kernel,
-                      absolute=True, sampling=sampling)
-
-        # Get all unique vectors
-        dens_vectors = dens.reshape([grid_data.shape[1], len(grid_ext)])
-
-        # Calculate weighted average and standard deviation for each vector
-        grid_mean, grid_var = [], []
-        for vec in dens_vectors:
-
-            # In case there are too few stars append NaN
-            if np.sum(vec) < 3:
-                grid_mean.append(np.nan)
-                grid_var.append(np.nan)
-
-            # Otherwise get weighted average position along vector and the weighted variance
-            else:
-                a, b = weighted_avg(values=grid_ext, weights=vec)
-                grid_mean.append(a)
-                grid_var.append(b / self.extvec._extinction_norm)  # The normalisation converts this to extinction
-
-        # Convert to arrays
-        grid_var = np.array(grid_var)
-        grid_mean = np.array(grid_mean)
-
-        # Let's get the nearest neighbor grid point for each source
+        # Define NN algorithm
         nbrs = NearestNeighbors(n_neighbors=1, algorithm="ball_tree").fit(grid_data.T)
-        _, indices = nbrs.kneighbors(np.vstack(science_rot.features)[1:, :].T)
-        indices = indices[:, 0]
 
-        # Inverse rotation of grid to get intrinsic features
-        intrinsic = self.extvec._rotmatrix_inv.dot(np.vstack([grid_mean[indices], grid_data[:, indices]]))
+        # Assign each control field source the nearest neighbor grid point
+        dis, idx = nbrs.kneighbors(np.vstack(control_rot.features)[1:, :].T)
+        dis, idx = dis[:, 0], idx[:, 0]
 
-        # It's time to calculate the extinction. :)
-        ext = (science_rot.features[0] - grid_mean[indices]) / self.extvec._extinction_norm
-        var = grid_var[indices]
+        # Filter too large distances (in case the NN is further than the grid bin width)
+        # TODO: Is this distance filter correct?
+        idx[dis > bin_grid / 2] = grid_data.shape[-1] + 1
 
-        # Generate empty arrays for full results
-        ext_full = np.full(self.n_data, fill_value=np.nan, dtype=float)
-        var_full = np.full(self.n_data, fill_value=np.nan, dtype=float)
-        int_full = np.full([len(intrinsic), self.n_data], fill_value=np.nan, dtype=float)
+        # Also find the nearest neighbor for each science target
+        science_idx = nbrs.kneighbors(np.vstack(science_rot.features)[1:, :].T)[1][:, 0]
 
-        # Lastly we put all the extinction measurements back into a full array
-        ext_full[self._strict_mask] = ext
-        var_full[self._strict_mask] = var
-        int_full[:, self._strict_mask] = intrinsic
+        # Build data vectors for GMM-fits
+        vectors_data = [control_rot.features[0][idx == i].reshape(-1, 1) for i in range(grid_data.shape[-1])]
 
-        # Return extinction, variance and intrinsic features
-        return ext_full, var_full, int_full
+        # Each control field vector needs to contain at least 10 sources
+        vectors_data = [np.nan if len(v) < 10 else v for v in vectors_data]
+
+        # Determine variance for each vector
+        vectors_var = [np.nanvar(v) if np.sum(np.isfinite(v)) > 0 else np.nan for v in vectors_data]
+
+        # Fit GMM for each vector
+        vectors_gmm = mp_gmm(data=vectors_data, n_components=n_components)
+
+        # Determine variance for each source
+        var = np.array([vectors_var[idx] for idx in science_idx])
+
+        # Fetch GMM for each source
+        gmm = np.array([vectors_gmm[idx] for idx in science_idx])
+
+        # Generate index and variance arrays for all sources
+        # idx_all = np.full(self.n_data, fill_value=np.nan, dtype=np.float32)
+        var_all = np.full(self.n_data, fill_value=np.nan, dtype=np.float32)
+        gmm_all = np.full(self.n_data, fill_value=np.nan, dtype=object)
+
+        # Fill arrays with results
+        gmm_all[self._strict_mask], var_all[self._strict_mask] = gmm, var
+        # idx_all[self._strict_mask] = science_idx
+
+        # Fit and return GMMs
+        return gmm_all, var_all
 
     # -----------------------------------------------------------------------------
-    def _pnicer_combinations(self, control, comb, sampling, kernel):
+    @staticmethod
+    def _evaluate_gmm(gmm, metric="mean"):
+
+        # In case the mean should be returned
+        if metric == "mean":
+            return weighted_avg(values=gmm.means_.ravel(), weights=gmm.weights_.ravel())[0]
+
+        # In case the maximum probability should be returned
+        if metric == "max":
+
+            # Determine inital query range
+            qrange = [np.min(gmm.means_) - 3 * gmm.covariances_[0][0], np.max(gmm.means_) + 3 * gmm.covariances_[0][0]]
+
+            # Get number of samples (range oversampled by 20 times the variance)
+            nsamples = np.ceil(20 * (qrange[1] - qrange[0]) / gmm.covariances_[0][0])
+
+            # At least 100 samples, maximum 1E5
+            # TODO: Do I still need this when limiting the vector to at least 10 sources or so?
+            if nsamples < 100:
+                nsamples = 100
+            elif nsamples > 1E5:
+                nsamples = 1E5
+
+            # Determine query range
+            grid = np.linspace(start=qrange[0], stop=qrange[1], num=nsamples)
+
+            # Determine maximum and return
+            return grid[np.argmax(np.exp(gmm.score_samples(np.expand_dims(grid, 1))))]
+
+    # -----------------------------------------------------------------------------
+    def _pnicer_combinations(self, control, combinations_science, combinations_control, n_components, sampling):
         """
         PNICER base implementation for combinations. Basically calls the pnicer_single implementation for all
         combinations. The output extinction is then the one with the smallest error from all combinations.
@@ -908,76 +892,59 @@ class Features:
         ----------
         control
             Instance of control field data.
-        comb
-            Zip object of combinations to use.
+        combinations_science : list
+            List of combinations for the science data.
+        combinations_control : list
+            List of combinations for the control field data.
         sampling : int
             Sampling of grid relative to bandwidth of kernel.
-        kernel : str
-            Name of kernel to be used for density estimation. e.g. "epanechnikov" or "gaussian".
 
         Returns
         -------
-        Extinction
-            Extinction instance with the calculated extinction and errors.
 
         """
+
+        # TODO: Update return value in docstring
 
         # Check instances
         self._check_class(ccls=control)
 
-        # Create lists to hold results for all combinations
-        ext_combinations, var_combinations = [], []
+        # Loop over all combinations and run PNICER
+        gmm, var = [], []
+        for sc, cc in zip(combinations_science, combinations_control):
 
-        # Here we loop over feature combinations since this is faster
-        for sc, cc in comb:
-
-            # Depending on number of features, choose algorithm
+            # Choose uni- or multivariate
             if sc.n_features == 1:
-                ext, var, _ = sc._pnicer_univariate(control=cc)
+                g, v = sc._pnicer_univariate(control=cc, n_components=n_components)
             else:
-                ext, var, _ = sc._pnicer_multivariate(control=cc, sampling=sampling, kernel=kernel)
+                g, v = sc._pnicer_multivariate(control=cc, n_components=n_components, sampling=sampling)
 
-            # Append results to lists
-            ext_combinations.append(ext)
-            var_combinations.append(var)
+            # Save results
+            gmm.append(g)
+            var.append(v)
 
-        # Convert to arrays and save combination data
-        ext_combinations = np.array(ext_combinations)
-        var_combinations = np.array(var_combinations)
+        # Choose minimum variance GMM
+        gmm = np.array(gmm)[np.argmin(var, axis=0), np.arange(self.n_data)]
 
-        # Assign to instance attribute
-        self._ext_combinations = ext_combinations
-        self._var_combinations = var_combinations
+        # Return intrinsic class
+        return self._get_intrinsic_class(gmm)
 
-        # Put large errors into entries without extinction
-        var_combinations[~np.isfinite(var_combinations)] = 10000.
+    # -----------------------------------------------------------------------------
+    @property
+    def _get_intrinsic_class(self):
 
-        # Chose extinction as minimum error across all combinations
-        ext = ext_combinations[np.argmin(var_combinations, axis=0), np.arange(self.n_data)]
-        var = var_combinations[np.argmin(var_combinations, axis=0), np.arange(self.n_data)]
-
-        # Make error cut
-        ext[var > 10] = var[var > 10] = np.nan
-
-        # Calculate intrinsic features
-        intrinsic = [self.features[idx] - self.extvec.extvec[idx] * ext for idx in range(self.n_features)]
+        # TODO: Add docstring
 
         # Import
         from pnicer.user import ApparentMagnitudes, ApparentColors
         from pnicer.intrinsic import IntrinsicMagnitudes, IntrinsicColors
 
-        # Choose which instance to return
         if isinstance(self, ApparentMagnitudes):
-            return IntrinsicMagnitudes(magnitudes=intrinsic, errors=self.features_err, extinction=ext,
-                                       extinction_variance=var, extvec=self.extvec.extvec,
-                                       coordinates=self.coordinates.coordinates, names=self.features_names)
-
+            return IntrinsicMagnitudes
         elif isinstance(self, ApparentColors):
-            return IntrinsicColors(colors=intrinsic, errors=self.features_err, extinction=ext, extinction_variance=var,
-                                   extvec=self.extvec.extvec, coordinates=self.coordinates.coordinates,
-                                   names=self.features_names)
+            return IntrinsicColors
         else:
-            raise ValueError("Invalid instance")
+            raise NotImplementedError
 
     # -----------------------------------------------------------------------------
     def features_intrinsic(self, extinction):
