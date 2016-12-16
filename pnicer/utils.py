@@ -433,10 +433,19 @@ def mp_gmm(data, n_components):
 
 # -----------------------------------------------------------------------------
 def _mp_gmm(data, n_components):
+    # TODO: Make parameters accessible to the user
 
     try:
-        return GaussianMixture(n_components=n_components, covariance_type="full",
-                               tol=1E-3, warm_start=False).fit(X=data)
+        # Fit model
+        gmm = GaussianMixture(n_components=n_components, covariance_type="full", tol=1E-4, warm_start=False).fit(X=data)
+
+        # Check for convergence and return
+        if not gmm.converged_:
+            return np.nan
+        else:
+            return gmm
+
+    # On error also return NaN
     except ValueError:
         return np.nan
 
