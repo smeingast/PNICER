@@ -115,7 +115,7 @@ class ApparentMagnitudes(Magnitudes):
         return self.mag2color()._all_combinations(idxstart=1)
 
     # -----------------------------------------------------------------------------
-    def pnicer(self, control, sampling=2, kernel="epanechnikov", add_colors=False):
+    def pnicer(self, control, n_components=3, sampling=2, add_colors=False):
         """
         Main PNICER method for magnitudes. Includes options to use combinations for input features, or convert them
         to colors.
@@ -126,8 +126,8 @@ class ApparentMagnitudes(Magnitudes):
             Control field instance. Same class as self.
         sampling : int, optional
             Sampling of grid relative to bandwidth of kernel. Default is 2.
-        kernel : str, optional
-            Name of kernel for KDE. e.g. 'epanechnikov' or 'gaussian'. Default is 'epanechnikov'.
+        n_components : int, optional
+            Number of components for Gaussian mixture model. Default is 3.
         add_colors : bool, optional
             Whether to also include the colors generated from the given magnitudes.
 
@@ -146,15 +146,18 @@ class ApparentMagnitudes(Magnitudes):
                 raise ValueError("To use colors, at least two features are required")
 
             # Build all combinations by adding colors to parameter space; also require at least two magnitudes
-            comb = zip(self._all_combinations(idxstart=2) + self._color_combinations(),
-                       control._all_combinations(idxstart=2) + control._color_combinations())
+            cscience = self._all_combinations(idxstart=2) + self._color_combinations()
+            ccontrol = control._all_combinations(idxstart=2) + control._color_combinations()
+
         else:
 
-            # Build combinations, but start with 2.
-            comb = zip(self._all_combinations(idxstart=2), control._all_combinations(idxstart=2))
+            # Build combinations without adding colors
+            cscience = self._all_combinations(idxstart=2)
+            ccontrol = control._all_combinations(idxstart=2)
 
         # Call PNICER
-        return self._pnicer_combinations(control=control, comb=comb, sampling=sampling, kernel=kernel)
+        return self._pnicer_combinations(control=control, n_components=n_components, sampling=sampling,
+                                         combinations_science=cscience, combinations_control=ccontrol)
 
     # -----------------------------------------------------------------------------
     def nicer(self, control=None, color0=None, color0_err=None, min_features=None):
@@ -531,6 +534,7 @@ class ApparentMagnitudes(Magnitudes):
         return beta, beta_err, ic, good_idx
 
     # -----------------------------------------------------------------------------
+    # noinspection PyUnboundLocalVariable
     @staticmethod
     def _plot_extinction_ratio(beta, ic, x_science, y_science, x_control=None, y_control=None):
         """
@@ -611,7 +615,7 @@ class ApparentColors(Colors):
                                              names=names)
 
     # -----------------------------------------------------------------------------
-    def pnicer(self, control, sampling=2, kernel="epanechnikov"):
+    def pnicer(self, control, n_components=3, sampling=2):
         """
         PNICER call method for colors.
 
@@ -619,12 +623,13 @@ class ApparentColors(Colors):
         ----------
         control
             Control field instance.
+        n_components : int, optional
+            Number of components for Gaussian mixture model. Default is 3.
         sampling : int, optional
             Sampling of grid relative to bandwidth of kernel. Default is 2.
-        kernel : str, optional
-            Name of kernel for KDE. e.g. 'epanechnikov' or 'gaussian'. Default is 'epanechnikov'.
 
         """
 
-        comb = zip(self._all_combinations(idxstart=1), control._all_combinations(idxstart=1))
-        return self._pnicer_combinations(control=control, comb=comb, sampling=sampling, kernel=kernel)
+        return self._pnicer_combinations(control=control, sampling=sampling, n_components=n_components,
+                                         combinations_science=self._all_combinations(idxstart=1),
+                                         combinations_control=control._all_combinations(idxstart=1))
