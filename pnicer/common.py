@@ -816,7 +816,20 @@ class Features:
     # -----------------------------------------------------------------------------
     @staticmethod
     def _set_defaults_gmm(**kwargs):
-        # TODO: Write docstring
+        """
+        Sets the defaults for Gaussian Mixture Model fits.
+
+        Parameters
+        ----------
+        kwargs : dict
+            kwargs passed from pnicer frontend.
+
+        Returns
+        -------
+        dict
+            Updated dictionary with GMM defaults.
+
+        """
 
         if "n_components" not in kwargs:
             kwargs["n_components"] = 3
