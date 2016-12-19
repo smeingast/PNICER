@@ -852,10 +852,18 @@ class Features:
 
         # Determine variance and index of GMMs (all 0 in the univariate case)
         var = np.full(self._n_data_strict_mask, fill_value=float(np.var(control.features[0])), dtype=np.float32)
-        idx = np.full(self._n_data_strict_mask, fill_value=0, dtype=np.uint32)
+        # idx = np.full(self._n_data_strict_mask, fill_value=0, dtype=np.uint32)
+
+        idx_all = np.full(self.n_data, fill_value=self.n_data + 1, dtype=np.uint32)
+        var_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
+        zp_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
+
+        idx_all[self._strict_mask] = 0
+        var_all[self._strict_mask] = var
+        zp_all[self._strict_mask] = self.features[0][self._strict_mask]
 
         # Return
-        return gmm, var, idx, self.features[0][self._strict_mask]
+        return gmm, var_all, idx_all, zp_all
 
     # -----------------------------------------------------------------------------
     def _pnicer_multivariate(self, control, **kwargs):
@@ -904,8 +912,16 @@ class Features:
         # Determine variance for each source
         var = np.array([vectors_var[idx] for idx in science_idx])
 
+        idx_all = np.full(self.n_data, fill_value=self.n_data + 1, dtype=np.uint32)
+        var_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
+        zp_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
+
+        idx_all[self._strict_mask] = science_idx
+        var_all[self._strict_mask] = var
+        zp_all[self._strict_mask] = science_rot.features[0]
+
         # Fit and return GMMs
-        return vectors_gmm, var, science_idx, science_rot.features[0]
+        return vectors_gmm, var_all, idx_all, zp_all
 
     # -----------------------------------------------------------------------------
     def _pnicer_combinations(self, combinations_science, combinations_control, **kwargs):
@@ -931,13 +947,8 @@ class Features:
         """
         # TODO: Update return value in docstring
 
-        # Number of combinations
-        n_combinations = len(combinations_science)
-
         # Loop over all combinations and run PNICER
-        gmm_combinations, var_combinations, idx_combinations = [], [], []
-        uidx_combinations, mask_combinations, zp_combinations = [], [], []
-        models_norm = []
+        gmm_combinations, var_combinations, uidx_combinations, zp_combinations, models_norm = [], [], [], [], []
         for sc, cc in zip(combinations_science, combinations_control):
 
             # Choose uni/multivariate PNICER
@@ -946,72 +957,39 @@ class Features:
             else:
                 g, v, i, zp = sc._pnicer_multivariate(control=cc, **kwargs)
 
-            # Save results
+            # Generate unique index for stacked GMM array
             uidx_combinations.append([j + len(flatten_lol(gmm_combinations)) for j in i])
+            models_norm.append([sc.extvec._extinction_norm for _ in range(len(g))])
+
+            # Save results
             gmm_combinations.append(g)
             var_combinations.append(v)
-            idx_combinations.append(i)
             zp_combinations.append(zp)
-            mask_combinations.append(sc._strict_mask_index)
-            models_norm.append([sc.extvec._extinction_norm for _ in range(len(g))])
-            # uidx_combinations.append([x + len(flatten_lol(uidx_combinations)) for x in range(len(g))])
 
-        # Unique GMMs
+        # Stack unique GMMs and norms
         gmm_unique = np.hstack(gmm_combinations)
-
-        # Flat norms
         models_norm = np.hstack(models_norm)
 
-        # Construct variance, zero-point, and index matrices for all sources
-        var_all = np.full((n_combinations, self.n_data), fill_value=1E6, dtype=np.float32)
-        zp_all = np.full((n_combinations, self.n_data), fill_value=1E6, dtype=np.float32)
-        idx_all = np.full((n_combinations, self.n_data), fill_value=self.n_data + 1, dtype=np.uint32)
-
-        # Fill matrices with data for each combination
-        for i in range(n_combinations):
-            var_all[i, mask_combinations[i]] = var_combinations[i]
-            zp_all[i, mask_combinations[i]] = zp_combinations[i]
-            idx_all[i, mask_combinations[i]] = uidx_combinations[i]
-
         # Choose minimum variance GMM across all combinations
-        minidx = np.argmin(var_all, axis=0)
-        """
-        All-bad slices will have a wrong index here. This will be filtered in the next step since source without any
-        excess measurements are excluded in any strict mask.
-        """
+        minidx = np.argmin(np.array(var_combinations), axis=0)
 
-        # Choose final model index and zero point for each source
-        sources_index = idx_all[minidx, np.arange(self.n_data)]
-        sources_zp = zp_all[minidx, np.arange(self.n_data)]
+        # Select model index and zero point for each source
+        sources_index = np.array(uidx_combinations)[minidx, np.arange(self.n_data)]
+        sources_zp = np.array(zp_combinations)[minidx, np.arange(self.n_data)]
+        # TODO: Check what is happening to all-bad slices
 
         # Chech if all bad slices are also bad in the index
-        a = np.where(np.nansum(var_all, axis=0) > 1E6 * (n_combinations - 1) + 1)[0].shape  # All-bad variances
+        # TODO: Do I need this check?
+        a = np.where(np.nansum(np.array(var_combinations), axis=0) >
+                     1E6 * (len(combinations_science) - 1) + 1)[0].shape  # All-bad variances
         b = np.where(sources_index > self.n_data)[0].shape  # All bad indices
         if not a == b:
             raise ValueError("Bad data is being propagated")
 
-        from pnicer.intrinsic import IntrinsicProbability
-
         # Return intrinsic class
-        return IntrinsicProbability(models_unique=gmm_unique, models_norm=models_norm,
-                                    sources_models_index=sources_index, sources_zp=sources_zp)
-
-    # -----------------------------------------------------------------------------
-    @property
-    def _get_intrinsic_class(self):
-
-        # TODO: Add docstring
-
-        # Import
-        from pnicer.user import ApparentMagnitudes, ApparentColors
-        from pnicer.intrinsic import IntrinsicMagnitudes, IntrinsicColors
-
-        if isinstance(self, ApparentMagnitudes):
-            return IntrinsicMagnitudes
-        elif isinstance(self, ApparentColors):
-            return IntrinsicColors
-        else:
-            raise NotImplementedError
+        from pnicer.intrinsic import IntrinsicProbability
+        return IntrinsicProbability(features=self, models=gmm_unique, models_norm=models_norm,
+                                    sources_index=sources_index, sources_zp=sources_zp)
 
     # -----------------------------------------------------------------------------
     def features_intrinsic(self, extinction):
