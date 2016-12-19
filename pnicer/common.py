@@ -4,8 +4,8 @@ import numpy as np
 
 from astropy import wcs
 from itertools import combinations
-from pnicer.utils import weighted_avg, caxes, mp_kde, data2grid, caxes_delete_ticklabels, round_partial, \
-    centroid_sphere, distance_sky, mp_gmm
+from pnicer.utils import caxes, mp_kde, data2grid, caxes_delete_ticklabels, round_partial, \
+    centroid_sphere, distance_sky, mp_gmm, flatten_lol
 
 # noinspection PyPackageRequirements
 from sklearn.neighbors import NearestNeighbors
@@ -233,6 +233,40 @@ class Features:
 
         # Return combined mask
         return np.prod(np.vstack([self._features_masks[i] for i in idx]), axis=0, dtype=bool)
+
+    # -----------------------------------------------------------------------------
+    @staticmethod
+    def _mask2index(mask):
+        """
+        Converts a mask to an index array.
+
+        Parameters
+        ----------
+        mask : np.array
+            Inut mask to convert to index
+
+        Returns
+        -------
+        np.array
+            Index array of mask.
+
+        """
+
+        return np.where(mask)[0]
+
+    # -----------------------------------------------------------------------------
+    @property
+    def _strict_mask_index(self):
+        """
+        Converts the strict mask to and index array.
+
+        Returns
+        -------
+        np.array
+            Index array of strict mask of instance.
+        """
+
+        return self._mask2index(self._strict_mask)
 
     # ----------------------------------------------------------------------------- #
     #                                 Helper methods                                #
@@ -780,21 +814,38 @@ class Features:
     # ----------------------------------------------------------------------------- #
 
     # -----------------------------------------------------------------------------
-    def _pnicer_univariate(self, control, n_components):
+    @staticmethod
+    def _set_defaults_gmm(**kwargs):
+        # TODO: Write docstring
 
-        # Define and fit Gaussian Mixture Model
-        gmm = GaussianMixture(n_components=n_components, covariance_type="full",
-                              tol=1E-3, warm_start=False).fit(X=np.expand_dims(control.features[0], 1))
+        if "n_components" not in kwargs:
+            kwargs["n_components"] = 3
+        if "covariance_type" not in kwargs:
+            kwargs["covariance_type"] = "full"
+        if "tol" not in kwargs:
+            kwargs["tol"] = 1E-4
+        if "warm_start" not in kwargs:
+            kwargs["warm_start"] = False
 
-        # Determine variance
-        var = np.var(control.features[0])
-
-        # Return
-        return (np.array([gmm for _ in range(self.n_data)], dtype=object),
-                np.full(self.n_data, fill_value=float(var), dtype=np.float32))
+        # Return argument dictionary
+        return kwargs
 
     # -----------------------------------------------------------------------------
-    def _pnicer_multivariate(self, control, n_components, sampling):
+    def _pnicer_univariate(self, control, **kwargs):
+
+        # Define and fit Gaussian Mixture Model
+        gmm = GaussianMixture(**self._set_defaults_gmm(**kwargs))
+        gmm = np.array([gmm.fit(X=np.expand_dims(control.features[0][control._strict_mask], 1))])
+
+        # Determine variance and index of GMMs (all 0 in the univariate case)
+        var = np.full(self._n_data_strict_mask, fill_value=float(np.var(control.features[0])), dtype=np.float32)
+        idx = np.full(self._n_data_strict_mask, fill_value=0, dtype=np.uint32)
+
+        # Return
+        return gmm, var, idx, self.features[0][self._strict_mask]
+
+    # -----------------------------------------------------------------------------
+    def _pnicer_multivariate(self, control, **kwargs):
 
         # Rotate the data spaces
         science_rot, control_rot = self._rotate(), control._rotate()
@@ -803,6 +854,7 @@ class Features:
         bandwidth = np.round(np.mean(np.nanmean(self.features_err, axis=1)), 2)
 
         # Determine bin widths for grid according to bandwidth and sampling
+        sampling = 2
         bin_grid = np.float(bandwidth / sampling)
 
         # Now we build a grid from the rotated data for all components but the first
@@ -823,6 +875,7 @@ class Features:
         science_idx = nbrs.kneighbors(np.vstack(science_rot.features)[1:, :].T)[1][:, 0]
 
         # Build data vectors for GMM-fits
+        # TODO: Do I have to add a strict mask here?
         vectors_data = [control_rot.features[0][idx == i].reshape(-1, 1) for i in range(grid_data.shape[-1])]
 
         # Each control field vector needs to contain at least 10 sources
@@ -832,58 +885,17 @@ class Features:
         vectors_var = [np.nanvar(v) if np.sum(np.isfinite(v)) > 0 else np.nan for v in vectors_data]
 
         # Fit GMM for each vector
-        vectors_gmm = mp_gmm(data=vectors_data, n_components=n_components)
+        params = self._set_defaults_gmm(**kwargs)
+        vectors_gmm = mp_gmm(data=vectors_data, **params)
 
         # Determine variance for each source
         var = np.array([vectors_var[idx] for idx in science_idx])
 
-        # Fetch GMM for each source
-        gmm = np.array([vectors_gmm[idx] for idx in science_idx])
-
-        # Generate index and variance arrays for all sources
-        # idx_all = np.full(self.n_data, fill_value=np.nan, dtype=np.float32)
-        var_all = np.full(self.n_data, fill_value=np.nan, dtype=np.float32)
-        gmm_all = np.full(self.n_data, fill_value=np.nan, dtype=object)
-
-        # Fill arrays with results
-        gmm_all[self._strict_mask], var_all[self._strict_mask] = gmm, var
-        # idx_all[self._strict_mask] = science_idx
-
         # Fit and return GMMs
-        return gmm_all, var_all
+        return vectors_gmm, var, science_idx, science_rot.features[0]
 
     # -----------------------------------------------------------------------------
-    @staticmethod
-    def _evaluate_gmm(gmm, metric="mean"):
-
-        # In case the mean should be returned
-        if metric == "mean":
-            return weighted_avg(values=gmm.means_.ravel(), weights=gmm.weights_.ravel())[0]
-
-        # In case the maximum probability should be returned
-        if metric == "max":
-
-            # Determine inital query range
-            qrange = [np.min(gmm.means_) - 3 * gmm.covariances_[0][0], np.max(gmm.means_) + 3 * gmm.covariances_[0][0]]
-
-            # Get number of samples (range oversampled by 20 times the variance)
-            nsamples = np.ceil(20 * (qrange[1] - qrange[0]) / gmm.covariances_[0][0])
-
-            # At least 100 samples, maximum 1E5
-            # TODO: Do I still need this when limiting the vector to at least 10 sources or so?
-            if nsamples < 100:
-                nsamples = 100
-            elif nsamples > 1E5:
-                nsamples = 1E5
-
-            # Determine query range
-            grid = np.linspace(start=qrange[0], stop=qrange[1], num=nsamples)
-
-            # Determine maximum and return
-            return grid[np.argmax(np.exp(gmm.score_samples(np.expand_dims(grid, 1))))]
-
-    # -----------------------------------------------------------------------------
-    def _pnicer_combinations(self, control, combinations_science, combinations_control, n_components, sampling):
+    def _pnicer_combinations(self, combinations_science, combinations_control, **kwargs):
         """
         PNICER base implementation for combinations. Basically calls the pnicer_single implementation for all
         combinations. The output extinction is then the one with the smallest error from all combinations.
@@ -892,42 +904,84 @@ class Features:
         ----------
         control
             Instance of control field data.
-        combinations_science : list
+        combinations_science : iterable
             List of combinations for the science data.
-        combinations_control : list
+        combinations_control : iterable
             List of combinations for the control field data.
         sampling : int
             Sampling of grid relative to bandwidth of kernel.
 
         Returns
         -------
+        IntrinsicProbability
 
         """
-
         # TODO: Update return value in docstring
 
-        # Check instances
-        self._check_class(ccls=control)
+        # Number of combinations
+        n_combinations = len(combinations_science)
 
         # Loop over all combinations and run PNICER
-        gmm, var = [], []
+        gmm_combinations, var_combinations, idx_combinations = [], [], []
+        uidx_combinations, mask_combinations, zp_combinations = [], [], []
+        models_norm = []
         for sc, cc in zip(combinations_science, combinations_control):
 
-            # Choose uni- or multivariate
+            # Choose uni/multivariate PNICER
             if sc.n_features == 1:
-                g, v = sc._pnicer_univariate(control=cc, n_components=n_components)
+                g, v, i, zp = sc._pnicer_univariate(control=cc, **kwargs)
             else:
-                g, v = sc._pnicer_multivariate(control=cc, n_components=n_components, sampling=sampling)
+                g, v, i, zp = sc._pnicer_multivariate(control=cc, **kwargs)
 
             # Save results
-            gmm.append(g)
-            var.append(v)
+            uidx_combinations.append([j + len(flatten_lol(gmm_combinations)) for j in i])
+            gmm_combinations.append(g)
+            var_combinations.append(v)
+            idx_combinations.append(i)
+            zp_combinations.append(zp)
+            mask_combinations.append(sc._strict_mask_index)
+            models_norm.append([sc.extvec._extinction_norm for _ in range(len(g))])
+            # uidx_combinations.append([x + len(flatten_lol(uidx_combinations)) for x in range(len(g))])
 
-        # Choose minimum variance GMM
-        gmm = np.array(gmm)[np.argmin(var, axis=0), np.arange(self.n_data)]
+        # Unique GMMs
+        gmm_unique = np.hstack(gmm_combinations)
+
+        # Flat norms
+        models_norm = np.hstack(models_norm)
+
+        # Construct variance, zero-point, and index matrices for all sources
+        var_all = np.full((n_combinations, self.n_data), fill_value=1E6, dtype=np.float32)
+        zp_all = np.full((n_combinations, self.n_data), fill_value=1E6, dtype=np.float32)
+        idx_all = np.full((n_combinations, self.n_data), fill_value=self.n_data + 1, dtype=np.uint32)
+
+        # Fill matrices with data for each combination
+        for i in range(n_combinations):
+            var_all[i, mask_combinations[i]] = var_combinations[i]
+            zp_all[i, mask_combinations[i]] = zp_combinations[i]
+            idx_all[i, mask_combinations[i]] = uidx_combinations[i]
+
+        # Choose minimum variance GMM across all combinations
+        minidx = np.argmin(var_all, axis=0)
+        """
+        All-bad slices will have a wrong index here. This will be filtered in the next step since source without any
+        excess measurements are excluded in any strict mask.
+        """
+
+        # Choose final model index and zero point for each source
+        sources_index = idx_all[minidx, np.arange(self.n_data)]
+        sources_zp = zp_all[minidx, np.arange(self.n_data)]
+
+        # Chech if all bad slices are also bad in the index
+        a = np.where(np.nansum(var_all, axis=0) > 1E6 * (n_combinations - 1) + 1)[0].shape  # All-bad variances
+        b = np.where(sources_index > self.n_data)[0].shape  # All bad indices
+        if not a == b:
+            raise ValueError("Bad data is being propagated")
+
+        from pnicer.intrinsic import IntrinsicProbability
 
         # Return intrinsic class
-        return self._get_intrinsic_class(gmm)
+        return IntrinsicProbability(models_unique=gmm_unique, models_norm=models_norm,
+                                    sources_models_index=sources_index, sources_zp=sources_zp)
 
     # -----------------------------------------------------------------------------
     @property
@@ -1250,4 +1304,8 @@ class ExtinctionVector:
 
         """
 
-        return self._extinction_rot[0]
+        # For one-dimensional data there is no rotation matrix
+        if self.n_dimensions == 1:
+            return 1.
+        else:
+            return self._extinction_rot[0]
