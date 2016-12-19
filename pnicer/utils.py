@@ -12,8 +12,11 @@ from multiprocessing.pool import Pool
 from itertools import combinations, repeat
 # noinspection PyPackageRequirements
 from sklearn.neighbors import KernelDensity
+# noinspection PyPackageRequirements
 from sklearn.mixture.gaussian_mixture import GaussianMixture
 
+
+# -----------------------------------------------------------------------------
 # Useful constants
 std2fwhm = 2 * np.sqrt(2 * np.log(2))
 
@@ -82,6 +85,25 @@ def weighted_avg(values, weights):
 
     # Return both
     return average, variance
+
+
+# -----------------------------------------------------------------------------
+def flatten_lol(lst):
+    """
+    Flattens a list of lists.
+
+    Parameters
+    ----------
+    lst : list
+        Input list (that contains lists).
+
+    Returns
+    -------
+    iterable
+        Flattened single list.
+
+    """
+    return [item for sublist in lst for item in sublist]
 
 
 # -----------------------------------------------------------------------------
@@ -422,28 +444,56 @@ def _mp_kde(kde, data, grid):
 
 
 # -----------------------------------------------------------------------------
-def mp_gmm(data, n_components):
+def mp_gmm(data, **kwargs):
+    """
+    Gaussian mixture model fitting with parallelisation. The parallelisation only works when mutliple sets need to be
+    fit.
 
-    # Determine gaussian mixture model
+    Parameters
+    ----------
+    data : iterable
+        Iterable (list) of data vectors to be fit
+    kwargs
+        Additional keyword arguments for GaussianMixture class.
+
+    Returns
+    -------
+    list
+        List of results of fitting.
+
+    """
+
+    # Determine gaussian mixture model and return
     with Pool() as pool:
-        mp = pool.starmap(_mp_gmm, zip(data, repeat(n_components)))
-
-    return mp
+        return pool.starmap(_mp_gmm, zip(data, repeat(kwargs)))
 
 
 # -----------------------------------------------------------------------------
-def _mp_gmm(data, n_components):
-    # TODO: Make parameters accessible to the user
+def _mp_gmm(data, kwargs):
+    """
+    Gaussian mixture model fitting helper routine.
+
+    Parameters
+    ----------
+    data : np.array
+        Data to be fit.
+    kwargs
+        Additional keyword arguments for GaussianMixture class.
+
+    Returns
+    -------
+        GaussianMixture class or NaN in case the fitting procedure did not converge or was not possible.
+    """
 
     try:
         # Fit model
-        gmm = GaussianMixture(n_components=n_components, covariance_type="full", tol=1E-4, warm_start=False).fit(X=data)
+        gmm = GaussianMixture(**kwargs).fit(X=data)
 
         # Check for convergence and return
-        if not gmm.converged_:
-            return np.nan
-        else:
+        if gmm.converged_:
             return gmm
+        else:
+            return np.nan
 
     # On error also return NaN
     except ValueError:
