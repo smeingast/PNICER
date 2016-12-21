@@ -2,6 +2,7 @@
 # Import stuff
 import sys
 import time
+import warnings
 import numpy as np
 
 from copy import copy
@@ -10,10 +11,198 @@ from astropy.io import fits
 from itertools import repeat
 from astropy.table import Table
 from multiprocessing.pool import Pool
+# noinspection PyPackageRequirements
+from sklearn.mixture import GaussianMixture
 
 from pnicer.common import Coordinates
-from pnicer.user import Magnitudes, Colors
-from pnicer.utils import distance_sky, std2fwhm, centroid_sphere
+from pnicer.user import Magnitudes, Colors, ApparentMagnitudes, ApparentColors
+from pnicer.utils import distance_sky, std2fwhm, centroid_sphere, weighted_avg
+
+
+# -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+class IntrinsicProbability(object):
+
+    def __init__(self, features, models, models_norm, sources_index, sources_zp):
+
+        # Set instance attributes
+        self.features = features
+        self.models = models
+        self.models_norm = models_norm
+        self.sources_index = sources_index
+        self.sources_zp = sources_zp
+
+        # Mask for bad sources
+        self._sources_mask = self.sources_index < self.features.n_data
+
+        self.get_extinction(metric="bla")
+
+    # ----------------------------------------------------------------------------- #
+    #                             Model attribute tools                             #
+    # ----------------------------------------------------------------------------- #
+
+    # -----------------------------------------------------------------------------
+    def __get_models_attributes(self, attr):
+        """
+        Helper method to return GMM attributes.
+
+        Parameters
+        ----------
+        attr : str
+            Attribute name to return.
+
+        Returns
+        -------
+        iterable
+            List of attributes for each unique gaussian mixture model.
+
+        """
+
+        return [getattr(gmm, attr) if isinstance(gmm, GaussianMixture) else np.nan for gmm in self.models]
+
+    # -----------------------------------------------------------------------------
+    @property
+    def _models_means(self):
+        """
+        Fetches the means of all gaussian mixture models.
+
+        Returns
+        -------
+        iterable
+            List of means of models.
+        """
+
+        return self.__get_models_attributes(attr="means_")
+
+    # -----------------------------------------------------------------------------
+    @property
+    def _models_variances(self):
+        """
+        Fetches the variances for all gaussian mixture models.
+
+        Returns
+        -------
+        iterable
+            List of variances of models.
+        """
+
+        return self.__get_models_attributes(attr="covariances_")
+
+    # -----------------------------------------------------------------------------
+    @property
+    def _models_weights(self):
+        """
+        Fetches the weights for all gaussian mixture models.
+
+        Returns
+        -------
+        iterable
+            List of weights of models.
+        """
+
+        return self.__get_models_attributes(attr="weights_")
+
+    # ----------------------------------------------------------------------------- #
+    #                            Model evaluation tools                             #
+    # ----------------------------------------------------------------------------- #
+
+    # -----------------------------------------------------------------------------
+    @property
+    def _models_intrinsic_mean(self):
+        """
+        Returns the intrisic feature values for all models corresponding to the mean of the probability density
+        distribution.
+
+        Returns
+        -------
+        iterable
+            List of means for each unique model.
+
+        """
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return [weighted_avg(values=v.ravel(), weights=w.ravel())[0] for v, w in
+                    zip(self._models_means, self._models_weights)]
+
+    # -----------------------------------------------------------------------------
+    @property
+    def _models_intrinsic_max(self):
+        """
+        Returns the intrisic feature values for all models corresponding to the maximum of the probability density
+        distribution.
+
+        Returns
+        -------
+        iterable
+            List of maxima for each unique model.
+
+        """
+
+        # Determine query range
+        qrange = [np.min(self._models_means) - 3 * self._models_variances[0][0],
+                  np.max(self._models_means) + 3 * self._models_variances[0][0]]
+
+        # Get number of samples (range oversampled by 20 times the variance)
+        nsamples = np.uint32(np.ceil(20 * (qrange[1] - qrange[0]) / self._models_variances[0][0]))[0][0]
+
+        # At least 100 samples, maximum 1E5
+        nsamples = 100 if nsamples < 100 else nsamples
+        nsamples = 100000 if nsamples > 1E5 else nsamples
+
+        # Create query range
+        qrange = np.linspace(start=qrange[0][0], stop=qrange[1][0], num=nsamples)
+
+        # Determine maximum and return
+        return [qrange[np.argmax(np.exp(g.score_samples(np.expand_dims(qrange, 1))))] for g in self.models]
+
+    # ----------------------------------------------------------------------------- #
+    #                               Extinction tools                                #
+    # ----------------------------------------------------------------------------- #
+
+    # -----------------------------------------------------------------------------
+    def get_extinction(self, metric="mean"):
+        """
+        Calculates extinction from the probability density distributions based on a given metric.
+
+        Parameters
+        ----------
+        metric : str, optional
+            Metric to use to evaluate the intrinsic feature. Possible are 'mean' (default) and 'max'.
+
+        Returns
+        -------
+        np.ndarray
+            Array of extinction values for each source.
+
+        """
+
+        if metric.lower() == "mean":
+            attr = "_models_intrinsic_mean"
+        elif metric.lower() == "max":
+            attr = "_models_intrinsic_max"
+        else:
+            raise ValueError("Metric '{0}' not supported".format(metric))
+
+        return ((self.sources_zp[self._sources_mask] -
+                 np.array(getattr(self, attr))[self.sources_index[self._sources_mask]]) /
+                self.models_norm[self.sources_index[self._sources_mask]])
+
+    # ----------------------------------------------------------------------------- #
+    #                                     Misc                                      #
+    # ----------------------------------------------------------------------------- #
+
+    # -----------------------------------------------------------------------------
+    @property
+    def _get_intrinsic_class(self):
+        # TODO: Add docstring
+
+        if isinstance(self.features, ApparentMagnitudes):
+            return IntrinsicMagnitudes
+        elif isinstance(self.features, ApparentColors):
+            return IntrinsicColors
+        else:
+            raise NotImplementedError("'{0}' not supported".format(self.features.__class__))
 
 
 # -----------------------------------------------------------------------------
