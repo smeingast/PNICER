@@ -892,9 +892,6 @@ class Features:
         # TODO: Is this distance filter correct?
         idx[dis > bin_grid / 2] = grid_data.shape[-1] + 1
 
-        # Also find the nearest neighbor for each science target
-        science_idx = nbrs.kneighbors(np.vstack(science_rot.features)[1:, :].T)[1][:, 0]
-
         # Build data vectors for GMM-fits
         # TODO: Do I have to add a strict mask here?
         vectors_data = [control_rot.features[0][idx == i].reshape(-1, 1) for i in range(grid_data.shape[-1])]
@@ -908,6 +905,14 @@ class Features:
         # Fit GMM for each vector
         params = self._set_defaults_gmm(**kwargs)
         vectors_gmm = mp_gmm(data=vectors_data, **params)
+
+        # Get good models
+        grid_good_idx = [i for i, j in enumerate(vectors_gmm) if isinstance(j, GaussianMixture)]
+        vectors_gmm = [vectors_gmm[i] for i in grid_good_idx]
+
+        # Find the nearest neighbor for each science target in the cleaned grid
+        nbrs = NearestNeighbors(n_neighbors=1, algorithm="ball_tree").fit(grid_data[:, grid_good_idx].T)
+        science_idx = nbrs.kneighbors(np.vstack(science_rot.features)[1:, :].T)[1][:, 0]
 
         # Determine variance for each source
         var = np.array([vectors_var[idx] for idx in science_idx])
@@ -967,6 +972,8 @@ class Features:
             zp_combinations.append(zp)
 
         # Stack unique GMMs and norms
+        # TODO: Eliminate bad GMMs and clean index
+        # TODO: Add check that there is a least one good GMM in the final list
         gmm_unique = np.hstack(gmm_combinations)
         models_norm = np.hstack(models_norm)
 
