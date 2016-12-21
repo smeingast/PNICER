@@ -972,10 +972,12 @@ class Features:
             zp_combinations.append(zp)
 
         # Stack unique GMMs and norms
-        # TODO: Eliminate bad GMMs and clean index
-        # TODO: Add check that there is a least one good GMM in the final list
         gmm_unique = np.hstack(gmm_combinations)
         models_norm = np.hstack(models_norm)
+
+        # Check if there are any good models
+        if len(gmm_unique) == 0:
+            raise ValueError("Gaussian mixture models did not converge")
 
         # Choose minimum variance GMM across all combinations
         minidx = np.argmin(np.array(var_combinations), axis=0)
