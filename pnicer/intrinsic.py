@@ -28,18 +28,37 @@ class IntrinsicProbability(object):
         # Set instance attributes
         self.features = features
         self.models = models
-        self.models_norm = models_norm
+        self._models_norm = models_norm
         self.sources_index = sources_index
         self.sources_zp = sources_zp
 
         # Mask for bad sources
         self._sources_mask = self.sources_index < self.features.n_data
 
-        self.get_extinction(metric="bla")
-
     # ----------------------------------------------------------------------------- #
     #                             Model attribute tools                             #
     # ----------------------------------------------------------------------------- #
+
+    # ----------------------------------------------------------------------
+    __model_params = None
+
+    @property
+    def _model_params(self):
+        """
+        Property which holds the table types.
+
+        Returns
+        -------
+        iterable
+            Ordered list of table types.
+        """
+
+        # Check if already determined
+        if self.__model_params is not None:
+            return self.__model_params
+
+        self.__model_params = self.models[0].get_params()
+        return self.__model_params
 
     # -----------------------------------------------------------------------------
     def __get_models_attributes(self, attr):
@@ -58,7 +77,7 @@ class IntrinsicProbability(object):
 
         """
 
-        return [getattr(gmm, attr) if isinstance(gmm, GaussianMixture) else np.nan for gmm in self.models]
+        return [getattr(gmm, attr) for gmm in self.models]
 
     # -----------------------------------------------------------------------------
     @property
@@ -101,6 +120,20 @@ class IntrinsicProbability(object):
         """
 
         return self.__get_models_attributes(attr="weights_")
+
+    # -----------------------------------------------------------------------------
+    @property
+    def _models_precision_cholesky(self):
+        """
+        Fetches precisions for all gaussian mixture models.
+
+        Returns
+        -------
+        iterable
+            List of precisions of models.
+        """
+
+        return self.__get_models_attributes(attr="precisions_cholesky_")
 
     # ----------------------------------------------------------------------------- #
     #                            Model evaluation tools                             #
@@ -161,6 +194,49 @@ class IntrinsicProbability(object):
     # ----------------------------------------------------------------------------- #
 
     # -----------------------------------------------------------------------------
+    def _models_extinction(self):
+        """
+        Creates the extinction probability density distribution for each source.
+
+        Returns
+        -------
+        iterable
+            List of Gaussian Mixture model instances for each source.
+
+        """
+
+        # TODO: Time this function with larger databases
+
+        # Get model parameters only once
+        var = self._models_variances
+        means = self._models_means
+        weights = self._models_weights
+        precisions = self._models_precision_cholesky
+
+        # Loop over all sources and make individual Gaussian Mixture models
+        models_extinction = []
+        for idx, zp, m in zip(self.sources_index, self.sources_zp, self._sources_mask):
+            if m:
+
+                # Create GMM
+                gmm = GaussianMixture(self._model_params)
+
+                # Create fake fitted GMM model by manually adding parameters
+                gmm.means_ = zp - means[idx]
+                gmm.covariances_ = var[idx] / self._models_norm[idx]
+                gmm.weights_ = weights[idx]
+                gmm.precisions_cholesky_ = precisions[idx]
+
+                # Save
+                models_extinction.append(gmm)
+
+            else:
+                models_extinction.append(None)
+
+        # Return
+        return models_extinction
+
+    # -----------------------------------------------------------------------------
     def get_extinction(self, metric="mean"):
         """
         Calculates extinction from the probability density distributions based on a given metric.
@@ -177,6 +253,8 @@ class IntrinsicProbability(object):
 
         """
 
+        # TODO: How to get variance?
+
         if metric.lower() == "mean":
             attr = "_models_intrinsic_mean"
         elif metric.lower() == "max":
@@ -184,9 +262,14 @@ class IntrinsicProbability(object):
         else:
             raise ValueError("Metric '{0}' not supported".format(metric))
 
-        return ((self.sources_zp[self._sources_mask] -
-                 np.array(getattr(self, attr))[self.sources_index[self._sources_mask]]) /
-                self.models_norm[self.sources_index[self._sources_mask]])
+        # Determine extinction based on chosen metric
+        ext = np.full_like(self.sources_zp, fill_value=np.nan, dtype=np.float32)
+        ext[self._sources_mask] = ((self.sources_zp[self._sources_mask] -
+                                    np.array(getattr(self, attr))[self.sources_index[self._sources_mask]]) /
+                                   self._models_norm[self.sources_index[self._sources_mask]])
+
+        # Return
+        return ext
 
     # ----------------------------------------------------------------------------- #
     #                                     Misc                                      #
@@ -208,7 +291,7 @@ class IntrinsicProbability(object):
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
 # noinspection PyProtectedMember
-class Intrinsic(object):
+class IntrinsicFeatures(object):
 
     # -----------------------------------------------------------------------------
     def __init__(self, coordinates, extinction, variance=None, extvec=None):
@@ -521,7 +604,7 @@ class Intrinsic(object):
 
 # ----------------------------------------------------------------------------- #
 # ----------------------------------------------------------------------------- #
-class IntrinsicMagnitudes(Magnitudes, Intrinsic):
+class IntrinsicMagnitudes(Magnitudes, IntrinsicFeatures):
 
     # -----------------------------------------------------------------------------
     def __init__(self, magnitudes, errors, extinction, extinction_variance, extvec, coordinates=None, names=None):
@@ -550,13 +633,13 @@ class IntrinsicMagnitudes(Magnitudes, Intrinsic):
         # Call the constructors explicitly without super
         Magnitudes.__init__(self, magnitudes=magnitudes, errors=errors, extvec=extvec, coordinates=coordinates,
                             names=names)
-        Intrinsic.__init__(self, coordinates=coordinates, extinction=extinction, variance=extinction_variance,
-                           extvec=extvec)
+        IntrinsicFeatures.__init__(self, coordinates=coordinates, extinction=extinction, variance=extinction_variance,
+                                   extvec=extvec)
 
 
 # ----------------------------------------------------------------------------- #
 # ----------------------------------------------------------------------------- #
-class IntrinsicColors(Intrinsic, Colors):
+class IntrinsicColors(IntrinsicFeatures, Colors):
 
     # -----------------------------------------------------------------------------
     def __init__(self, colors, errors, extinction, extinction_variance, extvec, coordinates=None, names=None):
@@ -584,8 +667,8 @@ class IntrinsicColors(Intrinsic, Colors):
 
         # Call the constructors explicitly without super
         Colors.__init__(self, colors=colors, errors=errors, extvec=extvec, coordinates=coordinates, names=names)
-        Intrinsic.__init__(self, coordinates=coordinates, extinction=extinction, variance=extinction_variance,
-                           extvec=extvec)
+        IntrinsicFeatures.__init__(self, coordinates=coordinates, extinction=extinction, variance=extinction_variance,
+                                   extvec=extvec)
 
 
 # ----------------------------------------------------------------------------- #
