@@ -458,7 +458,7 @@ def mp_gmm(data, **kwargs):
 
     Returns
     -------
-    list
+    iterable
         List of results of fitting.
 
     """
@@ -486,7 +486,9 @@ def _mp_gmm(data, kwargs):
     """
 
     try:
+
         # Fit model
+        # TODO: Force warm_start to be false?!?
         gmm = GaussianMixture(**kwargs).fit(X=data)
 
         # Check for convergence and return
