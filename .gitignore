@@ -11,6 +11,7 @@ notebooks/.ipynb_checkpoints
 my_stuff.py
 stub.py
 other
+*.png
 
 __pycache__/
 pnicer/__pycache__/
