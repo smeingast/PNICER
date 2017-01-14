@@ -133,8 +133,7 @@ class ApparentMagnitudes(Magnitudes):
 
         Returns
         -------
-        pnicer.intrinsic.Intrinsic
-            Extinction instance with the calcualted extinction and errors.
+        pnicer.intrinsic.IntrinsicProbability
 
         """
 
@@ -179,8 +178,8 @@ class ApparentMagnitudes(Magnitudes):
 
         Returns
         -------
-        pnicer.intrinsic.Intrinsic
-            Extinction instance with the calcualted extinction and errors.
+        pnicer.intrinsic.IntrinsicFeatures
+            Extinction instance with the calculated extinction and errors.
 
         """
 
@@ -615,7 +614,7 @@ class ApparentColors(Colors):
                                              names=names)
 
     # -----------------------------------------------------------------------------
-    def pnicer(self, control, n_components=3, sampling=2):
+    def pnicer(self, control, **kwargs):
         """
         PNICER call method for colors.
 
@@ -623,13 +622,11 @@ class ApparentColors(Colors):
         ----------
         control
             Control field instance.
-        n_components : int, optional
-            Number of components for Gaussian mixture model. Default is 3.
-        sampling : int, optional
-            Sampling of grid relative to bandwidth of kernel. Default is 2.
+        kwargs
+            GMM setup ('n_components', 'covariance_type', or 'tol')
 
         """
 
-        return self._pnicer_combinations(control=control, sampling=sampling, n_components=n_components,
-                                         combinations_science=self._all_combinations(idxstart=1),
-                                         combinations_control=control._all_combinations(idxstart=1))
+        # TODO: Update method!
+        return self._pnicer_combinations(combinations_science=self._all_combinations(idxstart=1),
+                                         combinations_control=control._all_combinations(idxstart=1), **kwargs)
