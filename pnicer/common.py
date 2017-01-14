@@ -543,6 +543,7 @@ class Features:
             If set, the path where the figure is saved
 
         """
+        # TODO: Maybe move to utils?
 
         # Import matplotlib
         from matplotlib import pyplot as plt
@@ -950,7 +951,7 @@ class Features:
         IntrinsicProbability
 
         """
-        # TODO: Update return value in docstring
+        # TODO: Update docstring
 
         # Loop over all combinations and run PNICER
         gmm_combinations, var_combinations, uidx_combinations, zp_combinations, models_norm = [], [], [], [], []
