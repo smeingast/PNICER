@@ -12,7 +12,7 @@ setup(
     packages=["pnicer", "pnicer.tests", "pnicer.tests_resources"],
     package_dir={"pnicer": "pnicer"},
     package_data={"pnicer": ["tests_resources/*.fits"]},
-    install_requires=["numpy", "scikit-learn", "matplotlib", "astropy", "wcsaxes"],
+    install_requires=["numpy", "scipy", "scikit-learn", "matplotlib", "astropy", "wcsaxes"],
     url="",
     license="",
     author="Stefan Meingast",
