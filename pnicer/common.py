@@ -5,7 +5,7 @@ import numpy as np
 from astropy import wcs
 from itertools import combinations
 from pnicer.utils import caxes, mp_kde, data2grid, caxes_delete_ticklabels, round_partial, \
-    centroid_sphere, distance_sky, mp_gmm, flatten_lol
+    centroid_sphere, distance_sky, mp_gmm, flatten_lol, finalize_plot
 
 # noinspection PyPackageRequirements
 from sklearn.neighbors import NearestNeighbors
@@ -532,30 +532,6 @@ class Features:
             raise ValueError("Axis size must be given either with a single number or a list with two entries")
 
     # -----------------------------------------------------------------------------
-    @staticmethod
-    def _finalize_plot(path=None):
-        """
-        Helper method to save or show plot.
-
-        Parameters
-        ----------
-        path : str, optional
-            If set, the path where the figure is saved
-
-        """
-        # TODO: Maybe move to utils?
-
-        # Import matplotlib
-        from matplotlib import pyplot as plt
-
-        # Save or show figure
-        if path is None:
-            plt.show()
-        else:
-            plt.savefig(path, bbox_inches='tight')
-        plt.close()
-
-    # -----------------------------------------------------------------------------
     def _gridspec_world(self, pixsize, ax_size, proj_code):
         """
         Creates all necessary instances for plotting with a grid in world coordinates.
@@ -662,7 +638,7 @@ class Features:
         caxes_delete_ticklabels(axes=axes, xfirst=False, xlast=True, yfirst=False, ylast=True)
 
         # Save or show figure
-        self._finalize_plot(path=path)
+        finalize_plot(path=path)
 
     # -----------------------------------------------------------------------------
     def plot_combinations_kde(self, path=None, ax_size=None, grid_bw=0.1, kernel="epanechnikov", cmap="gist_heat_r"):
@@ -715,7 +691,7 @@ class Features:
         caxes_delete_ticklabels(axes=axes, xfirst=False, xlast=True, yfirst=False, ylast=True)
 
         # Save or show figure
-        self._finalize_plot(path=path)
+        finalize_plot(path=path)
 
     # -----------------------------------------------------------------------------
     def plot_sources_scatter(self, path=None, ax_size=10, skip=1, **kwargs):
@@ -756,7 +732,7 @@ class Features:
             ax.set_ylim(lim[1])
 
         # Finalize plot
-        self._finalize_plot(path=path)
+        finalize_plot(path=path)
 
     # -----------------------------------------------------------------------------
     def plot_sources_kde(self, path=None, bandwidth=10 / 60, ax_size=10, kernel="epanechnikov", skip=1, **kwargs):
@@ -808,7 +784,7 @@ class Features:
             axes[idx].imshow(dens, origin="lower", interpolation="nearest", cmap="viridis", vmin=0, vmax=1, **kwargs)
 
         # Save or show figure
-        self._finalize_plot(path=path)
+        finalize_plot(path=path)
 
     # ----------------------------------------------------------------------------- #
     #                              Main PNICER routines                             #

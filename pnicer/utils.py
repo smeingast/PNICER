@@ -704,3 +704,26 @@ def data2grid(lon, lat, frame, proj_code="TAN", pixsize=5. / 60, **kwargs):
 
     # Return header and grid
     return header, world_grid
+
+
+# -----------------------------------------------------------------------------
+def finalize_plot(path=None):
+    """
+    Helper method to save or show plot.
+
+    Parameters
+    ----------
+    path : str, optional
+        If set, the path where the figure is saved
+
+    """
+
+    # Import matplotlib
+    from matplotlib import pyplot as plt
+
+    # Save or show figure
+    if path is None:
+        plt.show()
+    else:
+        plt.savefig(path, bbox_inches='tight')
+    plt.close()
