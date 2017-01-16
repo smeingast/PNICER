@@ -486,7 +486,7 @@ class ContinuousExtinction:
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
 # noinspection PyProtectedMember
-class DiscreteExtinction(object):
+class DiscreteExtinction:
 
     # -----------------------------------------------------------------------------
     def __init__(self, extinction, variance=None, coord=None, extvec=None):
