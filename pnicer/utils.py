@@ -731,11 +731,33 @@ def finalize_plot(path=None):
 
 
 # -----------------------------------------------------------------------------
-def gmm_scale_model(gmm, scale, params=None):
-    # TODO: Add docstring
+def gmm_scale(gmm, shift=0.0, scale=1.0, reverse=False, params=None):
+    """
+    Apply scaling factors to GMM instances.
+
+    Parameters
+    ----------
+    gmm : GaussianMixture
+        GMM instance to be scaled.
+    shift : int, float, optional
+        Shift for the entire model. Default is 0 (no shift).
+    scale : int, float, optional
+        Scale for all components. Default is 1 (no scale).
+    reverse : bool, optional
+        Whether the GMM should be reversed.
+    params
+        GaussianMixture params for initialization of new instance.
+
+    Returns
+    -------
+    GaussianMixture
+        Modified GMM instance.
+
+    """
 
     # Fetch parameters if not supplied
     if params is None:
+        # noinspection PyUnresolvedReferences
         params = gmm.get_params()
 
     # Instantiate new GMM
@@ -743,7 +765,17 @@ def gmm_scale_model(gmm, scale, params=None):
 
     # Create scaled fitted GMM model
     gmm_new.weights_ = gmm.weights_
-    gmm_new.means_ = gmm.means_ / scale
+
+    # Apply shift if set
+    gmm_new.means_ = gmm.means_ + shift
+
+    # Apply scale
+    gmm_new.means_ /= scale
+
+    # Reverse if set
+    if reverse:
+        gmm_new.means_ *= -1
+
     # gmm_new.means_ = (zp - gmm.means_) / scale
     # TODO: Zero-point must be from rotated data space. Check!
     gmm_new.covariances_ = gmm.covariances_ / scale ** 2
@@ -757,21 +789,27 @@ def gmm_scale_model(gmm, scale, params=None):
 # -----------------------------------------------------------------------------
 def gmm_sample_xy(gmm, kappa=3, sampling=10, nmin=100, nmax=100000):
     """
+    Creates discrete values (x, y) for a given GMM instance.
 
     Parameters
     ----------
-    gmm
-    kappa
-    sampling
-    nmin
-    nmax
+    gmm : GaussianMixture
+        Fitted GaussianMixture model instance from which to draw samples.
+    kappa : int, float
+        Width of query range (in units of standard deviations).
+    sampling : int
+        Sampling factor for the smallest component standard deviation.
+    nmin : int
+        Minimum number of samples to draw.
+    nmax : int
+        Maximum number of samples to draw. Not recommended to set this to > 1E5 as it becomes very slow.
 
     Returns
     -------
-    ndarray, ndarray, float
+    ndarray, ndarray
+        Tuple holding x and y data arrays.
 
     """
-    # TODO: Add docstring
 
     # Get GMM attributes
     s = np.sqrt(gmm.covariances_)
