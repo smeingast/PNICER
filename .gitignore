@@ -6,6 +6,8 @@
 
 # Notebook stuff
 notebooks/.ipynb_checkpoints
+verifications
+verifications/*.ipynb
 
 # Other
 my_stuff.py
