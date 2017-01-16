@@ -12,7 +12,6 @@ from astropy.table import Table
 from multiprocessing.pool import Pool
 
 from pnicer.common import Coordinates
-from pnicer.user import Magnitudes, Colors, ApparentMagnitudes, ApparentColors
 from pnicer.utils.gmm import gmm_scale, gmm_expected_value, gmm_sample_xy, gmm_max, gmm_confidence_interval, \
     gmm_population_variance
 from pnicer.utils.plots import finalize_plot
@@ -21,7 +20,7 @@ from pnicer.utils.algebra import centroid_sphere, distance_sky, std2fwhm
 
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
-class IntrinsicProbability(object):
+class ContinuousExtinction:
 
     def __init__(self, features, models, index, zp):
 
@@ -335,7 +334,8 @@ class IntrinsicProbability(object):
         var[self._sources_mask] = np.array(self._models_population_variance)[idx]
 
         # Return
-        return ext, var
+        return DiscreteExtinction(extinction=ext, variance=var, coord=self.features.coordinates.coordinates,
+                                  extvec=self.features.extvec.extvec)
 
     # ----------------------------------------------------------------------------- #
     #                               Plotting methods                                #
@@ -482,48 +482,32 @@ class IntrinsicProbability(object):
         # Save or show figure
         finalize_plot(path=path)
 
-    # ----------------------------------------------------------------------------- #
-    #                                     Misc                                      #
-    # ----------------------------------------------------------------------------- #
-
-    # -----------------------------------------------------------------------------
-    @property
-    def _get_intrinsic_class(self):
-        # TODO: Add docstring
-
-        if isinstance(self.features, ApparentMagnitudes):
-            return IntrinsicMagnitudes
-        elif isinstance(self.features, ApparentColors):
-            return IntrinsicColors
-        else:
-            raise NotImplementedError("'{0}' not supported".format(self.features.__class__))
-
 
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
 # noinspection PyProtectedMember
-class IntrinsicFeatures(object):
+class DiscreteExtinction(object):
 
     # -----------------------------------------------------------------------------
-    def __init__(self, coordinates, extinction, variance=None, extvec=None):
+    def __init__(self, extinction, variance=None, coord=None, extvec=None):
         """
         Class for Intrisic features and extinction.
 
         Parameters
         ----------
-        coordinates : SkyCoord
-            Astropy SkyCoord instance.
         extinction : np.ndarray
             Extinction data.
         variance : np.ndarray, optional
             Variance in extinction.
+        coord : SkyCoord
+            Astropy SkyCoord instance.
         extvec : ExtinctionVector, optional
             Extinction Vector instance.
 
         """
 
         # Set attributes
-        self.coordinates = Coordinates(coordinates=coordinates)
+        self.coordinates = Coordinates(coordinates=coord)
         self.extinction = extinction
         self.variance = np.zeros_like(extinction) if variance is None else variance
         self.extvec = extvec
@@ -585,14 +569,14 @@ class IntrinsicFeatures(object):
         sampling : int, optional
             Sampling of data. i.e. how many pixels per bandwidth. Default is 2.
         nicest : bool, optional
-            Whether to activate the NICEST correction factor.
+            Whether to activate the NICEST correction factor. Default is False.
         alpha : float, optional
             The slope in the number counts (NICEST equation 2). Default is 1/3.
         use_fwhm : bool, optional
             If set, the bandwidth parameter represents the gaussian FWHM instead of its standard deviation. Only
             available when using a gaussian weighting.
         silent : bool, optional
-            Whether information on the progress should be printed.
+            Whether information on the progress should be printed. Default is False.
 
         Returns
         -------
@@ -811,75 +795,6 @@ class IntrinsicFeatures(object):
 
         # Write to file
         tbhdu.writeto(path, clobber=True)
-
-
-# ----------------------------------------------------------------------------- #
-# ----------------------------------------------------------------------------- #
-class IntrinsicMagnitudes(Magnitudes, IntrinsicFeatures):
-
-    # -----------------------------------------------------------------------------
-    def __init__(self, magnitudes, errors, extinction, extinction_variance, extvec, coordinates=None, names=None):
-        """
-        Intrinsic magnitude data class.
-
-        Parameters
-        ----------
-        magnitudes : list
-            List of magnitude arrays. All arrays must have the same length.
-        errors : list
-            List off magnitude error arrays.
-        extinction : np.ndarray
-            Extinction data.
-        extinction_variance : np.ndarray, optional
-            Variance in extinction.
-        extvec : list
-            List holding the extinction components for each magnitude.
-        coordinates : SkyCoord, optional
-            Astropy SkyCoord instance.
-        names : list, optional
-            List of magnitude (feature) names.
-
-        """
-
-        # Call the constructors explicitly without super
-        Magnitudes.__init__(self, magnitudes=magnitudes, errors=errors, extvec=extvec, coordinates=coordinates,
-                            names=names)
-        IntrinsicFeatures.__init__(self, coordinates=coordinates, extinction=extinction, variance=extinction_variance,
-                                   extvec=extvec)
-
-
-# ----------------------------------------------------------------------------- #
-# ----------------------------------------------------------------------------- #
-class IntrinsicColors(IntrinsicFeatures, Colors):
-
-    # -----------------------------------------------------------------------------
-    def __init__(self, colors, errors, extinction, extinction_variance, extvec, coordinates=None, names=None):
-        """
-        Intrinsic color data class.
-
-        Parameters
-        ----------
-        colors : list
-            List of magnitude arrays. All arrays must have the same length.
-        errors : list
-            List off magnitude error arrays.
-        extinction : np.ndarray
-            Extinction data.
-        extinction_variance : np.ndarray, optional
-            Variance in extinction.
-        extvec : list
-            List holding the extinction components for each magnitude.
-        coordinates : SkyCoord, optional
-            Astropy SkyCoord instance.
-        names : list, optional
-            List of magnitude (feature) names.
-
-        """
-
-        # Call the constructors explicitly without super
-        Colors.__init__(self, colors=colors, errors=errors, extvec=extvec, coordinates=coordinates, names=names)
-        IntrinsicFeatures.__init__(self, coordinates=coordinates, extinction=extinction, variance=extinction_variance,
-                                   extvec=extvec)
 
 
 # ----------------------------------------------------------------------------- #

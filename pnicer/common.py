@@ -1001,8 +1001,8 @@ class Features:
             raise ValueError("Bad data is being propagated")
 
         # Return intrinsic class
-        from pnicer.intrinsic import IntrinsicProbability
-        return IntrinsicProbability(features=self, models=gmm_unique, index=sources_index, zp=sources_zp)
+        from pnicer.extinction import ContinuousExtinction
+        return ContinuousExtinction(features=self, models=gmm_unique, index=sources_index, zp=sources_zp)
 
     # -----------------------------------------------------------------------------
     def features_intrinsic(self, extinction):

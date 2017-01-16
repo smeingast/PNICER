@@ -133,7 +133,7 @@ class ApparentMagnitudes(Magnitudes):
 
         Returns
         -------
-        pnicer.intrinsic.IntrinsicProbability
+        pnicer.extinction.ContinuousExtinction
 
         """
 
@@ -271,13 +271,12 @@ class ApparentMagnitudes(Magnitudes):
             ext[mask] = var[mask] = np.nan
 
         # Calculate intrinsic magnitudes
-        intrinsic = [self.features[idx] - self.extvec.extvec[idx] * ext for idx in range(self.n_features)]
+        # intrinsic = [self.features[idx] - self.extvec.extvec[idx] * ext for idx in range(self.n_features)]
 
         # Return Intrinsic instance
-        from pnicer.intrinsic import IntrinsicMagnitudes
-        return IntrinsicMagnitudes(magnitudes=intrinsic, errors=self.features_err, extinction=ext,
-                                   extinction_variance=var, extvec=self.extvec.extvec,
-                                   coordinates=self.coordinates.coordinates, names=self.features_names)
+        from pnicer.extinction import DiscreteExtinction
+        return DiscreteExtinction(extinction=ext, variance=var, extvec=self.extvec.extvec,
+                                  coord=self.coordinates.coordinates)
 
     # -----------------------------------------------------------------------------
     # noinspection PyPackageRequirements

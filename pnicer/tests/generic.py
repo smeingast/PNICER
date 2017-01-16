@@ -1,13 +1,14 @@
+# plt.savefig("/Users/stefan/Dropbox/Projects/PNICER/dummy.png", bbox_inches="tight", dpi=150)
 def orion():
+    """This method goes through a typical PNICER session and creates an extinction map of Orion A from 2MASS data. """
 
     # Import stuff
     from astropy.io import fits
     from astropy.coordinates import SkyCoord
 
     from pnicer import ApparentMagnitudes
-    from pnicer.utils import get_resource_path
+    from pnicer.utils.auxiliary import get_resource_path
 
-    """ This file goes through a typical PNICER session and creates an extinction map of Orion A from 2MASS data. """
 
     # Find the test files
     science_path = get_resource_path(package="pnicer.tests_resources", resource="Orion_A_2mass.fits")
@@ -38,16 +39,25 @@ def orion():
     control = ApparentMagnitudes(magnitudes=con_phot, errors=con_err, extvec=feature_extinction, coordinates=con_coo,
                                  names=feature_names)
 
-    print(science)
-    exit()
-
-
     # Test PNICER on both magnitudes and colors
-    science.pnicer(control=control)
-    pnicer = science.mag2color().pnicer(control=control.mag2color())
+    # science.pnicer(control=control)
+
+    pnicer = science.mag2color().pnicer(control=control.mag2color(), n_components=3)
+    ext_pnicer = pnicer.get_discrete_extinction()
+    map_pnicer = ext_pnicer.build_map(bandwidth=5 / 60, metric="gaussian", use_fwhm=True)
+    map_pnicer.save_fits("/Users/stefan/Desktop/pnicer.fits")
+    map_pnicer.plot_map(path="/Users/stefan/Desktop/pnicer.png")
+
+
+    ext_nicer = science.nicer(control=control)
+    map_nicer = ext_nicer.build_map(bandwidth=5 / 60, metric="gaussian", use_fwhm=True)
+    # map_nicer.save_fits("/Users/stefan/Desktop/nicer.fits")
+
+
+
 
     # Test NICER
-    science.nicer(control=control)
+    exit()
 
     # Make extinction map
     pnicer_emap = pnicer.build_map(bandwidth=5 / 60, metric="gaussian", nicest=False, use_fwhm=False)
@@ -57,3 +67,5 @@ def orion():
 
     """ If no errors pop up, then the basic PNICER package works """
     print("{0:<80s}".format("PNICER routines terminated successfully! Happy extinction mapping :) "))
+
+orion()
