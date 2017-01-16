@@ -731,7 +731,7 @@ def finalize_plot(path=None):
 
 
 # -----------------------------------------------------------------------------
-def gmm_scale(gmm, shift=0.0, scale=1.0, reverse=False, params=None):
+def gmm_scale(gmm, shift=None, scale=None, reverse=False, params=None):
     """
     Apply scaling factors to GMM instances.
 
@@ -767,20 +767,22 @@ def gmm_scale(gmm, shift=0.0, scale=1.0, reverse=False, params=None):
     gmm_new.weights_ = gmm.weights_
 
     # Apply shift if set
-    gmm_new.means_ = gmm.means_ + shift
+    gmm_new.means_ = gmm.means_ + shift if shift is not None else gmm.means_
 
     # Apply scale
-    gmm_new.means_ /= scale
+    if scale is not None:
+        gmm_new.means_ /= scale
+
+    gmm_new.covariances_ = gmm.covariances_ / scale ** 2 if scale is not None else gmm.covariances_
+    gmm_new.precisions_ = np.linalg.inv(gmm_new.covariances_) if scale is not None else gmm.precisions_
+    gmm_new.precisions_cholesky_ = np.linalg.cholesky(gmm_new.precisions_) if scale is not None \
+        else gmm.precisions_cholesky_
 
     # Reverse if set
     if reverse:
         gmm_new.means_ *= -1
 
-    # gmm_new.means_ = (zp - gmm.means_) / scale
     # TODO: Zero-point must be from rotated data space. Check!
-    gmm_new.covariances_ = gmm.covariances_ / scale ** 2
-    gmm_new.precisions_ = np.linalg.inv(gmm_new.covariances_)
-    gmm_new.precisions_cholesky_ = np.linalg.cholesky(gmm_new.precisions_)
 
     # Return scaled GMM
     return gmm_new
