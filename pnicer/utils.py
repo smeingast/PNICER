@@ -792,7 +792,6 @@ def gmm_sample_xy(gmm, kappa=3, sampling=10, nmin=100, nmax=100000):
     yrange = np.exp(gmm.score_samples(np.expand_dims(xrange, 1)))
 
     # Step
-    # dx = np.ediff1d(xrange)[0]
     return xrange, yrange
 
 
@@ -825,7 +824,7 @@ def gmm_confidence_interval(gmm, level=0.95):
 
     """
     # TODO: Modify docstring
-    xrange, yrange, _ = gmm_sample_xy(gmm=gmm, kappa=10, sampling=50)
+    xrange, yrange = gmm_sample_xy(gmm=gmm, kappa=10, sampling=50)
 
     # Cumulative integral
     cumint = cumtrapz(y=yrange, x=xrange, initial=0)
@@ -842,7 +841,7 @@ def gmm_population_variance(gmm):
     ev = gmm_expected_value(gmm=gmm)
 
     # Get query range
-    xrange, yrange, _ = gmm_sample_xy(gmm=gmm, kappa=10, sampling=50)
+    xrange, yrange = gmm_sample_xy(gmm=gmm, kappa=10, sampling=50)
 
     # Return population variance
     return np.trapz(np.power(xrange, 2) * yrange, xrange) - ev**2
@@ -859,7 +858,10 @@ def gmm_confidence_interval_value(gmm, value, level=0.95):
     # TODO: Check if this works as intended
 
     # Get query ranges
-    gmm_x, gmm_y, dx = gmm_sample_xy(gmm=gmm, kappa=5, sampling=100, nmin=1000, nmax=100000)
+    gmm_x, gmm_y = gmm_sample_xy(gmm=gmm, kappa=5, sampling=100, nmin=1000, nmax=100000)
+
+    # Get dx
+    dx = np.ediff1d(gmm_x)[0]
 
     # Find position of 'value'
     value_idx = np.argmin(np.abs(gmm_x - value))
