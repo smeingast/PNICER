@@ -392,7 +392,7 @@ class Features:
         rotdata = self.extvec._rotmatrix.dot(data)
 
         # Rotate extinction vector
-        extvec = self.extvec._extinction_rot
+        extvec = self.extvec._extvec_rot
 
         # In case no coordinates are supplied they need to be masked
         if self.coordinates.coordinates is not None:
@@ -1280,7 +1280,7 @@ class ExtinctionVector:
 
     # -----------------------------------------------------------------------------
     @property
-    def _extinction_rot(self):
+    def _extvec_rot(self):
         """
         Calculates the rotated extinction vector.
 
@@ -1309,4 +1309,4 @@ class ExtinctionVector:
         if self.n_dimensions == 1:
             return self.extvec[0]
         else:
-            return self._extinction_rot[0]
+            return self._extvec_rot[0]
