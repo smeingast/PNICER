@@ -2,7 +2,6 @@
 # Import stuff
 import sys
 import time
-import warnings
 import numpy as np
 
 from copy import copy
@@ -11,54 +10,92 @@ from astropy.io import fits
 from itertools import repeat
 from astropy.table import Table
 from multiprocessing.pool import Pool
-# noinspection PyPackageRequirements
-from sklearn.mixture import GaussianMixture
 
 from pnicer.common import Coordinates
 from pnicer.user import Magnitudes, Colors, ApparentMagnitudes, ApparentColors
-from pnicer.utils import distance_sky, std2fwhm, centroid_sphere, weighted_avg
+from pnicer.utils import distance_sky, std2fwhm, centroid_sphere, finalize_plot, gmm_sample_xy, gmm_expected_value, \
+    gmm_max, gmm_confidence_interval, gmm_population_variance, gmm_scale
 
 
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
 class IntrinsicProbability(object):
 
-    def __init__(self, features, models, models_norm, sources_index, sources_zp):
+    def __init__(self, features, models, index, zp):
+
+        # Input checks
+        if (len(index) != features.n_data) | (len(zp) != features.n_data):
+            raise ValueError("Incompatible input for InstrinsicProbability")
 
         # Set instance attributes
         self.features = features
         self.models = models
-        self._models_norm = models_norm
-        self.sources_index = sources_index
-        self.sources_zp = sources_zp
+        self.index = index
+        self.zp = zp
 
-        # Mask for bad sources
-        self._sources_mask = self.sources_index < self.features.n_data
+    # ----------------------------------------------------------------------
+    @property
+    def _sources_mask(self):
+        """
+        Mask for bad sources where no intrinsic probability distribution could be derived. The mask contains True
+        for good sources and False for bad.
+
+        Returns
+        -------
+        ndarray
+            Numpy array with boolean entries.
+
+        """
+
+        return self.index < self.features.n_data
+
+    # ----------------------------------------------------------------------
+    @property
+    def _n_models(self):
+        """
+        Number of unique models in instance.
+
+        Returns
+        -------
+        int
+
+        """
+
+        return len(self.models)
+
+    # ----------------------------------------------------------------------
+    @property
+    def _n_sources_models(self):
+        """
+        Number of sources in the science field assigned to each unique model.
+
+        Returns
+        -------
+        ndarray
+            Numpy array with number of sources for each unique model.
+
+        """
+
+        return np.histogram(self.index, bins=np.arange(-0.5, stop=self._n_models + 0.5, step=1))[0]
 
     # ----------------------------------------------------------------------------- #
     #                             Model attribute tools                             #
     # ----------------------------------------------------------------------------- #
 
     # ----------------------------------------------------------------------
-    __model_params = None
-
     @property
     def _model_params(self):
         """
-        Property which holds the table types.
+        GMM model parameters (shared for all unique instances)
 
         Returns
         -------
-        iterable
-            Ordered list of table types.
+        dict
+            GMM model parameter dictionary.
+
         """
 
-        # Check if already determined
-        if self.__model_params is not None:
-            return self.__model_params
-
-        self.__model_params = self.models[0].get_params()
-        return self.__model_params
+        return self.models[0].get_params()
 
     # -----------------------------------------------------------------------------
     def __get_models_attributes(self, attr):
@@ -140,60 +177,101 @@ class IntrinsicProbability(object):
     # ----------------------------------------------------------------------------- #
 
     # -----------------------------------------------------------------------------
-    @property
-    def _models_intrinsic_mean(self):
+    def _models_sample_xy(self, **kwargs):
         """
-        Returns the intrisic feature values for all models corresponding to the mean of the probability density
-        distribution.
+        Creates discrete values (x, y) for all probability density distributions.
+
+        Parameters
+        ----------
+        kwargs
+            Additional parameters (kappa, sigma, nmin, nmax)
 
         Returns
         -------
         iterable
-            List of means for each unique model.
+            List of tuples (xarr, yarr)
 
         """
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            return [weighted_avg(values=v.ravel(), weights=w.ravel())[0] for v, w in
-                    zip(self._models_means, self._models_weights)]
+        return [gmm_sample_xy(gmm=gmm, **kwargs) for gmm in self.models]
 
     # -----------------------------------------------------------------------------
     @property
-    def _models_intrinsic_max(self):
+    def _models_expected_value(self):
         """
-        Returns the intrisic feature values for all models corresponding to the maximum of the probability density
-        distribution.
+        Calculates the expected value for all model probability density distributions.
 
         Returns
         -------
         iterable
-            List of maxima for each unique model.
+            List of expected values.
 
         """
 
-        # Determine query range
-        qrange = [np.min(self._models_means) - 3 * self._models_variances[0][0],
-                  np.max(self._models_means) + 3 * self._models_variances[0][0]]
+        return [gmm_expected_value(gmm=gmm) for gmm in self.models]
 
-        # Get number of samples (range oversampled by 20 times the variance)
-        nsamples = np.uint32(np.ceil(20 * (qrange[1] - qrange[0]) / self._models_variances[0][0]))[0][0]
+    # -----------------------------------------------------------------------------
+    @property
+    def _models_max(self):
+        """
+        Returns the coordinates of the maximum of the probability density distribution.
 
-        # At least 100 samples, maximum 1E5
-        nsamples = 100 if nsamples < 100 else nsamples
-        nsamples = 100000 if nsamples > 1E5 else nsamples
+        Returns
+        -------
+        iterable
+            List of coordinates for maxima for each model.
 
-        # Create query range
-        qrange = np.linspace(start=qrange[0][0], stop=qrange[1][0], num=nsamples)
+        """
 
-        # Determine maximum and return
-        return [qrange[np.argmax(np.exp(g.score_samples(np.expand_dims(qrange, 1))))] for g in self.models]
+        return [gmm_max(gmm=gmm, sampling=100) for gmm in self.models]
+
+    # -----------------------------------------------------------------------------
+    @property
+    def _models_population_variance(self):
+        """
+        Determine the population variance of the probability density distributions for all unique models.
+
+        Returns
+        -------
+        iterable
+            List of population variances for all GMMs.
+
+        """
+
+        return [gmm_population_variance(gmm=gmm) for gmm in self.models]
+
+    # -----------------------------------------------------------------------------
+    def _models_confidence_interval(self, levels):
+        """
+        Calculates the confidence intervals for all models at specified confidence levels.
+
+        Parameters
+        ----------
+        levels : float, list
+            Confidence levels to evaluate. Either a single value for all models, or a list of levels for each model.
+
+        Returns
+        -------
+        iterable
+            List of confidence intervals for given confidence levels.
+
+        """
+
+        # Convert to lists if parameters are given as single values
+        if isinstance(levels, float):
+            levels = [levels for _ in range(self._n_models)]
+        if isinstance(levels, list):
+            if len(levels) != self._n_models:
+                raise ValueError("Levels must be either specified by a single value or a list of values for each model")
+
+        return [gmm_confidence_interval(gmm=gmm, level=l) for gmm, l in zip(self.models, levels)]
 
     # ----------------------------------------------------------------------------- #
     #                               Extinction tools                                #
     # ----------------------------------------------------------------------------- #
 
     # -----------------------------------------------------------------------------
+    @property
     def _models_extinction(self):
         """
         Creates the extinction probability density distribution for each source.
@@ -206,70 +284,201 @@ class IntrinsicProbability(object):
         """
 
         # TODO: Time this function with larger databases
+        model_params = self._model_params
+        sources_mask = self._sources_mask
 
-        # Get model parameters only once
-        var = self._models_variances
-        means = self._models_means
-        weights = self._models_weights
-        precisions = self._models_precision_cholesky
-
-        # Loop over all sources and make individual Gaussian Mixture models
-        models_extinction = []
-        for idx, zp, m in zip(self.sources_index, self.sources_zp, self._sources_mask):
-            if m:
-
-                # Create GMM
-                gmm = GaussianMixture(self._model_params)
-
-                # Create fake fitted GMM model by manually adding parameters
-                gmm.means_ = zp - means[idx]
-                gmm.covariances_ = var[idx] / self._models_norm[idx]
-                gmm.weights_ = weights[idx]
-                gmm.precisions_cholesky_ = precisions[idx]
-
-                # Save
-                models_extinction.append(gmm)
-
-            else:
-                models_extinction.append(None)
-
-        # Return
-        return models_extinction
+        return [gmm_scale(gmm=self.models[midx], shift=self.zp[sidx], params=model_params) if mask else None
+                for sidx, midx, mask in zip(range(self.features.n_data), self.index, sources_mask)]
 
     # -----------------------------------------------------------------------------
-    def get_extinction(self, metric="mean"):
+    def _model_extinction_source(self, idx):
         """
-        Calculates extinction from the probability density distributions based on a given metric.
+        Creates a Gaussiam Mixture Model probability density distribution describing the extinction for a specific
+        source (as given by the index).
 
         Parameters
         ----------
-        metric : str, optional
-            Metric to use to evaluate the intrinsic feature. Possible are 'mean' (default) and 'max'.
+        idx : int
+            Index of source.
 
         Returns
         -------
-        np.ndarray
-            Array of extinction values for each source.
+        GaussianMixture
+            GMM instance describing the extinction for the given source.
 
         """
 
-        # TODO: How to get variance?
+        midx = self.index[idx]
+        return gmm_scale(gmm=self.models[midx], shift=self.zp[idx], scale=None, reverse=False)
 
-        if metric.lower() == "mean":
-            attr = "_models_intrinsic_mean"
+    # -----------------------------------------------------------------------------
+    def get_discrete_extinction(self, metric="expected value"):
+        # TODO: Add docstring
+
+        if "expect" in metric.lower():
+            attr = "_models_expected_value"
         elif metric.lower() == "max":
             attr = "_models_intrinsic_max"
         else:
             raise ValueError("Metric '{0}' not supported".format(metric))
 
+        idx = self.index[self._sources_mask]
+
         # Determine extinction based on chosen metric
-        ext = np.full_like(self.sources_zp, fill_value=np.nan, dtype=np.float32)
-        ext[self._sources_mask] = ((self.sources_zp[self._sources_mask] -
-                                    np.array(getattr(self, attr))[self.sources_index[self._sources_mask]]) /
-                                   self._models_norm[self.sources_index[self._sources_mask]])
+        ext = np.full_like(self.zp, fill_value=np.nan, dtype=np.float32)
+        ext[self._sources_mask] = np.array(getattr(self, attr))[idx] + self.zp[self._sources_mask]
+
+        # Get population variance of models
+        var = np.full_like(self.zp, fill_value=np.nan, dtype=np.float32)
+        var[self._sources_mask] = np.array(self._models_population_variance)[idx]
 
         # Return
-        return ext
+        return ext, var
+
+    # ----------------------------------------------------------------------------- #
+    #                               Plotting methods                                #
+    # ----------------------------------------------------------------------------- #
+
+    # -----------------------------------------------------------------------------
+    def _plot_models(self, path=None, ax_size=5, confidence_level=0.9):
+        """
+        Creates a plot of all unique Gaussian Mixture Models.
+
+        Parameters
+        ----------
+        path : str, optional
+            Figure file path.
+        ax_size : int, optional
+            Size of axis for a single model.
+        confidence_level : float, optional
+            Confidence interval level to be plotted. Default is 0.9. If no interval should be plotted, set to None.
+
+        """
+
+        # Import
+        import matplotlib.pyplot as plt
+        from matplotlib.pyplot import GridSpec
+        from matplotlib.ticker import AutoMinorLocator
+
+        # Determine layout
+        nrows = int(np.floor(np.sqrt(self._n_models)))
+        ncols = int(np.ceil(self._n_models / nrows))
+
+        # Generate plot grid
+        plt.figure(figsize=[ax_size * ncols, ax_size * nrows])
+        grid = GridSpec(ncols=ncols, nrows=nrows, bottom=0.05, top=0.95, left=0.05, right=0.95,
+                        hspace=0.15, wspace=0.15)
+
+        for idx in range(self._n_models):
+
+            # Grab GMM and scale
+            gmm = self.models[idx]
+
+            # Adjust so that distribution is centered on 0 fpr plots
+            # gmm.means_ -= np.mean(gmm.means_)
+
+            # Add axis
+            ax = plt.subplot(grid[idx])
+
+            # Get plot range and values
+            x, y = gmm_sample_xy(gmm=gmm, kappa=3, sampling=10, nmin=100, nmax=5000)
+
+            # Draw
+            ax.plot(x, y, color="black", lw=2)
+
+            # Add confidence interval if requested
+            if confidence_level is not None:
+
+                # Check input
+                if not isinstance(confidence_level, float):
+                    raise ValueError("Specified confidence level must be >0 and <1!")
+
+                # Draw upper and lower limit
+                for l in gmm_confidence_interval(gmm=gmm, level=confidence_level):
+                    ax.axvline(l, ymin=0, ymax=2, color="black", linestyle="dotted", lw=2, alpha=0.7)
+
+            # Add expected value and max
+            ax.axvline(gmm_max(gmm=gmm), color="crimson", alpha=0.8, linestyle="dashed", lw=2)
+            ax.axvline(gmm_expected_value(gmm=gmm), color="#2A52BE", alpha=0.8, linestyle="dashed", lw=2)
+
+            # Set symmetric range
+            dummy = np.max(np.abs(ax.get_xlim()))
+            ax.set_xlim(-dummy, dummy)
+
+            # Annotate
+            if idx % ncols == 0:
+                ax.set_ylabel("Probability Density")
+            if idx >= self._n_models - ncols:
+                ax.set_xlabel("Extinction + ZP")
+
+            # Add number of sources for each model
+            ax.annotate("N = " + str(self._n_sources_models[idx]), xy=[0.5, 1.02], xycoords="axes fraction",
+                        va="bottom", ha="center")
+
+            # Ticks
+            ax.xaxis.set_minor_locator(AutoMinorLocator())
+            ax.yaxis.set_minor_locator(AutoMinorLocator())
+
+        # Save or show figure
+        finalize_plot(path=path)
+
+    # -----------------------------------------------------------------------------
+    def _plot_model_extinction_source(self, idx, path=None, ax_size=8, confidence_level=None, **kwargs):
+        """
+        Plot the full extinction model for a specific source.
+
+        Parameters
+        ----------
+        idx : int
+            Index of source to be plotted.
+        path : str, optional
+            Figure file path
+        ax_size : int
+            Size of figure axis
+        confidence_level : float, optional
+            If set, also plot confidence interval at given level.
+        kwargs
+            Any additional keyword arguments for the plot function which draws the distribution (e.g. color, lw, etc.).
+
+        """
+
+        # Import
+        import matplotlib.pyplot as plt
+        from matplotlib.ticker import AutoMinorLocator
+
+        # Fetch extinction model for source
+        egmm = self._model_extinction_source(idx=idx)
+
+        # Get samples
+        x, y = gmm_sample_xy(gmm=egmm, kappa=3, sampling=50)
+
+        # Make figure
+        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=[ax_size, 0.7 * ax_size])
+
+        # Draw
+        ax.plot(x, y, **kwargs)
+
+        # Add confidence interval if requested
+        if confidence_level is not None:
+
+            # Check input
+            if not isinstance(confidence_level, float):
+                raise ValueError("Specified confidence level must be >0 and <1!")
+
+            # Draw upper and lower limit
+            for l in gmm_confidence_interval(gmm=egmm, level=confidence_level):
+                ax.axvline(l, ymin=0, ymax=2, color="black", linestyle="dashed", lw=2, alpha=0.7)
+
+        # Annotate
+        ax.set_xlabel("Extinction")
+        ax.set_ylabel("Probability Density")
+
+        # Ticks
+        ax.xaxis.set_minor_locator(AutoMinorLocator())
+        ax.yaxis.set_minor_locator(AutoMinorLocator())
+
+        # Save or show figure
+        finalize_plot(path=path)
 
     # ----------------------------------------------------------------------------- #
     #                                     Misc                                      #
@@ -735,7 +944,7 @@ class ExtinctionMap:
 
         # Import
         import matplotlib
-        from matplotlib import pyplot as plt
+        import matplotlib.pyplot as plt
 
         # If the density should be plotted, set to 4
         nfig = 3

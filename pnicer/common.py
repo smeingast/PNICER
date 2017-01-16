@@ -5,7 +5,7 @@ import numpy as np
 from astropy import wcs
 from itertools import combinations
 from pnicer.utils import caxes, mp_kde, data2grid, caxes_delete_ticklabels, round_partial, \
-    centroid_sphere, distance_sky, mp_gmm, flatten_lol, finalize_plot
+    centroid_sphere, distance_sky, mp_gmm, flatten_lol, finalize_plot, gmm_scale, gmm_expected_value
 
 # noinspection PyPackageRequirements
 from sklearn.neighbors import NearestNeighbors
@@ -830,6 +830,7 @@ class Features:
         gmm = np.array([gmm.fit(X=np.expand_dims(control.features[0][control._strict_mask], 1))])
 
         # Determine variance and index of GMMs (all 0 in the univariate case)
+        # TODO: Replace with population variance
         var = np.full(self._n_data_strict_mask, fill_value=float(np.var(control.features[0])), dtype=np.float32)
         # idx = np.full(self._n_data_strict_mask, fill_value=0, dtype=np.uint32)
 
@@ -955,6 +956,13 @@ class Features:
         gmm_unique = np.hstack(gmm_combinations)
         models_norm = np.hstack(models_norm)
 
+        # Calculate shift for models so they align with 0 at their expected value
+        models_shift = [gmm_expected_value(gmm=gmm) for gmm in gmm_unique]
+
+        # Scale models to extinction space
+        gmm_unique = [gmm_scale(gmm=gmm, shift=-shift, scale=scale, reverse=True)
+                      for gmm, shift, scale in zip(gmm_unique, models_shift, models_norm)]
+
         # Check if there are any good models
         if len(gmm_unique) == 0:
             raise ValueError("Gaussian mixture models did not converge")
@@ -962,9 +970,22 @@ class Features:
         # Choose minimum variance GMM across all combinations
         minidx = np.argmin(np.array(var_combinations), axis=0)
 
-        # Select model index and zero point for each source
+        # Select model index
         sources_index = np.array(uidx_combinations)[minidx, np.arange(self.n_data)]
-        sources_zp = np.array(zp_combinations)[minidx, np.arange(self.n_data)]
+
+        # Create mask for bad sources
+        sources_mask = sources_index < self.n_data
+
+        # Fetch norm for each source
+        sources_norm = np.full(self.n_data, fill_value=1, dtype=float)
+        sources_norm[sources_mask] = models_norm[sources_index[sources_mask]]
+
+        # Fetch ZP shift for each source
+        sources_shift = np.full(self.n_data, fill_value=0, dtype=float)
+        sources_shift[sources_mask] = np.array(models_shift)[sources_index[sources_mask]]
+
+        # Calculate zero point for each source
+        sources_zp = (np.array(zp_combinations)[minidx, np.arange(self.n_data)] - sources_shift) / sources_norm
         # TODO: Check what is happening to all-bad slices
 
         # Chech if all bad slices are also bad in the index
@@ -977,8 +998,7 @@ class Features:
 
         # Return intrinsic class
         from pnicer.intrinsic import IntrinsicProbability
-        return IntrinsicProbability(features=self, models=gmm_unique, models_norm=models_norm,
-                                    sources_index=sources_index, sources_zp=sources_zp)
+        return IntrinsicProbability(features=self, models=gmm_unique, index=sources_index, zp=sources_zp)
 
     # -----------------------------------------------------------------------------
     def features_intrinsic(self, extinction):
@@ -1269,6 +1289,7 @@ class ExtinctionVector:
         np.ndarray
 
         """
+        # TODO: Rename to extvec?
 
         return self._rotmatrix.dot(self.extvec)
 
@@ -1286,6 +1307,6 @@ class ExtinctionVector:
 
         # For one-dimensional data there is no rotation matrix
         if self.n_dimensions == 1:
-            return 1.
+            return self.extvec[0]
         else:
             return self._extinction_rot[0]
