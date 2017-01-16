@@ -792,8 +792,8 @@ def gmm_sample_xy(gmm, kappa=3, sampling=10, nmin=100, nmax=100000):
     yrange = np.exp(gmm.score_samples(np.expand_dims(xrange, 1)))
 
     # Step
-    dx = np.ediff1d(xrange)[0]
-    return xrange, yrange, dx
+    # dx = np.ediff1d(xrange)[0]
+    return xrange, yrange
 
 
 # -----------------------------------------------------------------------------
@@ -811,7 +811,7 @@ def gmm_expected_value(gmm):
 
 
 # -----------------------------------------------------------------------------
-def _gmm_confidence_interval(gmm, level=0.95):
+def gmm_confidence_interval(gmm, level=0.95):
     """
 
     Parameters
