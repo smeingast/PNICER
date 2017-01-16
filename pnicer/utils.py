@@ -834,35 +834,80 @@ def gmm_sample_xy(gmm, kappa=3, sampling=10, nmin=100, nmax=100000):
 
 
 # -----------------------------------------------------------------------------
-def gmm_max(gmm):
-    # TODO: Add docstring
-    x, y = gmm_sample_xy(gmm=gmm, kappa=1, sampling=50)
+def gmm_max(gmm, sampling=50):
+    """
+    Returns the coordinates of the maximum of the probability density distribution defined by the GMM.
+
+    Parameters
+    ----------
+    gmm : GaussianMixture
+        Input GMM for which the maximum should be determined.
+    sampling : int, optional
+        Sampling factor for GMM. The larger, the better the maximum will be determined. Default is 50.
+
+    Returns
+    -------
+    iterable
+        Maximum coordinate.
+
+    """
+
+    # Draw samples
+    x, y = gmm_sample_xy(gmm=gmm, kappa=1, sampling=sampling)
+
+    # Return maximum
     return x[np.argmax(y)]
 
 
 # -----------------------------------------------------------------------------
-def gmm_expected_value(gmm):
-    # TODO: Add docstring (same as mean)
-    xrange, yrange = gmm_sample_xy(gmm=gmm, kappa=10, sampling=50)
+def gmm_expected_value(gmm, sampling=50):
+    """
+    Returns the coordinates of the expected value of the probability density distribution defined by the GMM.
+
+    Parameters
+    ----------
+    gmm : GaussianMixture
+        Input GMM for which the expected value should be determined.
+    sampling : int, optional
+        Sampling factor for GMM. The larger, the better the expected value will be determined. Default is 50.
+
+    Returns
+    -------
+    iterable
+        Expected value coordinate.
+
+    """
+
+    # Draw samples
+    xrange, yrange = gmm_sample_xy(gmm=gmm, kappa=10, sampling=sampling)
+
+    # Return expected value
     return np.trapz(xrange * yrange, xrange)
 
 
 # -----------------------------------------------------------------------------
-def gmm_confidence_interval(gmm, level=0.95):
+def gmm_confidence_interval(gmm, level=0.9, sampling=50):
     """
+    Returns the confidence interval for a given gaussian mixture model and for a given confidence level.
 
     Parameters
     ----------
-    gmm
-    level
+    gmm : GaussianMixture
+        Input GMM for which the interval should be determined
+    level : float, optional
+        Confidence level (between 0 and 1). Default is 90%
+    sampling : int
+        Sampling factor for GMM. The larger, the better the interval will be determined. Default is 50.
 
     Returns
     -------
     tuple
+        Confidence interval (min, max)
 
     """
-    # TODO: Modify docstring
-    xrange, yrange = gmm_sample_xy(gmm=gmm, kappa=10, sampling=50)
+
+    # Draw samples
+    xrange, yrange = gmm_sample_xy(gmm=gmm, kappa=10, sampling=sampling)
 
     # Cumulative integral
     cumint = cumtrapz(y=yrange, x=xrange, initial=0)
@@ -873,7 +918,20 @@ def gmm_confidence_interval(gmm, level=0.95):
 
 # -----------------------------------------------------------------------------
 def gmm_population_variance(gmm):
-    # TODO: Add docstring
+    """
+    Determine the population variance of the probability density distribution given by a GMM.
+
+    Parameters
+    ----------
+    gmm : GaussianMixture
+        Input Gaussian Mixture Model.
+
+    Returns
+    -------
+    float
+        Population variance for GMM.
+
+    """
 
     # Get expected value
     ev = gmm_expected_value(gmm=gmm)
@@ -883,12 +941,6 @@ def gmm_population_variance(gmm):
 
     # Return population variance
     return np.trapz(np.power(xrange, 2) * yrange, xrange) - ev**2
-
-
-# -----------------------------------------------------------------------------
-def models_population_variance(self):
-    # TODO: Add docstring
-    return [self._gmm_population_variance(gmm=gmm) for gmm in self.models]
 
 
 # -----------------------------------------------------------------------------
