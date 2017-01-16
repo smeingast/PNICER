@@ -822,6 +822,8 @@ class Features:
 
     # -----------------------------------------------------------------------------
     def _pnicer_univariate(self, control, **kwargs):
+        # TODO: Add docstring
+        # TODO: Require minimum number of sources
 
         # Define and fit Gaussian Mixture Model
         gmm = GaussianMixture(**self._set_defaults_gmm(**kwargs))
@@ -844,6 +846,7 @@ class Features:
 
     # -----------------------------------------------------------------------------
     def _pnicer_multivariate(self, control, **kwargs):
+        # TODO: Add docstring
 
         # Rotate the data spaces
         science_rot, control_rot = self._rotate(), control._rotate()
@@ -873,8 +876,8 @@ class Features:
         # TODO: Do I have to add a strict mask here?
         vectors_data = [control_rot.features[0][idx == i].reshape(-1, 1) for i in range(grid_data.shape[-1])]
 
-        # Each control field vector needs to contain at least 10 sources
-        vectors_data = [np.nan if len(v) < 10 else v for v in vectors_data]
+        # Each control field vector needs to contain at least 20 sources
+        vectors_data = [np.nan if len(v) < 20 else v for v in vectors_data]
 
         # Determine variance for each vector
         vectors_var = [np.nanvar(v) if np.sum(np.isfinite(v)) > 0 else np.nan for v in vectors_data]
