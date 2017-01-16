@@ -798,14 +798,14 @@ def gmm_sample_xy(gmm, kappa=3, sampling=10, nmin=100, nmax=100000):
 # -----------------------------------------------------------------------------
 def gmm_max(gmm):
     # TODO: Add docstring
-    xrange, _, _ = gmm_sample_xy(gmm=gmm, kappa=1, sampling=50)
-    return xrange[np.argmax(np.exp(gmm.score_samples(np.expand_dims(xrange, 1))))]
+    x, y = gmm_sample_xy(gmm=gmm, kappa=1, sampling=50)
+    return x[np.argmax(y)]
 
 
 # -----------------------------------------------------------------------------
 def gmm_expected_value(gmm):
-    # TODO: Add docstrin (same as mean)
-    xrange, yrange, _ = gmm_sample_xy(gmm=gmm, kappa=10, sampling=50)
+    # TODO: Add docstring (same as mean)
+    xrange, yrange = gmm_sample_xy(gmm=gmm, kappa=10, sampling=50)
     return np.trapz(xrange * yrange, xrange)
 
 
