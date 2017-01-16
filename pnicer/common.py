@@ -4,8 +4,12 @@ import numpy as np
 
 from astropy import wcs
 from itertools import combinations
-from pnicer.utils import caxes, mp_kde, data2grid, caxes_delete_ticklabels, round_partial, \
-    centroid_sphere, distance_sky, mp_gmm, flatten_lol, finalize_plot, gmm_scale, gmm_expected_value
+from pnicer.utils.kde import mp_kde
+from pnicer.utils.wcs import data2grid
+from pnicer.utils.auxiliary import flatten_lol
+from pnicer.utils.gmm import mp_gmm, gmm_scale, gmm_expected_value
+from pnicer.utils.plots import caxes, caxes_delete_ticklabels, finalize_plot
+from pnicer.utils.algebra import round_partial, centroid_sphere, distance_sky
 
 # noinspection PyPackageRequirements
 from sklearn.neighbors import NearestNeighbors

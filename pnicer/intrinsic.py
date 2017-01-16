@@ -13,8 +13,10 @@ from multiprocessing.pool import Pool
 
 from pnicer.common import Coordinates
 from pnicer.user import Magnitudes, Colors, ApparentMagnitudes, ApparentColors
-from pnicer.utils import distance_sky, std2fwhm, centroid_sphere, finalize_plot, gmm_sample_xy, gmm_expected_value, \
-    gmm_max, gmm_confidence_interval, gmm_population_variance, gmm_scale
+from pnicer.utils.gmm import gmm_scale, gmm_expected_value, gmm_sample_xy, gmm_max, gmm_confidence_interval, \
+    gmm_population_variance
+from pnicer.utils.plots import finalize_plot
+from pnicer.utils.algebra import centroid_sphere, distance_sky, std2fwhm
 
 
 # -----------------------------------------------------------------------------

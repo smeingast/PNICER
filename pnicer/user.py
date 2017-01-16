@@ -3,7 +3,7 @@
 import numpy as np
 
 from pnicer.common import Features
-from pnicer.utils import get_sample_covar, get_color_covar
+from pnicer.utils.algebra import get_sample_covar, get_color_covar
 
 
 # ----------------------------------------------------------------------------- #
