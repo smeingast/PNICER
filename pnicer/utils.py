@@ -8,6 +8,7 @@ import multiprocessing
 
 from astropy import wcs
 from astropy.io import fits
+from scipy.integrate import cumtrapz
 from multiprocessing.pool import Pool
 from itertools import combinations, repeat
 # noinspection PyPackageRequirements
@@ -727,3 +728,163 @@ def finalize_plot(path=None):
     else:
         plt.savefig(path, bbox_inches='tight')
     plt.close()
+
+
+# -----------------------------------------------------------------------------
+def gmm_scale_model(gmm, scale, params=None):
+    # TODO: Add docstring
+
+    # Fetch parameters if not supplied
+    if params is None:
+        params = gmm.get_params()
+
+    # Instantiate new GMM
+    gmm_new = GaussianMixture(params)
+
+    # Create scaled fitted GMM model
+    gmm_new.weights_ = gmm.weights_
+    gmm_new.means_ = gmm.means_ / scale
+    # gmm_new.means_ = (zp - gmm.means_) / scale
+    # TODO: Zero-point must be from rotated data space. Check!
+    gmm_new.covariances_ = gmm.covariances_ / scale ** 2
+    gmm_new.precisions_ = np.linalg.inv(gmm_new.covariances_)
+    gmm_new.precisions_cholesky_ = np.linalg.cholesky(gmm_new.precisions_)
+
+    # Return scaled GMM
+    return gmm_new
+
+
+# -----------------------------------------------------------------------------
+def gmm_sample_xy(gmm, kappa=3, sampling=10, nmin=100, nmax=100000):
+    """
+
+    Parameters
+    ----------
+    gmm
+    kappa
+    sampling
+    nmin
+    nmax
+
+    Returns
+    -------
+    ndarray, ndarray, float
+
+    """
+    # TODO: Add docstring
+
+    # Get GMM attributes
+    s = np.sqrt(gmm.covariances_)
+    m = gmm.means_
+
+    # Determine min and max of range
+    qmin, qmax = (float(np.min(m) - kappa * np.max(s)), float(np.max(m) + kappa * np.max(s)))
+
+    # Determine number of samples (number of samples from smallest standard deviation with 'sampling' samples)
+    nsamples = (qmax - qmin) / (np.min(s) / sampling)
+
+    # Set min/max numer of samples
+    nsamples = 100 if nsamples < nmin else nsamples
+    nsamples = 100000 if nsamples > nmax else nsamples
+
+    # Get query range
+    xrange = np.linspace(start=qmin, stop=qmax, num=nsamples)
+    yrange = np.exp(gmm.score_samples(np.expand_dims(xrange, 1)))
+
+    # Step
+    dx = np.ediff1d(xrange)[0]
+    return xrange, yrange, dx
+
+
+# -----------------------------------------------------------------------------
+def gmm_max(gmm):
+    # TODO: Add docstring
+    xrange, _, _ = gmm_sample_xy(gmm=gmm, kappa=1, sampling=50)
+    return xrange[np.argmax(np.exp(gmm.score_samples(np.expand_dims(xrange, 1))))]
+
+
+# -----------------------------------------------------------------------------
+def gmm_expected_value(gmm):
+    # TODO: Add docstrin (same as mean)
+    xrange, yrange, _ = gmm_sample_xy(gmm=gmm, kappa=10, sampling=50)
+    return np.trapz(xrange * yrange, xrange)
+
+
+# -----------------------------------------------------------------------------
+def _gmm_confidence_interval(gmm, level=0.95):
+    """
+
+    Parameters
+    ----------
+    gmm
+    level
+
+    Returns
+    -------
+    tuple
+
+    """
+    # TODO: Modify docstring
+    xrange, yrange, _ = gmm_sample_xy(gmm=gmm, kappa=10, sampling=50)
+
+    # Cumulative integral
+    cumint = cumtrapz(y=yrange, x=xrange, initial=0)
+
+    # Return interval
+    return tuple(np.interp([(1 - level) / 2, level + (1 - level) / 2], cumint, xrange))
+
+
+# -----------------------------------------------------------------------------
+def gmm_population_variance(gmm):
+
+    # Get expected value
+    ev = gmm_expected_value(gmm=gmm)
+
+    # Get query range
+    xrange, yrange, _ = gmm_sample_xy(gmm=gmm, kappa=10, sampling=50)
+
+    # Return population variance
+    return np.trapz(np.power(xrange, 2) * yrange, xrange) - ev**2
+
+
+# -----------------------------------------------------------------------------
+def models_population_variance(self):
+    # Add docstring
+    return [self._gmm_population_variance(gmm=gmm) for gmm in self.models]
+
+
+# -----------------------------------------------------------------------------
+def gmm_confidence_interval_value(gmm, value, level=0.95):
+    # TODO: Check if this works as intended
+
+    # Get query ranges
+    gmm_x, gmm_y, dx = gmm_sample_xy(gmm=gmm, kappa=5, sampling=100, nmin=1000, nmax=100000)
+
+    # Find position of 'value'
+    value_idx = np.argmin(np.abs(gmm_x - value))
+
+    # Integrate as long as necessary
+    for i in range(len(gmm_x)):
+
+        # Current index on both sides
+        lidx = value_idx - i if value_idx - i >= 0 else 0
+        ridx = value_idx + i if value_idx + i < len(gmm_x) else len(gmm_x) - 1
+
+        # Need to separate left and right integral due to asymmetry
+        lint = np.trapz(gmm_y[lidx:value_idx], dx=dx)
+        rint = np.trapz(gmm_y[value_idx:ridx], dx=dx)
+
+        # Sum of both sides
+        # integral = np.trapz(gmm_y[lidx:ridx], dx=dx)
+        integral = lint + rint
+
+        # Break if confidence level reached
+        if integral > level:
+            break
+
+    # Choose final index for confidence interval
+    # noinspection PyUnboundLocalVariable
+    ci_half_size = value - gmm_x[lidx] if value_idx - lidx > ridx - value_idx else gmm_x[ridx] - value
+
+    # Return interval
+    return value - ci_half_size, value + ci_half_size
