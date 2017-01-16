@@ -836,6 +836,7 @@ def _gmm_confidence_interval(gmm, level=0.95):
 
 # -----------------------------------------------------------------------------
 def gmm_population_variance(gmm):
+    # TODO: Add docstring
 
     # Get expected value
     ev = gmm_expected_value(gmm=gmm)
@@ -849,7 +850,7 @@ def gmm_population_variance(gmm):
 
 # -----------------------------------------------------------------------------
 def models_population_variance(self):
-    # Add docstring
+    # TODO: Add docstring
     return [self._gmm_population_variance(gmm=gmm) for gmm in self.models]
 
 
