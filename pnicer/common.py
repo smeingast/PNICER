@@ -7,7 +7,7 @@ from itertools import combinations
 from pnicer.utils.kde import mp_kde
 from pnicer.utils.wcs import data2grid
 from pnicer.utils.auxiliary import flatten_lol
-from pnicer.utils.gmm import mp_gmm, gmm_scale, gmm_expected_value
+from pnicer.utils.gmm import mp_gmm, gmm_scale, gmm_expected_value, gmm_population_variance
 from pnicer.utils.plots import caxes, caxes_delete_ticklabels, finalize_plot
 from pnicer.utils.algebra import round_partial, centroid_sphere, distance_sky
 
@@ -831,23 +831,31 @@ class Features:
 
         # Define and fit Gaussian Mixture Model
         gmm = GaussianMixture(**self._set_defaults_gmm(**kwargs))
-        gmm = np.array([gmm.fit(X=np.expand_dims(control.features[0][control._strict_mask], 1))])
+        gmm = gmm.fit(X=np.expand_dims(control.features[0][control._strict_mask], 1))
 
-        # Determine variance and index of GMMs (all 0 in the univariate case)
-        # TODO: Replace with population variance
-        var = np.full(self._n_data_strict_mask, fill_value=float(np.var(control.features[0])), dtype=np.float32)
-        # idx = np.full(self._n_data_strict_mask, fill_value=0, dtype=np.uint32)
+        # Scaling factor to extinction
+        scale = self.extvec._extinction_norm
+
+        # Shift factor to center on expected value
+        shift = -gmm_expected_value(gmm=gmm)
+
+        # Scale model to extinction
+        gmm = gmm_scale(gmm=gmm, shift=shift, scale=scale, reverse=True)
+
+        # Determine population variance in units of extinction
+        var = gmm_population_variance(gmm=gmm)
 
         idx_all = np.full(self.n_data, fill_value=self.n_data + 1, dtype=np.uint32)
-        var_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
-        zp_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
-
         idx_all[self._strict_mask] = 0
+
+        var_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
         var_all[self._strict_mask] = var
-        zp_all[self._strict_mask] = self.features[0][self._strict_mask]
+
+        zp_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
+        zp_all[self._strict_mask] = (self.features[0][self._strict_mask] + shift) / scale
 
         # Return
-        return gmm, var_all, idx_all, zp_all
+        return [gmm], var_all, idx_all, zp_all
 
     # -----------------------------------------------------------------------------
     def _pnicer_multivariate(self, control, **kwargs):
@@ -860,7 +868,8 @@ class Features:
         bandwidth = np.round(np.mean(np.nanmean(self.features_err, axis=1)), 2)
 
         # Determine bin widths for grid according to bandwidth and sampling
-        sampling = 2
+        # TODO: Optimize sampling or make it user choice
+        sampling = 4
         bin_grid = np.float(bandwidth / sampling)
 
         # Now we build a grid from the rotated data for all components but the first
@@ -884,16 +893,25 @@ class Features:
         # Each control field vector needs to contain at least 20 sources
         vectors_data = [np.nan if len(v) < 20 else v for v in vectors_data]
 
-        # Determine variance for each vector
-        vectors_var = [np.nanvar(v) if np.sum(np.isfinite(v)) > 0 else np.nan for v in vectors_data]
-
         # Fit GMM for each vector
-        params = self._set_defaults_gmm(**kwargs)
-        vectors_gmm = mp_gmm(data=vectors_data, **params)
+        vectors_gmm = mp_gmm(data=vectors_data, **self._set_defaults_gmm(**kwargs))
+
+        # Determine scaling and shifting factor for models
+        scale = self.extvec._extinction_norm
+        vectors_shift = [-gmm_expected_value(gmm=gmm) if isinstance(gmm, GaussianMixture) else None
+                         for gmm in vectors_gmm]
+
+        # Scale GMMs to extinction
+        vectors_gmm = [gmm_scale(gmm=gmm, scale=scale, shift=shift) if isinstance(gmm, GaussianMixture) else None
+                       for gmm, shift in zip(vectors_gmm, vectors_shift)]
+
+        # Determine variance for each vector
+        vectors_var = [gmm_population_variance(gmm=gmm) if gmm is not None else np.nan for gmm in vectors_gmm]
 
         # Get good models
         grid_good_idx = [i for i, j in enumerate(vectors_gmm) if isinstance(j, GaussianMixture)]
         vectors_gmm = [vectors_gmm[i] for i in grid_good_idx]
+        vectors_shift = [vectors_shift[i] for i in grid_good_idx]
 
         # Find the nearest neighbor for each science target in the cleaned grid
         nbrs = NearestNeighbors(n_neighbors=1, algorithm="ball_tree").fit(grid_data[:, grid_good_idx].T)
@@ -902,15 +920,17 @@ class Features:
         # Determine variance for each source
         var = np.array([vectors_var[idx] for idx in science_idx])
 
+        # Create and index, variance and zp arrays for all sources
         idx_all = np.full(self.n_data, fill_value=self.n_data + 1, dtype=np.uint32)
-        var_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
-        zp_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
-
         idx_all[self._strict_mask] = science_idx
-        var_all[self._strict_mask] = var
-        zp_all[self._strict_mask] = science_rot.features[0]
 
-        # Fit and return GMMs
+        var_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
+        var_all[self._strict_mask] = var
+
+        zp_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
+        zp_all[self._strict_mask] = (science_rot.features[0] + np.array(vectors_shift)[science_idx]) / scale
+
+        # Return
         return vectors_gmm, var_all, idx_all, zp_all
 
     # -----------------------------------------------------------------------------
@@ -927,8 +947,6 @@ class Features:
             List of combinations for the science data.
         combinations_control : iterable
             List of combinations for the control field data.
-        sampling : int
-            Sampling of grid relative to bandwidth of kernel.
 
         Returns
         -------
@@ -949,7 +967,6 @@ class Features:
 
             # Generate unique index for stacked GMM array
             uidx_combinations.append([j + len(flatten_lol(gmm_combinations)) for j in i])
-            models_norm.append([sc.extvec._extinction_norm for _ in range(len(g))])
 
             # Save results
             gmm_combinations.append(g)
@@ -958,18 +975,6 @@ class Features:
 
         # Stack unique GMMs and norms
         gmm_unique = np.hstack(gmm_combinations)
-        models_norm = np.hstack(models_norm)
-
-        # Calculate shift for models so they align with 0 at their expected value
-        models_shift = [gmm_expected_value(gmm=gmm) for gmm in gmm_unique]
-
-        # Scale models to extinction space
-        gmm_unique = [gmm_scale(gmm=gmm, shift=-shift, scale=scale, reverse=True)
-                      for gmm, shift, scale in zip(gmm_unique, models_shift, models_norm)]
-
-        # Check if there are any good models
-        if len(gmm_unique) == 0:
-            raise ValueError("Gaussian mixture models did not converge")
 
         # Choose minimum variance GMM across all combinations
         minidx = np.argmin(np.array(var_combinations), axis=0)
@@ -977,19 +982,8 @@ class Features:
         # Select model index
         sources_index = np.array(uidx_combinations)[minidx, np.arange(self.n_data)]
 
-        # Create mask for bad sources
-        sources_mask = sources_index < self.n_data
-
-        # Fetch norm for each source
-        sources_norm = np.full(self.n_data, fill_value=1, dtype=float)
-        sources_norm[sources_mask] = models_norm[sources_index[sources_mask]]
-
-        # Fetch ZP shift for each source
-        sources_shift = np.full(self.n_data, fill_value=0, dtype=float)
-        sources_shift[sources_mask] = np.array(models_shift)[sources_index[sources_mask]]
-
-        # Calculate zero point for each source
-        sources_zp = (np.array(zp_combinations)[minidx, np.arange(self.n_data)] - sources_shift) / sources_norm
+        # Get zero point for each source
+        sources_zp = np.array(zp_combinations)[minidx, np.arange(self.n_data)]
         # TODO: Check what is happening to all-bad slices
 
         # Chech if all bad slices are also bad in the index
