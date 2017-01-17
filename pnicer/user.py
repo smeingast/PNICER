@@ -115,7 +115,7 @@ class ApparentMagnitudes(Magnitudes):
         return self.mag2color()._all_combinations(idxstart=1)
 
     # -----------------------------------------------------------------------------
-    def pnicer(self, control, n_components=3, sampling=2, add_colors=False):
+    def pnicer(self, control, add_colors=False, **kwargs):
         """
         Main PNICER method for magnitudes. Includes options to use combinations for input features, or convert them
         to colors.
@@ -124,10 +124,6 @@ class ApparentMagnitudes(Magnitudes):
         ----------
         control
             Control field instance. Same class as self.
-        sampling : int, optional
-            Sampling of grid relative to bandwidth of kernel. Default is 2.
-        n_components : int, optional
-            Number of components for Gaussian mixture model. Default is 3.
         add_colors : bool, optional
             Whether to also include the colors generated from the given magnitudes.
 
@@ -155,8 +151,7 @@ class ApparentMagnitudes(Magnitudes):
             ccontrol = control._all_combinations(idxstart=2)
 
         # Call PNICER
-        return self._pnicer_combinations(control=control, n_components=n_components, sampling=sampling,
-                                         combinations_science=cscience, combinations_control=ccontrol)
+        return self._pnicer_combinations(combinations_science=cscience, combinations_control=ccontrol, **kwargs)
 
     # -----------------------------------------------------------------------------
     def nicer(self, control=None, color0=None, color0_err=None, min_features=None):
@@ -178,8 +173,8 @@ class ApparentMagnitudes(Magnitudes):
 
         Returns
         -------
-        pnicer.intrinsic.IntrinsicFeatures
-            Extinction instance with the calculated extinction and errors.
+        pnicer.extinction.DiscreteExtinction
+            DiscreteExtinction instance with the calculated extinction and errors.
 
         """
 
