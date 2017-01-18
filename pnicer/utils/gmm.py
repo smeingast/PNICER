@@ -309,15 +309,14 @@ def _mp_gmm(data, kwargs):
     try:
 
         # Fit model
-        # TODO: Force warm_start to be false?!?
         gmm = GaussianMixture(**kwargs).fit(X=data)
 
         # Check for convergence and return
         if gmm.converged_:
             return gmm
         else:
-            return np.nan
+            return None
 
     # On error also return NaN
     except ValueError:
-        return np.nan
+        return None
