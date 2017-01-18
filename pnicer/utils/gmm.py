@@ -61,7 +61,9 @@ def gmm_scale(gmm, shift=None, scale=None, reverse=False, params=None):
     if reverse:
         gmm_new.means_ *= -1
 
-    # TODO: Zero-point must be from rotated data space. Check!
+    # Add converged attribute if available
+    if gmm.converged_:
+        gmm_new.converged_ = gmm.converged_
 
     # Return scaled GMM
     return gmm_new
