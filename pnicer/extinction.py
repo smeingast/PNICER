@@ -342,7 +342,7 @@ class ContinuousExtinction:
     # ----------------------------------------------------------------------------- #
 
     # -----------------------------------------------------------------------------
-    def _plot_models(self, path=None, ax_size=5, confidence_level=0.9):
+    def _plot_models(self, path=None, ax_size=None, confidence_level=0.9):
         """
         Creates a plot of all unique Gaussian Mixture Models.
 
@@ -350,8 +350,8 @@ class ContinuousExtinction:
         ----------
         path : str, optional
             Figure file path.
-        ax_size : int, optional
-            Size of axis for a single model.
+        ax_size : list, optional
+            Size of axis for a single model (e.g. [5, 4]). Defaults to [4, 4].
         confidence_level : float, optional
             Confidence interval level to be plotted. Default is 0.9. If no interval should be plotted, set to None.
 
@@ -362,12 +362,16 @@ class ContinuousExtinction:
         from matplotlib.pyplot import GridSpec
         from matplotlib.ticker import AutoMinorLocator
 
+        # Set axis size
+        if ax_size is None:
+            ax_size = [4, 4]
+
         # Determine layout
         nrows = int(np.floor(np.sqrt(self._n_models)))
         ncols = int(np.ceil(self._n_models / nrows))
 
         # Generate plot grid
-        plt.figure(figsize=[ax_size * ncols, ax_size * nrows])
+        plt.figure(figsize=[ax_size[0] * ncols, ax_size[1] * nrows])
         grid = GridSpec(ncols=ncols, nrows=nrows, bottom=0.05, top=0.95, left=0.05, right=0.95,
                         hspace=0.15, wspace=0.15)
 
@@ -416,6 +420,10 @@ class ContinuousExtinction:
             # Add number of sources for each model
             ax.annotate("N = " + str(self._n_sources_models[idx]), xy=[0.5, 1.02], xycoords="axes fraction",
                         va="bottom", ha="center")
+
+            # Add number of components for each model
+            ax.annotate("NC = " + str(gmm.get_params()["n_components"]), xy=[0.03, 0.97], xycoords="axes fraction",
+                        va="top", ha="left")
 
             # Ticks
             ax.xaxis.set_minor_locator(AutoMinorLocator())
