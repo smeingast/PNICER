@@ -936,8 +936,8 @@ class Features:
     # -----------------------------------------------------------------------------
     def _pnicer_combinations(self, combinations_science, combinations_control, **kwargs):
         """
-        PNICER base implementation for combinations. Basically calls the pnicer_single implementation for all
-        combinations. The output extinction is then the one with the smallest error from all combinations.
+        PNICER base implementation for combinations. Calls the PNICER implementation for all combinations. The output
+        extinction is then the one with the smallest variance from all combinations.
 
         Parameters
         ----------
@@ -950,10 +950,9 @@ class Features:
 
         Returns
         -------
-        IntrinsicProbability
+        ContinuousExtinction
 
         """
-        # TODO: Update docstring
 
         # Loop over all combinations and run PNICER
         gmm_combinations, var_combinations, uidx_combinations, zp_combinations, models_norm = [], [], [], [], []
