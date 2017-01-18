@@ -115,7 +115,7 @@ class ApparentMagnitudes(Magnitudes):
         return self.mag2color()._all_combinations(idxstart=1)
 
     # -----------------------------------------------------------------------------
-    def pnicer(self, control, add_colors=False, **kwargs):
+    def pnicer(self, control, max_components=3, add_colors=False, **kwargs):
         """
         Main PNICER method for magnitudes. Includes options to use combinations for input features, or convert them
         to colors.
@@ -124,6 +124,8 @@ class ApparentMagnitudes(Magnitudes):
         ----------
         control
             Control field instance. Same class as self.
+        max_components : int, optional
+            Maximum number of components to fit.
         add_colors : bool, optional
             Whether to also include the colors generated from the given magnitudes.
 
@@ -151,7 +153,8 @@ class ApparentMagnitudes(Magnitudes):
             ccontrol = control._all_combinations(idxstart=2)
 
         # Call PNICER
-        return self._pnicer_combinations(combinations_science=cscience, combinations_control=ccontrol, **kwargs)
+        return self._pnicer_combinations(combinations_science=cscience, combinations_control=ccontrol,
+                                         max_components=max_components, **kwargs)
 
     # -----------------------------------------------------------------------------
     def nicer(self, control=None, color0=None, color0_err=None, min_features=None):
@@ -608,7 +611,7 @@ class ApparentColors(Colors):
                                              names=names)
 
     # -----------------------------------------------------------------------------
-    def pnicer(self, control, **kwargs):
+    def pnicer(self, control, max_components=3, **kwargs):
         """
         PNICER call method for colors.
 
@@ -616,11 +619,14 @@ class ApparentColors(Colors):
         ----------
         control
             Control field instance.
+        max_components : int, optional
+            Maximum number of components to fit.
         kwargs
-            GMM setup ('n_components', 'covariance_type', or 'tol')
+            GMM setup ('covariance_type', or 'tol').
 
         """
 
         # TODO: Update method!
         return self._pnicer_combinations(combinations_science=self._all_combinations(idxstart=1),
-                                         combinations_control=control._all_combinations(idxstart=1), **kwargs)
+                                         combinations_control=control._all_combinations(idxstart=1),
+                                         max_components=max_components, **kwargs)

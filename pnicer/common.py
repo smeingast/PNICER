@@ -7,7 +7,7 @@ from itertools import combinations
 from pnicer.utils.kde import mp_kde
 from pnicer.utils.wcs import data2grid
 from pnicer.utils.auxiliary import flatten_lol
-from pnicer.utils.gmm import mp_gmm, gmm_scale, gmm_expected_value, gmm_population_variance
+from pnicer.utils.gmm import mp_gmm, gmm_scale, gmm_expected_value, gmm_population_variance, gmm_components
 from pnicer.utils.plots import caxes, caxes_delete_ticklabels, finalize_plot
 from pnicer.utils.algebra import round_partial, centroid_sphere, distance_sky
 
@@ -812,8 +812,11 @@ class Features:
 
         """
 
-        if "n_components" not in kwargs:
-            kwargs["n_components"] = 3
+        # Remove n_components if given
+        if "n_components" in kwargs.keys():
+            kwargs.pop("n_components", None)
+
+        # Set defaults
         if "covariance_type" not in kwargs:
             kwargs["covariance_type"] = "full"
         if "tol" not in kwargs:
@@ -827,12 +830,15 @@ class Features:
         return kwargs
 
     # -----------------------------------------------------------------------------
-    def _pnicer_univariate(self, control, **kwargs):
+    def _pnicer_univariate(self, control, max_components, **kwargs):
         # TODO: Add docstring
         # TODO: Require minimum number of sources
 
+        # Set number of components
+        n_components = gmm_components(data=control.features[0][control._strict_mask], max_components=max_components)
+
         # Define and fit Gaussian Mixture Model
-        gmm = GaussianMixture(**self._set_defaults_gmm(**kwargs))
+        gmm = GaussianMixture(n_components=n_components, **self._set_defaults_gmm(**kwargs))
         gmm = gmm.fit(X=np.expand_dims(control.features[0][control._strict_mask], 1))
 
         # Scaling factor to extinction
@@ -860,7 +866,7 @@ class Features:
         return [gmm], var_all, idx_all, zp_all
 
     # -----------------------------------------------------------------------------
-    def _pnicer_multivariate(self, control, **kwargs):
+    def _pnicer_multivariate(self, control, max_components, **kwargs):
         # TODO: Add docstring
 
         # Rotate the data spaces
@@ -893,10 +899,10 @@ class Features:
         vectors_data = [control_rot.features[0][idx == i].reshape(-1, 1) for i in range(grid_data.shape[-1])]
 
         # Each control field vector needs to contain at least 20 sources
-        vectors_data = [np.nan if len(v) < 20 else v for v in vectors_data]
+        vectors_data = [None if len(v) < 20 else v for v in vectors_data]
 
         # Fit GMM for each vector
-        vectors_gmm = mp_gmm(data=vectors_data, **self._set_defaults_gmm(**kwargs))
+        vectors_gmm = mp_gmm(data=vectors_data, max_components=max_components, **self._set_defaults_gmm(**kwargs))
 
         # Determine scaling and shifting factor for models
         scale = self.extvec._extinction_norm
@@ -940,7 +946,7 @@ class Features:
         return vectors_gmm, var_all, idx_all, zp_all
 
     # -----------------------------------------------------------------------------
-    def _pnicer_combinations(self, combinations_science, combinations_control, **kwargs):
+    def _pnicer_combinations(self, combinations_science, combinations_control, max_components, **kwargs):
         """
         PNICER base implementation for combinations. Calls the PNICER implementation for all combinations. The output
         extinction is then the one with the smallest variance from all combinations.
@@ -966,9 +972,9 @@ class Features:
 
             # Choose uni/multivariate PNICER
             if sc.n_features == 1:
-                g, v, i, zp = sc._pnicer_univariate(control=cc, **kwargs)
+                g, v, i, zp = sc._pnicer_univariate(control=cc, max_components=max_components, **kwargs)
             else:
-                g, v, i, zp = sc._pnicer_multivariate(control=cc, **kwargs)
+                g, v, i, zp = sc._pnicer_multivariate(control=cc, max_components=max_components, **kwargs)
 
             # Generate unique index for stacked GMM array
             uidx_combinations.append([j + len(flatten_lol(gmm_combinations)) for j in i])
