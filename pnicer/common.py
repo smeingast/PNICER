@@ -915,6 +915,10 @@ class Features:
         vectors_gmm = [vectors_gmm[i] for i in grid_good_idx]
         vectors_shift = [vectors_shift[i] for i in grid_good_idx]
 
+        # Raise error if no good models remain
+        if len(vectors_gmm) < 1:
+            raise ValueError("No Gaussian Mixture Model converged")
+
         # Find the nearest neighbor for each science target in the cleaned grid
         nbrs = NearestNeighbors(n_neighbors=1, algorithm="ball_tree").fit(grid_data[:, grid_good_idx].T)
         science_idx = nbrs.kneighbors(np.vstack(science_rot.features)[1:, :].T)[1][:, 0]
