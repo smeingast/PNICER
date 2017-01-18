@@ -818,6 +818,8 @@ class Features:
             kwargs["covariance_type"] = "full"
         if "tol" not in kwargs:
             kwargs["tol"] = 1E-4
+        if "max_iter" not in kwargs:
+            kwargs["max_iter"] = 200
         if "warm_start" not in kwargs:
             kwargs["warm_start"] = False
 
