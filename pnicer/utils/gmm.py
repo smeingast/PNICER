@@ -40,7 +40,9 @@ def gmm_scale(gmm, shift=None, scale=None, reverse=False, params=None):
         params = gmm.get_params()
 
     # Instantiate new GMM
-    gmm_new = GaussianMixture(params)
+    gmm_new = GaussianMixture()
+    # noinspection PyUnresolvedReferences
+    gmm_new.set_params(**params)
 
     # Create scaled fitted GMM model
     gmm_new.weights_ = gmm.weights_
@@ -267,7 +269,39 @@ def gmm_confidence_interval_value(gmm, value, level=0.95):
 
 
 # -----------------------------------------------------------------------------
-def mp_gmm(data, **kwargs):
+def gmm_components(data, max_components, n_per_component=20):
+    """
+    Simple estimator for number of components.
+
+    Parameters
+    ----------
+    data : ndarray
+        Data array.
+    max_components : int
+        Maximum number of components.
+    n_per_component : int, optional
+        The minimum number of data points per component. Defaults to 20
+
+    Returns
+    -------
+    int
+        Number of components.
+
+    """
+
+    if data is None:
+        return None
+
+    # Determine number of components for GMM
+    n_components = np.round(len(data.ravel()) / n_per_component, decimals=0).astype(int)
+    n_components = max_components if n_components > max_components else n_components
+
+    # Return
+    return n_components
+
+
+# -----------------------------------------------------------------------------
+def mp_gmm(data, max_components, **kwargs):
     """
     Gaussian mixture model fitting with parallelisation. The parallelisation only works when mutliple sets need to be
     fit.
@@ -276,6 +310,8 @@ def mp_gmm(data, **kwargs):
     ----------
     data : iterable
         Iterable (list) of data vectors to be fit
+    max_components : int, iterable
+        Maximum number of components for all models.
     kwargs
         Additional keyword arguments for GaussianMixture class.
 
@@ -286,13 +322,16 @@ def mp_gmm(data, **kwargs):
 
     """
 
+    # Determine number of components for each data vector
+    n_components = [gmm_components(data=d, max_components=max_components) for d in data]
+
     # Determine gaussian mixture model and return
     with Pool() as pool:
-        return pool.starmap(_mp_gmm, zip(data, repeat(kwargs)))
+        return pool.starmap(_mp_gmm, zip(data, n_components, repeat(kwargs)))
 
 
 # -----------------------------------------------------------------------------
-def _mp_gmm(data, kwargs):
+def _mp_gmm(data, n_components, kwargs):
     """
     Gaussian mixture model fitting helper routine.
 
@@ -300,25 +339,26 @@ def _mp_gmm(data, kwargs):
     ----------
     data : np.array
         Data to be fit.
+    n_components : int
+        Number of components for model.
     kwargs
         Additional keyword arguments for GaussianMixture class.
 
     Returns
     -------
         GaussianMixture class or NaN in case the fitting procedure did not converge or was not possible.
+
     """
 
-    try:
+    # If no data is given
+    if data is None:
+        return None
 
-        # Fit model
-        gmm = GaussianMixture(**kwargs).fit(X=data)
+    # Fit model
+    gmm = GaussianMixture(n_components=n_components, **kwargs).fit(X=data)
 
-        # Check for convergence and return
-        if gmm.converged_:
-            return gmm
-        else:
-            return None
-
-    # On error also return NaN
-    except ValueError:
+    # Check for convergence and return
+    if gmm.converged_:
+        return gmm
+    else:
         return None
