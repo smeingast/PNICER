@@ -49,7 +49,7 @@ def caxes(ndim, ax_size=None, labels=None):
 
     """
 
-    # import
+    # Import
     from matplotlib import pyplot as plt
 
     if labels is not None:
@@ -149,3 +149,40 @@ def caxes_delete_ticklabels(axes, xfirst=False, xlast=False, yfirst=False, ylast
                 yticks[0].set_visible(False)
             if ylast:
                 yticks[-1].set_visible(False)
+
+
+# -----------------------------------------------------------------------------
+def plot_gmm(gmm, path=None, ax_size=None, **kwargs):
+    """
+    Simple plotting routine for GMM instance
+
+    Parameters
+    ----------
+    gmm : GaussianMixture
+        The model to be plotted.
+    path : str, optional
+        Path to file when the plot should be saved.
+    ax_size : list, optional
+        List of axis size [xsize, ysize]. Defaults to [7, 5]
+    kwargs
+        Any additional pyplot.plot keyword argument (color, lw, etc.)
+
+    """
+
+    # Set default axis size
+    if ax_size is None:
+        ax_size = [7, 5]
+
+    # Import
+    from matplotlib import pyplot as plt
+    from pnicer.utils.gmm import gmm_sample_xy
+
+    # Draw samples
+    x, y = gmm_sample_xy(gmm=gmm, kappa=4, sampling=20)
+
+    # Create figure and plot data
+    fig, ax = plt.subplots(nrows=1, ncols=1, figsize=ax_size)
+    ax.plot(x, y, **kwargs)
+
+    # Save or show
+    finalize_plot(path=path)
