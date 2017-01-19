@@ -834,6 +834,15 @@ class Features:
         # TODO: Add docstring
         # TODO: Require minimum number of sources
 
+        # Generate outout arrays
+        idx_all = np.full(self.n_data, fill_value=self.n_data + 1, dtype=np.uint32)
+        var_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
+        zp_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
+
+        # Reuqire a minimum of 20 sources
+        if self._n_data_strict_mask < 20:
+            return [None], var_all, idx_all, zp_all
+
         # Set number of components
         n_components = gmm_components(data=control.features[0][control._strict_mask], max_components=max_components)
 
@@ -853,13 +862,9 @@ class Features:
         # Determine population variance in units of extinction
         var = gmm_population_variance(gmm=gmm)
 
-        idx_all = np.full(self.n_data, fill_value=self.n_data + 1, dtype=np.uint32)
+        # Fill output arrays
         idx_all[self._strict_mask] = 0
-
-        var_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
         var_all[self._strict_mask] = var
-
-        zp_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
         zp_all[self._strict_mask] = (self.features[0][self._strict_mask] + shift) / scale
 
         # Return
