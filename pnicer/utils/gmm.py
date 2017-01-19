@@ -2,11 +2,12 @@
 # Import packages
 import numpy as np
 
-# noinspection PyPackageRequirements
-from sklearn.mixture import GaussianMixture
-from scipy.integrate import cumtrapz
 from itertools import repeat
 from multiprocessing import Pool
+from scipy.integrate import cumtrapz
+# noinspection PyPackageRequirements
+from sklearn.mixture import GaussianMixture
+from pnicer.utils.algebra import gauss_function
 
 
 # -----------------------------------------------------------------------------
@@ -116,6 +117,37 @@ def gmm_sample_xy(gmm, kappa=3, sampling=10, nmin=100, nmax=100000):
 
     # Step
     return xrange, yrange
+
+
+# -----------------------------------------------------------------------------
+def gmm_sample_xy_components(gmm, **kwargs):
+    """
+    Gets samples for each GMM component individually.
+
+    Parameters
+    ----------
+    gmm : GaussianMixture
+        The GMM to be sampled.
+    kwargs
+        Any additional keyword arguments for drawing samples from GMM.
+
+    Returns
+    -------
+    ndarray, iterable
+        Tuple holding the x data range and a list of y data for each component of the GMM.
+
+    """
+
+    # Draw samples for entire range
+    x, y = gmm_sample_xy(gmm=gmm, **kwargs)
+
+    # Sample each component separately
+    y_components = []
+    for m, c, w in zip(gmm.means_.ravel(), gmm.covariances_.ravel(), gmm.weights_.ravel()):
+        y_components.append(gauss_function(x=x, amp=1, x0=m, sigma=np.sqrt(c), area=w))
+
+    # Return
+    return x, y_components
 
 
 # -----------------------------------------------------------------------------
