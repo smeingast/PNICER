@@ -993,6 +993,17 @@ class Features:
         # Select model index
         sources_index = np.array(uidx_combinations)[minidx, np.arange(self.n_data)]
 
+        # Rebase index to remove models with no sources assigned
+        clean_index = list(set(sources_index))
+        new_index = [i for i in range(len(clean_index))]
+        new_index[-1] = clean_index[-1]
+        diff_index = [c - n for c, n in zip(clean_index, new_index)]
+
+        # Rebase sources_index
+        gmm_unique = gmm_unique[clean_index[:-1]]
+        for c, d in zip(clean_index, diff_index):
+            sources_index[sources_index == c] = sources_index[sources_index == c] - d
+
         # Get zero point for each source
         sources_zp = np.array(zp_combinations)[minidx, np.arange(self.n_data)]
         # TODO: Check what is happening to all-bad slices
