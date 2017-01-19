@@ -1011,7 +1011,7 @@ class Features:
                 g, v, i, zp = sc._pnicer_multivariate(control=cc, max_components=max_components, **kwargs)
 
             # Generate unique index for stacked GMM array
-            uidx_combinations.append([j + len(flatten_lol(gmm_combinations)) for j in i])
+            uidx_combinations.append(i + len(flatten_lol(gmm_combinations)))
 
             # Save results
             gmm_combinations.append(g)
