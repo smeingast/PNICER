@@ -1029,14 +1029,16 @@ class Features:
 
         # Rebase index to remove models with no sources assigned
         clean_index = list(set(sources_index))
+        clean_index.sort()
         new_index = [i for i in range(len(clean_index))]
         new_index[-1] = clean_index[-1]
         diff_index = [c - n for c, n in zip(clean_index, new_index)]
 
         # Rebase sources_index
-        gmm_unique = gmm_unique[clean_index[:-1]]
+        gmm_unique = gmm_unique[clean_index[:-1]] if np.max(clean_index) > self.n_data else gmm_unique[clean_index]
         for c, d in zip(clean_index, diff_index):
-            sources_index[sources_index == c] = sources_index[sources_index == c] - d
+            sources_index[sources_index == c] = sources_index[sources_index == c] - d \
+                if c < self.n_data else self.n_data + 1
 
         # Get zero point for each source
         sources_zp = np.array(zp_combinations)[minidx, np.arange(self.n_data)]
