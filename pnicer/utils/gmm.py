@@ -98,11 +98,14 @@ def gmm_sample_xy(gmm, kappa=3, sampling=10, nmin=100, nmax=100000):
     """
 
     # Get GMM attributes
-    s = np.sqrt(gmm.covariances_)
-    m = gmm.means_
+    s = np.sqrt(gmm.covariances_.ravel())
+    m = gmm.means_.ravel()
+
+    # Get min-max range options
+    roptions = list(zip(*[(float(mm - kappa * ss), float(mm + kappa * ss)) for ss, mm in zip(s, m)]))
 
     # Determine min and max of range
-    qmin, qmax = (float(np.min(m) - kappa * np.max(s)), float(np.max(m) + kappa * np.max(s)))
+    qmin, qmax = np.min(roptions[0]), np.max(roptions[1])
 
     # Determine number of samples (number of samples from smallest standard deviation with 'sampling' samples)
     nsamples = (qmax - qmin) / (np.min(s) / sampling)
@@ -113,6 +116,8 @@ def gmm_sample_xy(gmm, kappa=3, sampling=10, nmin=100, nmax=100000):
 
     # Get query range
     xrange = np.linspace(start=qmin, stop=qmax, num=nsamples)
+
+    # Score samples
     yrange = np.exp(gmm.score_samples(np.expand_dims(xrange, 1)))
 
     # Step
