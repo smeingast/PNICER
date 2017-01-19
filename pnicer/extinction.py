@@ -15,7 +15,7 @@ from pnicer.common import Coordinates
 from pnicer.utils.gmm import gmm_scale, gmm_expected_value, gmm_sample_xy, gmm_max, gmm_confidence_interval, \
     gmm_population_variance, gmm_sample_xy_components
 from pnicer.utils.plots import finalize_plot
-from pnicer.utils.algebra import centroid_sphere, distance_sky, std2fwhm
+from pnicer.utils.algebra import centroid_sphere, distance_sky, std2fwhm, round_partial
 
 
 # -----------------------------------------------------------------------------
@@ -388,6 +388,7 @@ class ContinuousExtinction:
         grid = GridSpec(ncols=ncols, nrows=nrows, bottom=0.05, top=0.95, left=0.05, right=0.95,
                         hspace=0.15, wspace=0.15)
 
+        plot_range = []
         for idx in range(self._n_models):
 
             # Grab GMM and scale
@@ -400,14 +401,14 @@ class ContinuousExtinction:
             ax = plt.subplot(grid[idx])
 
             # Get plot range and values
-            x, y = gmm_sample_xy(gmm=gmm, kappa=3, sampling=10, nmin=100, nmax=5000)
+            x, y = gmm_sample_xy(gmm=gmm, kappa=4, sampling=10, nmin=100, nmax=5000)
 
             # Draw entire GMM
             ax.plot(x, y, color="black", lw=2)
 
             # Draw individual components if set
             if draw_components:
-                xc, yc = gmm_sample_xy_components(gmm=gmm, kappa=3, sampling=10, nmin=100, nmax=5000)
+                xc, yc = gmm_sample_xy_components(gmm=gmm, kappa=4, sampling=10, nmin=100, nmax=5000)
                 for y in yc:
                     ax.plot(xc, y, color="black", linestyle="dashed", lw=1)
 
@@ -426,10 +427,6 @@ class ContinuousExtinction:
             ax.axvline(gmm_max(gmm=gmm), color="crimson", alpha=0.8, linestyle="dashed", lw=2)
             ax.axvline(gmm_expected_value(gmm=gmm), color="#2A52BE", alpha=0.8, linestyle="dashed", lw=2)
 
-            # Set symmetric range
-            dummy = np.max(np.abs(ax.get_xlim()))
-            ax.set_xlim(-dummy, dummy)
-
             # Annotate
             if idx % ncols == 0:
                 ax.set_ylabel("Probability Density")
@@ -447,6 +444,17 @@ class ContinuousExtinction:
             # Ticks
             ax.xaxis.set_minor_locator(AutoMinorLocator())
             ax.yaxis.set_minor_locator(AutoMinorLocator())
+
+            # Save plot range
+            plot_range.append(np.max(np.abs(x)))
+
+        # Set common xrange
+        xr = round_partial(np.mean(plot_range) - 0.1, precision=0.1)
+        for idx in range(self._n_models):
+            ax = plt.subplot(grid[idx])
+
+            # Set symmetric range
+            ax.set_xlim(-xr, xr)
 
         # Save or show figure
         finalize_plot(path=path)
