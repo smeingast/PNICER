@@ -927,11 +927,9 @@ class Features:
         dis, idx = dis[:, 0], idx[:, 0]
 
         # Filter too large distances (in case the NN is further than the grid bin width)
-        # TODO: Is this distance filter correct?
         idx[dis > bin_grid / 2] = grid_data.shape[-1] + 1
 
         # Build data vectors for GMM-fits
-        # TODO: Do I have to add a strict mask here?
         vectors_data = [control_rot.features[0][idx == i].reshape(-1, 1) for i in range(grid_data.shape[-1])]
 
         # Each control field vector needs to contain at least 20 sources
@@ -1073,7 +1071,6 @@ class Features:
 
         """
 
-        # TODO: Automatically detect extinction class (for now only accepts arrays)
         return [f - extinction * v for f, v in zip(self.features, self.extvec.extvec)]
 
 
