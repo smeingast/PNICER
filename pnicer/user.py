@@ -125,7 +125,7 @@ class ApparentMagnitudes(Magnitudes):
         control
             Control field instance. Same class as self.
         max_components : int, optional
-            Maximum number of components to fit.
+            Maximum number of components to fit. Default is 3.
         add_colors : bool, optional
             Whether to also include the colors generated from the given magnitudes.
 
@@ -620,7 +620,7 @@ class ApparentColors(Colors):
         control
             Control field instance.
         max_components : int, optional
-            Maximum number of components to fit.
+            Maximum number of components to fit. Default is 3.
         kwargs
             GMM setup ('covariance_type', or 'tol').
 

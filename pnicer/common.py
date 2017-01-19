@@ -1027,6 +1027,7 @@ class Features:
         # Select model index
         sources_index = np.array(uidx_combinations)[minidx, np.arange(self.n_data)]
 
+        # TODO: Test results with and without rebasing the index
         # Rebase index to remove models with no sources assigned
         clean_index = list(set(sources_index))
         clean_index.sort()
