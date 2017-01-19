@@ -284,7 +284,6 @@ class ContinuousExtinction:
 
         """
 
-        # TODO: Time this function with larger databases
         model_params = self._model_params
         sources_mask = self._sources_mask
 

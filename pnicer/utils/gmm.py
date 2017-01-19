@@ -41,9 +41,7 @@ def gmm_scale(gmm, shift=None, scale=None, reverse=False, params=None):
         params = gmm.get_params()
 
     # Instantiate new GMM
-    gmm_new = GaussianMixture()
-    # noinspection PyUnresolvedReferences
-    gmm_new.set_params(**params)
+    gmm_new = GaussianMixture(**params)
 
     # Create scaled fitted GMM model
     gmm_new.weights_ = gmm.weights_
