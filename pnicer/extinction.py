@@ -314,11 +314,24 @@ class ContinuousExtinction:
 
     # -----------------------------------------------------------------------------
     def get_discrete_extinction(self, metric="expected value"):
-        # TODO: Add docstring
+        """
+        Discretize extinction from probability density distributions.
+
+        Parameters
+        ----------
+        metric : str, optional
+            Metric to be used. Either 'expected value' or 'max'.
+
+        Returns
+        -------
+        DiscreteExtinction
+            DiscreteExtinction object with the discretized values and errors.
+
+        """
 
         if "expect" in metric.lower():
             attr = "_models_expected_value"
-        elif metric.lower() == "max":
+        elif "max" in metric.lower():
             attr = "_models_intrinsic_max"
         else:
             raise ValueError("Metric '{0}' not supported".format(metric))
