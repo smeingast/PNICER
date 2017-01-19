@@ -831,8 +831,23 @@ class Features:
 
     # -----------------------------------------------------------------------------
     def _pnicer_univariate(self, control, max_components, **kwargs):
-        # TODO: Add docstring
-        # TODO: Require minimum number of sources
+        """
+        Univariate PNICER implmentation.
+
+        Parameters
+        ----------
+        control
+            Control Field Feature instance
+        max_components : int
+            Maximum number of GMM compponents to use.
+        kwargs
+            Additional kwargs for GaussianMixture
+
+        Returns
+        -------
+            Fitted model, variance, model index, and zero-point for all sources.
+
+        """
 
         # Generate outout arrays
         idx_all = np.full(self.n_data, fill_value=self.n_data + 1, dtype=np.uint32)
@@ -872,7 +887,23 @@ class Features:
 
     # -----------------------------------------------------------------------------
     def _pnicer_multivariate(self, control, max_components, **kwargs):
-        # TODO: Add docstring
+        """
+        Mulitvariate PNICER implementation.
+
+        Parameters
+        ----------
+        control
+            Control Field Feature instance
+        max_components : int
+            Maximum number of GMM compponents to use.
+        kwargs
+            Additional kwargs for GaussianMixture
+
+        Returns
+        -------
+            Fitted models, variance, model index, and zero-point for all sources.
+
+        """
 
         # Rotate the data spaces
         science_rot, control_rot = self._rotate(), control._rotate()
@@ -1314,7 +1345,6 @@ class ExtinctionVector:
         np.ndarray
 
         """
-        # TODO: Rename to extvec?
 
         return self._rotmatrix.dot(self.extvec)
 
