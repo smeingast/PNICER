@@ -626,7 +626,6 @@ class ApparentColors(Colors):
 
         """
 
-        # TODO: Update method!
         return self._pnicer_combinations(combinations_science=self._all_combinations(idxstart=1),
                                          combinations_control=control._all_combinations(idxstart=1),
                                          max_components=max_components, **kwargs)
