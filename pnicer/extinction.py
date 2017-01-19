@@ -313,7 +313,7 @@ class ContinuousExtinction:
         return gmm_scale(gmm=self.models[midx], shift=self.zp[idx], scale=None, reverse=False)
 
     # -----------------------------------------------------------------------------
-    def get_discrete_extinction(self, metric="expected value"):
+    def discretize(self, metric="expected value"):
         """
         Discretize extinction from probability density distributions.
 

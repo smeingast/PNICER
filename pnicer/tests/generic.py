@@ -45,7 +45,7 @@ def orion():
     science.nicer(control=control)
 
     # Discretize extinction distributions from PNICER
-    ext_pnicer = pnicer.get_discrete_extinction()
+    ext_pnicer = pnicer.discretize()
 
     # Make extinction map
     pnicer_emap = ext_pnicer.build_map(bandwidth=5 / 60, metric="gaussian", nicest=False, use_fwhm=True)
