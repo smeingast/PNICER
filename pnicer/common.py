@@ -4,46 +4,52 @@ import numpy as np
 
 from astropy import wcs
 from itertools import combinations
+from pnicer.utils.kde import mp_kde
+from pnicer.utils.wcs import data2grid
+from pnicer.utils.auxiliary import flatten_lol
+from pnicer.utils.gmm import mp_gmm, gmm_scale, gmm_expected_value, gmm_population_variance, gmm_components
+from pnicer.utils.plots import caxes, caxes_delete_ticklabels, finalize_plot
+from pnicer.utils.algebra import round_partial, centroid_sphere, distance_sky
+
 # noinspection PyPackageRequirements
 from sklearn.neighbors import NearestNeighbors
-
-# from pnicer.user import Magnitudes, Colors
-from pnicer.utils import weighted_avg, caxes, mp_kde, data2grid, caxes_delete_ticklabels, round_partial, \
-    centroid_sphere, distance_sky
+# noinspection PyPackageRequirements
+from sklearn.mixture import GaussianMixture
 
 
 # ----------------------------------------------------------------------------- #
 # ----------------------------------------------------------------------------- #
 # noinspection PyProtectedMember
-class DataBase:
+class Features:
 
-    def __init__(self, mag, err, extvec, coordinates=None, names=None):
+    # -----------------------------------------------------------------------------
+    def __init__(self, features, feature_err, feature_extvec, feature_names=None, feature_coordinates=None):
         """
         Basic Data class which provides the foundation for extinction measurements.
 
         Parameters
         ----------
-        mag : iterable
-            List of magnitude arrays. All arrays must have the same length!
-        err : iterable
-            List off magnitude error arrays.
-        extvec : iterable
-            List holding the extinction components for each magnitude.
-        coordinates : astropy.coordinates.SkyCoord, optional
+        features : iterable
+            List of feature arrays. All arrays must have the same length!
+        feature_err : iterable
+            List off feature error arrays.
+        feature_extvec : iterable
+            List holding the extinction components for each feature (extinction vector).
+        feature_coordinates : astropy.coordinates.SkyCoord, optional
             Astropy SkyCoord instance.
-        names : list
-            List of magnitude (feature) names.
+        feature_names : list
+            List of feature names.
 
         """
 
         # Set features
-        self.features = mag
-        self.features_err = err
-        self.features_names = names
-        self.extvec = ExtinctionVector(extvec=extvec)
+        self.features = features
+        self.features_err = feature_err
+        self.features_names = feature_names
+        self.extvec = ExtinctionVector(extvec=feature_extvec)
 
         # Set coordinate attributes
-        self.coordinates = Coordinates(coordinates=coordinates)
+        self.coordinates = Coordinates(coordinates=feature_coordinates)
 
         # Generate simple names for the magnitudes if not set
         if self.features_names is None:
@@ -75,9 +81,22 @@ class DataBase:
             raise ValueError("Input arrays must have equal size")
 
         # Coordinates must be supplied for all data if set
-        if coordinates is not None:
+        if feature_coordinates is not None:
             if len(self.coordinates) != len(self.features[0]):
                 raise ValueError("Input coordinates do not match to data!")
+
+    # -----------------------------------------------------------------------------
+    def __len__(self):
+        return self.features_err.__len__()
+
+    # -----------------------------------------------------------------------------
+    # def __str__(self):
+    #     return Table([np.around(x, 3) for x in self.features], names=self.features_names).__str__()
+
+    # -----------------------------------------------------------------------------
+    def __iter__(self):
+        for x in self.features:
+            yield x
 
     # ----------------------------------------------------------------------------- #
     #                            Some useful properties                             #
@@ -113,6 +132,24 @@ class DataBase:
 
     # -----------------------------------------------------------------------------
     @property
+    def _n_data_strict_mask(self):
+        """
+        Number of sources which have data in all features.
+
+        Returns
+        -------
+        int
+
+        """
+
+        return np.sum(self._strict_mask)
+
+    # ----------------------------------------------------------------------------- #
+    #                                     Masks                                     #
+    # ----------------------------------------------------------------------------- #
+
+    # -----------------------------------------------------------------------------
+    @property
     def _features_masks(self):
         """
         Provides a list with masks for each given feature. True (1) entries are good, False (0) are bad.
@@ -126,10 +163,6 @@ class DataBase:
         """
 
         return [np.isfinite(m) & np.isfinite(e) for m, e in zip(self.features, self.features_err)]
-
-    # ----------------------------------------------------------------------------- #
-    #                                     Masks                                     #
-    # ----------------------------------------------------------------------------- #
 
     # -----------------------------------------------------------------------------
     def _loose_mask(self, max_bad_features):
@@ -204,6 +237,40 @@ class DataBase:
 
         # Return combined mask
         return np.prod(np.vstack([self._features_masks[i] for i in idx]), axis=0, dtype=bool)
+
+    # -----------------------------------------------------------------------------
+    @staticmethod
+    def _mask2index(mask):
+        """
+        Converts a mask to an index array.
+
+        Parameters
+        ----------
+        mask : np.array
+            Inut mask to convert to index
+
+        Returns
+        -------
+        np.array
+            Index array of mask.
+
+        """
+
+        return np.where(mask)[0]
+
+    # -----------------------------------------------------------------------------
+    @property
+    def _strict_mask_index(self):
+        """
+        Converts the strict mask to and index array.
+
+        Returns
+        -------
+        np.array
+            Index array of strict mask of instance.
+        """
+
+        return self._mask2index(self._strict_mask)
 
     # ----------------------------------------------------------------------------- #
     #                                 Helper methods                                #
@@ -329,7 +396,7 @@ class DataBase:
         rotdata = self.extvec._rotmatrix.dot(data)
 
         # Rotate extinction vector
-        extvec = self.extvec._extinction_rot
+        extvec = self.extvec._extvec_rot
 
         # In case no coordinates are supplied they need to be masked
         if self.coordinates.coordinates is not None:
@@ -338,10 +405,10 @@ class DataBase:
             coordinates = None
 
         # Return
-        return self.__class__(mag=[rotdata[idx, :] for idx in range(self.n_features)],
-                              err=[err[idx, :] for idx in range(self.n_features)],
-                              extvec=extvec, coordinates=coordinates,
-                              names=[x + "_rot" for x in self.features_names])
+        # noinspection PyTypeChecker
+        return self.__class__([rotdata[idx, :] for idx in range(self.n_features)],
+                              [err[idx, :]for idx in range(self.n_features)],
+                              extvec, coordinates, [x + "_rot" for x in self.features_names])
 
     # -----------------------------------------------------------------------------
     def _all_combinations(self, idxstart):
@@ -364,13 +431,21 @@ class DataBase:
                                       for p in range(idxstart, self.n_features + 1)]
                  for item in sublist]
 
+        # Import
+        from pnicer.user import ApparentColors, ApparentMagnitudes
+
         combination_instances = []
         for c in all_c:
             cdata, cerror = [self.features[idx] for idx in c], [self.features_err[idx] for idx in c]
             cnames = [self.features_names[idx] for idx in c]
             extvec = [self.extvec.extvec[idx] for idx in c]
-            combination_instances.append(self.__class__(mag=cdata, err=cerror, extvec=extvec,
-                                                        coordinates=self.coordinates.coordinates, names=cnames))
+
+            if isinstance(self, ApparentMagnitudes):
+                combination_instances.append(self.__class__(magnitudes=cdata, errors=cerror, extvec=extvec,
+                                                            coordinates=self.coordinates.coordinates, names=cnames))
+            elif isinstance(self, ApparentColors):
+                combination_instances.append(self.__class__(colors=cdata, errors=cerror, extvec=extvec,
+                                                            coordinates=self.coordinates.coordinates, names=cnames))
 
         # Return list of combinations.
         return combination_instances
@@ -459,29 +534,6 @@ class DataBase:
 
         else:
             raise ValueError("Axis size must be given either with a single number or a list with two entries")
-
-    # -----------------------------------------------------------------------------
-    @staticmethod
-    def _finalize_plot(path=None):
-        """
-        Helper method to save or show plot.
-
-        Parameters
-        ----------
-        path : str, optional
-            If set, the path where the figure is saved
-
-        """
-
-        # Import matplotlib
-        from matplotlib import pyplot as plt
-
-        # Save or show figure
-        if path is None:
-            plt.show()
-        else:
-            plt.savefig(path, bbox_inches='tight')
-        plt.close()
 
     # -----------------------------------------------------------------------------
     def _gridspec_world(self, pixsize, ax_size, proj_code):
@@ -590,7 +642,7 @@ class DataBase:
         caxes_delete_ticklabels(axes=axes, xfirst=False, xlast=True, yfirst=False, ylast=True)
 
         # Save or show figure
-        self._finalize_plot(path=path)
+        finalize_plot(path=path)
 
     # -----------------------------------------------------------------------------
     def plot_combinations_kde(self, path=None, ax_size=None, grid_bw=0.1, kernel="epanechnikov", cmap="gist_heat_r"):
@@ -643,7 +695,7 @@ class DataBase:
         caxes_delete_ticklabels(axes=axes, xfirst=False, xlast=True, yfirst=False, ylast=True)
 
         # Save or show figure
-        self._finalize_plot(path=path)
+        finalize_plot(path=path)
 
     # -----------------------------------------------------------------------------
     def plot_sources_scatter(self, path=None, ax_size=10, skip=1, **kwargs):
@@ -684,7 +736,7 @@ class DataBase:
             ax.set_ylim(lim[1])
 
         # Finalize plot
-        self._finalize_plot(path=path)
+        finalize_plot(path=path)
 
     # -----------------------------------------------------------------------------
     def plot_sources_kde(self, path=None, bandwidth=10 / 60, ax_size=10, kernel="epanechnikov", skip=1, **kwargs):
@@ -736,211 +788,274 @@ class DataBase:
             axes[idx].imshow(dens, origin="lower", interpolation="nearest", cmap="viridis", vmin=0, vmax=1, **kwargs)
 
         # Save or show figure
-        self._finalize_plot(path=path)
+        finalize_plot(path=path)
 
     # ----------------------------------------------------------------------------- #
     #                              Main PNICER routines                             #
     # ----------------------------------------------------------------------------- #
 
     # -----------------------------------------------------------------------------
-    def _pnicer_univariate(self, control):
+    @staticmethod
+    def _set_defaults_gmm(**kwargs):
         """
-        Univariate implementation of PNICER.
+        Sets the defaults for Gaussian Mixture Model fits.
 
         Parameters
         ----------
-        control
-            Control field instance.
+        kwargs : dict
+            kwargs passed from pnicer frontend.
 
         Returns
         -------
-        tuple
-            Tuple containing extinction, variance and de-reddened features.
+        dict
+            Updated dictionary with GMM defaults.
 
         """
 
-        # Some dummy checks
-        self._check_class(ccls=control)
-        if (self.n_features != 1) | (control.n_features != 1):
-            raise ValueError("Only one feature allowed for this method")
+        # Remove n_components if given
+        if "n_components" in kwargs.keys():
+            kwargs.pop("n_components", None)
 
-        # Get mean and variance of control field
-        cf_mean, cf_var = np.nanmean(control.features[0]), np.nanvar(control.features[0])
+        # Set defaults
+        if "covariance_type" not in kwargs:
+            kwargs["covariance_type"] = "full"
+        if "tol" not in kwargs:
+            kwargs["tol"] = 1E-4
+        if "max_iter" not in kwargs:
+            kwargs["max_iter"] = 200
+        if "warm_start" not in kwargs:
+            kwargs["warm_start"] = False
 
-        # Calculate extinction for each source
-        ext = (self.features[0] - cf_mean) / self.extvec.extvec[0]
-
-        # Also the variance
-        var = (self.features_err[0] ** 2 + cf_var) / self.extvec.extvec[0] ** 2
-
-        # Intrinsic features
-        intrinsic = np.full_like(ext, fill_value=float(cf_mean))
-        intrinsic[~np.isfinite(ext)] = np.nan
-
-        # Return Extinction, variance and intrinsic features
-        return ext, var, intrinsic[np.newaxis, :]
+        # Return argument dictionary
+        return kwargs
 
     # -----------------------------------------------------------------------------
-    def _pnicer_multivariate(self, control, sampling, kernel):
+    def _pnicer_univariate(self, control, max_components, **kwargs):
         """
-        Main PNICER routine to get extinction. This will return only the extinction values for data for which all
-        features are available.
+        Univariate PNICER implmentation.
 
         Parameters
         ----------
         control
-            Instance of control field data.
-        sampling : int
-            Sampling of grid relative to bandwidth of kernel.
-        kernel : str
-            Name of kernel to be used for density estimation. e.g. "epanechnikov" or "gaussian".
+            Control Field Feature instance
+        max_components : int
+            Maximum number of GMM compponents to use.
+        kwargs
+            Additional kwargs for GaussianMixture
 
         Returns
         -------
-        tuple(np.ndarray, np.ndarray, np.ndarray)
-            Tuple containing extinction, variance and de-reddened features.
+            Fitted model, variance, model index, and zero-point for all sources.
 
         """
 
-        # Check instances
-        if self.__class__ != control.__class__:
-            raise ValueError("Input and control instance not compatible")
+        # Generate outout arrays
+        idx_all = np.full(self.n_data, fill_value=self.n_data + 1, dtype=np.uint32)
+        var_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
+        zp_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
+
+        # Reuqire a minimum of 20 sources
+        if self._n_data_strict_mask < 20:
+            return [None], var_all, idx_all, zp_all
+
+        # Set number of components
+        n_components = gmm_components(data=control.features[0][control._strict_mask], max_components=max_components)
+
+        # Define and fit Gaussian Mixture Model
+        gmm = GaussianMixture(n_components=n_components, **self._set_defaults_gmm(**kwargs))
+        gmm = gmm.fit(X=np.expand_dims(control.features[0][control._strict_mask], 1))
+
+        # Scaling factor to extinction
+        scale = self.extvec._extinction_norm
+
+        # Shift factor to center on expected value
+        shift = -gmm_expected_value(gmm=gmm)
+
+        # Scale model to extinction
+        gmm = gmm_scale(gmm=gmm, shift=shift, scale=scale, reverse=True)
+
+        # Determine population variance in units of extinction
+        var = gmm_population_variance(gmm=gmm)
+
+        # Fill output arrays
+        idx_all[self._strict_mask] = 0
+        var_all[self._strict_mask] = var
+        zp_all[self._strict_mask] = (self.features[0][self._strict_mask] + shift) / scale
+
+        # Return
+        return [gmm], var_all, idx_all, zp_all
+
+    # -----------------------------------------------------------------------------
+    def _pnicer_multivariate(self, control, max_components, **kwargs):
+        """
+        Mulitvariate PNICER implementation.
+
+        Parameters
+        ----------
+        control
+            Control Field Feature instance
+        max_components : int
+            Maximum number of GMM compponents to use.
+        kwargs
+            Additional kwargs for GaussianMixture
+
+        Returns
+        -------
+            Fitted models, variance, model index, and zero-point for all sources.
+
+        """
 
         # Rotate the data spaces
         science_rot, control_rot = self._rotate(), control._rotate()
 
-        # Get bandwidth of kernel
+        # Get bandwidth from photometric errors
         bandwidth = np.round(np.mean(np.nanmean(self.features_err, axis=1)), 2)
 
         # Determine bin widths for grid according to bandwidth and sampling
-        bin_grid = bin_ext = np.float(bandwidth / sampling)
+        # TODO: Optimize sampling or make it user choice
+        sampling = 4
+        bin_grid = np.float(bandwidth / sampling)
 
         # Now we build a grid from the rotated data for all components but the first
-        grid_data = DataBase._build_feature_grid(data=np.vstack(science_rot.features)[1:, :], precision=bin_grid)
+        grid_data = Features._build_feature_grid(data=np.vstack(science_rot.features)[1:, :], precision=bin_grid)
 
-        # Create a grid to evaluate along the reddening vector
-        grid_ext = np.arange(start=np.floor(min(control_rot.features[0])),
-                             stop=np.ceil(max(control_rot.features[0])), step=bin_ext)
-
-        # Now we combine those to get _all_ grid points
-        xgrid = np.column_stack([np.tile(grid_ext, grid_data.shape[1]),
-                                 np.repeat(grid_data, len(grid_ext), axis=1).T])
-
-        # With our grid, we evaluate the density on it for the control field (!)
-        dens = mp_kde(grid=xgrid, data=np.vstack(control_rot.features).T, bandwidth=bandwidth, kernel=kernel,
-                      absolute=True, sampling=sampling)
-
-        # Get all unique vectors
-        dens_vectors = dens.reshape([grid_data.shape[1], len(grid_ext)])
-
-        # Calculate weighted average and standard deviation for each vector
-        grid_mean, grid_var = [], []
-        for vec in dens_vectors:
-
-            # In case there are too few stars append NaN
-            if np.sum(vec) < 3:
-                grid_mean.append(np.nan)
-                grid_var.append(np.nan)
-
-            # Otherwise get weighted average position along vector and the weighted variance
-            else:
-                a, b = weighted_avg(values=grid_ext, weights=vec)
-                grid_mean.append(a)
-                grid_var.append(b / self.extvec._extinction_norm)  # The normalisation converts this to extinction
-
-        # Convert to arrays
-        grid_var = np.array(grid_var)
-        grid_mean = np.array(grid_mean)
-
-        # Let's get the nearest neighbor grid point for each source
+        # Define NN algorithm
         nbrs = NearestNeighbors(n_neighbors=1, algorithm="ball_tree").fit(grid_data.T)
-        _, indices = nbrs.kneighbors(np.vstack(science_rot.features)[1:, :].T)
-        indices = indices[:, 0]
 
-        # Inverse rotation of grid to get intrinsic features
-        intrinsic = self.extvec._rotmatrix_inv.dot(np.vstack([grid_mean[indices], grid_data[:, indices]]))
+        # Assign each control field source the nearest neighbor grid point
+        dis, idx = nbrs.kneighbors(np.vstack(control_rot.features)[1:, :].T)
+        dis, idx = dis[:, 0], idx[:, 0]
 
-        # It's time to calculate the extinction. :)
-        ext = (science_rot.features[0] - grid_mean[indices]) / self.extvec._extinction_norm
-        var = grid_var[indices]
+        # Filter too large distances (in case the NN is further than the grid bin width)
+        idx[dis > bin_grid / 2] = grid_data.shape[-1] + 1
 
-        # Generate empty arrays for full results
-        ext_full = np.full(self.n_data, fill_value=np.nan, dtype=float)
-        var_full = np.full(self.n_data, fill_value=np.nan, dtype=float)
-        int_full = np.full([len(intrinsic), self.n_data], fill_value=np.nan, dtype=float)
+        # Build data vectors for GMM-fits
+        vectors_data = [control_rot.features[0][idx == i].reshape(-1, 1) for i in range(grid_data.shape[-1])]
 
-        # Lastly we put all the extinction measurements back into a full array
-        ext_full[self._strict_mask] = ext
-        var_full[self._strict_mask] = var
-        int_full[:, self._strict_mask] = intrinsic
+        # Each control field vector needs to contain at least 20 sources
+        vectors_data = [None if len(v) < 20 else v for v in vectors_data]
 
-        # Return extinction, variance and intrinsic features
-        return ext_full, var_full, int_full
+        # Fit GMM for each vector
+        vectors_gmm = mp_gmm(data=vectors_data, max_components=max_components, **self._set_defaults_gmm(**kwargs))
+
+        # Determine scaling and shifting factor for models
+        scale = self.extvec._extinction_norm
+        vectors_shift = [-gmm_expected_value(gmm=gmm) if isinstance(gmm, GaussianMixture) else None
+                         for gmm in vectors_gmm]
+
+        # Scale GMMs to extinction
+        vectors_gmm = [gmm_scale(gmm=gmm, scale=scale, shift=shift) if isinstance(gmm, GaussianMixture) else None
+                       for gmm, shift in zip(vectors_gmm, vectors_shift)]
+
+        # Determine variance for each vector
+        vectors_var = [gmm_population_variance(gmm=gmm) if gmm is not None else np.nan for gmm in vectors_gmm]
+
+        # Get good models
+        grid_good_idx = [i for i, j in enumerate(vectors_gmm) if isinstance(j, GaussianMixture)]
+        vectors_gmm = [vectors_gmm[i] for i in grid_good_idx]
+        vectors_shift = [vectors_shift[i] for i in grid_good_idx]
+
+        # Raise error if no good models remain
+        if len(vectors_gmm) < 1:
+            raise ValueError("No Gaussian Mixture Model converged")
+
+        # Find the nearest neighbor for each science target in the cleaned grid
+        nbrs = NearestNeighbors(n_neighbors=1, algorithm="ball_tree").fit(grid_data[:, grid_good_idx].T)
+        science_idx = nbrs.kneighbors(np.vstack(science_rot.features)[1:, :].T)[1][:, 0]
+
+        # Determine variance for each source
+        var = np.array([vectors_var[idx] for idx in science_idx])
+
+        # Create and index, variance and zp arrays for all sources
+        idx_all = np.full(self.n_data, fill_value=self.n_data + 1, dtype=np.uint32)
+        idx_all[self._strict_mask] = science_idx
+
+        var_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
+        var_all[self._strict_mask] = var
+
+        zp_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
+        zp_all[self._strict_mask] = (science_rot.features[0] + np.array(vectors_shift)[science_idx]) / scale
+
+        # Return
+        return vectors_gmm, var_all, idx_all, zp_all
 
     # -----------------------------------------------------------------------------
-    def _pnicer_combinations(self, control, comb, sampling, kernel):
+    def _pnicer_combinations(self, combinations_science, combinations_control, max_components, **kwargs):
         """
-        PNICER base implementation for combinations. Basically calls the pnicer_single implementation for all
-        combinations. The output extinction is then the one with the smallest error from all combinations.
+        PNICER base implementation for combinations. Calls the PNICER implementation for all combinations. The output
+        extinction is then the one with the smallest variance from all combinations.
 
         Parameters
         ----------
         control
             Instance of control field data.
-        comb
-            Zip object of combinations to use.
-        sampling : int
-            Sampling of grid relative to bandwidth of kernel.
-        kernel : str
-            Name of kernel to be used for density estimation. e.g. "epanechnikov" or "gaussian".
+        combinations_science : iterable
+            List of combinations for the science data.
+        combinations_control : iterable
+            List of combinations for the control field data.
 
         Returns
         -------
-        Extinction
-            Extinction instance with the calculated extinction and errors.
+        ContinuousExtinction
 
         """
 
-        # Check instances
-        self._check_class(ccls=control)
+        # Loop over all combinations and run PNICER
+        gmm_combinations, var_combinations, uidx_combinations, zp_combinations, models_norm = [], [], [], [], []
+        for sc, cc in zip(combinations_science, combinations_control):
 
-        # Create lists to hold results for all combinations
-        ext_combinations, var_combinations = [], []
-
-        # Here we loop over feature combinations since this is faster
-        for sc, cc in comb:
-
-            # Depending on number of features, choose algorithm
+            # Choose uni/multivariate PNICER
             if sc.n_features == 1:
-                ext, var, _ = sc._pnicer_univariate(control=cc)
+                g, v, i, zp = sc._pnicer_univariate(control=cc, max_components=max_components, **kwargs)
             else:
-                ext, var, _ = sc._pnicer_multivariate(control=cc, sampling=sampling, kernel=kernel)
+                g, v, i, zp = sc._pnicer_multivariate(control=cc, max_components=max_components, **kwargs)
 
-            # Append results to lists
-            ext_combinations.append(ext)
-            var_combinations.append(var)
+            # Generate unique index for stacked GMM array
+            uidx_combinations.append([j + len(flatten_lol(gmm_combinations)) for j in i])
 
-        # Convert to arrays and save combination data
-        ext_combinations = np.array(ext_combinations)
-        var_combinations = np.array(var_combinations)
+            # Save results
+            gmm_combinations.append(g)
+            var_combinations.append(v)
+            zp_combinations.append(zp)
 
-        # Assign to instance attribute
-        self._ext_combinations = ext_combinations
-        self._var_combinations = var_combinations
+        # Stack unique GMMs and norms
+        gmm_unique = np.hstack(gmm_combinations)
 
-        # Put large errors into entries without extinction
-        var_combinations[~np.isfinite(var_combinations)] = 10000.
+        # Choose minimum variance GMM across all combinations
+        minidx = np.argmin(np.array(var_combinations), axis=0)
 
-        # Chose extinction as minimum error across all combinations
-        ext = ext_combinations[np.argmin(var_combinations, axis=0), np.arange(self.n_data)]
-        var = var_combinations[np.argmin(var_combinations, axis=0), np.arange(self.n_data)]
+        # Select model index
+        sources_index = np.array(uidx_combinations)[minidx, np.arange(self.n_data)]
 
-        # Make error cut
-        ext[var > 10] = var[var > 10] = np.nan
+        # TODO: Test results with and without rebasing the index
+        # Rebase index to remove models with no sources assigned
+        clean_index = list(set(sources_index))
+        clean_index.sort()
+        new_index = [i for i in range(len(clean_index))]
+        new_index[-1] = clean_index[-1]
+        diff_index = [c - n for c, n in zip(clean_index, new_index)]
 
-        # Return Extinction instance
-        from pnicer.extinction import Extinction
-        return Extinction(coordinates=self.coordinates.coordinates, extinction=ext, variance=var, extvec=self.extvec)
+        # Rebase sources_index
+        gmm_unique = gmm_unique[clean_index[:-1]] if np.max(clean_index) > self.n_data else gmm_unique[clean_index]
+        for c, d in zip(clean_index, diff_index):
+            sources_index[sources_index == c] = sources_index[sources_index == c] - d \
+                if c < self.n_data else self.n_data + 1
+
+        # Get zero point for each source
+        sources_zp = np.array(zp_combinations)[minidx, np.arange(self.n_data)]
+        # TODO: Check what is happening to all-bad slices
+
+        # Chech if all bad slices are also bad in the index
+        # TODO: Do I need this check?
+        a = np.where(np.nansum(np.array(var_combinations), axis=0) >
+                     1E6 * (len(combinations_science) - 1) + 1)[0].shape  # All-bad variances
+        b = np.where(sources_index > self.n_data)[0].shape  # All bad indices
+        if not a == b:
+            raise ValueError("Bad data is being propagated")
+
+        # Return intrinsic class
+        from pnicer.extinction import ContinuousExtinction
+        return ContinuousExtinction(features=self, models=gmm_unique, index=sources_index, zp=sources_zp)
 
     # -----------------------------------------------------------------------------
     def features_intrinsic(self, extinction):
@@ -959,7 +1074,6 @@ class DataBase:
 
         """
 
-        # TODO: Automatically detect extinction class (for now only accepts arrays)
         return [f - extinction * v for f, v in zip(self.features, self.extvec.extvec)]
 
 
@@ -967,6 +1081,7 @@ class DataBase:
 # ----------------------------------------------------------------------------- #
 class Coordinates:
 
+    # -----------------------------------------------------------------------------
     def __init__(self, coordinates):
         """
         Additional coordinates class to add a few convenient attributes to Sky coordinates.
@@ -1070,6 +1185,7 @@ class Coordinates:
 # ----------------------------------------------------------------------------- #
 class ExtinctionVector:
 
+    # -----------------------------------------------------------------------------
     def __init__(self, extvec):
         """
         Class for extinction vectors.
@@ -1083,6 +1199,19 @@ class ExtinctionVector:
 
         # Set attributes
         self.extvec = extvec
+
+    # -----------------------------------------------------------------------------
+    def __len__(self):
+        return len(self.extvec)
+
+    # -----------------------------------------------------------------------------
+    def __str__(self):
+        return self.extvec.__str__()
+
+    # -----------------------------------------------------------------------------
+    def __iter__(self):
+        for x in self.extvec:
+            yield x
 
     # -----------------------------------------------------------------------------
     @property
@@ -1207,7 +1336,7 @@ class ExtinctionVector:
 
     # -----------------------------------------------------------------------------
     @property
-    def _extinction_rot(self):
+    def _extvec_rot(self):
         """
         Calculates the rotated extinction vector.
 
@@ -1231,4 +1360,8 @@ class ExtinctionVector:
 
         """
 
-        return self._extinction_rot[0]
+        # For one-dimensional data there is no rotation matrix
+        if self.n_dimensions == 1:
+            return self.extvec[0]
+        else:
+            return self._extvec_rot[0]

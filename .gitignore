@@ -6,11 +6,14 @@
 
 # Notebook stuff
 notebooks/.ipynb_checkpoints
+verifications
+verifications/*.ipynb
 
 # Other
 my_stuff.py
 stub.py
 other
+*.png
 
 __pycache__/
 pnicer/__pycache__/

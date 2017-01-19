@@ -2,35 +2,35 @@
 # import stuff
 import numpy as np
 
-from pnicer.common import DataBase
-from pnicer.utils import get_sample_covar, get_color_covar
+from pnicer.common import Features
+from pnicer.utils.algebra import get_sample_covar, get_color_covar
 
 
-# -----------------------------------------------------------------------------
-# noinspection PyProtectedMember
-class Magnitudes(DataBase):
+# ----------------------------------------------------------------------------- #
+# ----------------------------------------------------------------------------- #
+class Magnitudes(Features):
 
-    def __init__(self, mag, err, extvec, coordinates=None, names=None):
+    def __init__(self, magnitudes, errors, extvec, coordinates=None, names=None):
         """
-        Main class for users. Includes PNICER and NICER.
+        Generic magnitude data class.
 
         Parameters
         ----------
-        mag : list
+        magnitudes : list
             List of magnitude arrays. All arrays must have the same length.
-        err : list
+        errors : list
             List off magnitude error arrays.
-        coordinates : SkyCoord, optional
-            Astropy SkyCoord instance.
         extvec : list
             List holding the extinction components for each magnitude.
+        coordinates : SkyCoord, optional
+            Astropy SkyCoord instance.
         names : list, optional
             List of magnitude (feature) names.
 
         """
 
-        # Call parent
-        super(Magnitudes, self).__init__(mag=mag, err=err, extvec=extvec, coordinates=coordinates, names=names)
+        super(Magnitudes, self).__init__(features=magnitudes, feature_err=errors, feature_extvec=extvec,
+                                         feature_names=names, feature_coordinates=coordinates)
 
     # -----------------------------------------------------------------------------
     def mag2color(self):
@@ -39,7 +39,7 @@ class Magnitudes(DataBase):
 
         Returns
         -------
-        Colors
+        ApparentColors
             Colors instance.
 
         """
@@ -58,8 +58,46 @@ class Magnitudes(DataBase):
         names = [self.features_names[k - 1] + "-" + self.features_names[k] for k in range(1, self.n_features)]
 
         # Return Colors instance
-        return Colors(mag=colors, err=colors_error, extvec=color_extvec, coordinates=self.coordinates.coordinates,
-                      names=names)
+        return ApparentColors(colors=colors, errors=colors_error, extvec=color_extvec,
+                              coordinates=self.coordinates.coordinates, names=names)
+
+
+# ----------------------------------------------------------------------------- #
+# ----------------------------------------------------------------------------- #
+class Colors(Features):
+    def __init__(self, colors, errors, extvec, coordinates=None, names=None):
+        super(Colors, self).__init__(features=colors, feature_err=errors, feature_extvec=extvec, feature_names=names,
+                                     feature_coordinates=coordinates)
+
+
+# ----------------------------------------------------------------------------- #
+# ----------------------------------------------------------------------------- #
+# noinspection PyProtectedMember
+class ApparentMagnitudes(Magnitudes):
+
+    # -----------------------------------------------------------------------------
+    def __init__(self, magnitudes, errors, extvec, coordinates=None, names=None):
+        """
+        Main class for users with magnitude data. Includes PNICER and NICER.
+
+        Parameters
+        ----------
+        magnitudes : list
+            List of magnitude arrays. All arrays must have the same length.
+        errors : list
+            List off magnitude error arrays.
+        extvec : list
+            List holding the extinction components for each magnitude.
+        coordinates : SkyCoord, optional
+            Astropy SkyCoord instance.
+        names : list, optional
+            List of magnitude (feature) names.
+
+        """
+
+        # Call parent
+        super(ApparentMagnitudes, self).__init__(magnitudes=magnitudes, errors=errors, extvec=extvec,
+                                                 coordinates=coordinates, names=names)
 
     # -----------------------------------------------------------------------------
     def _color_combinations(self):
@@ -77,7 +115,7 @@ class Magnitudes(DataBase):
         return self.mag2color()._all_combinations(idxstart=1)
 
     # -----------------------------------------------------------------------------
-    def pnicer(self, control, sampling=2, kernel="epanechnikov", add_colors=False):
+    def pnicer(self, control, max_components=3, add_colors=False, **kwargs):
         """
         Main PNICER method for magnitudes. Includes options to use combinations for input features, or convert them
         to colors.
@@ -86,17 +124,14 @@ class Magnitudes(DataBase):
         ----------
         control
             Control field instance. Same class as self.
-        sampling : int, optional
-            Sampling of grid relative to bandwidth of kernel. Default is 2.
-        kernel : str, optional
-            Name of kernel for KDE. e.g. 'epanechnikov' or 'gaussian'. Default is 'epanechnikov'.
+        max_components : int, optional
+            Maximum number of components to fit. Default is 3.
         add_colors : bool, optional
             Whether to also include the colors generated from the given magnitudes.
 
         Returns
         -------
-        pnicer.extinction.Extinction
-            Extinction instance with the calcualted extinction and errors.
+        pnicer.extinction.ContinuousExtinction
 
         """
 
@@ -108,15 +143,18 @@ class Magnitudes(DataBase):
                 raise ValueError("To use colors, at least two features are required")
 
             # Build all combinations by adding colors to parameter space; also require at least two magnitudes
-            comb = zip(self._all_combinations(idxstart=2) + self._color_combinations(),
-                       control._all_combinations(idxstart=2) + control._color_combinations())
+            cscience = self._all_combinations(idxstart=2) + self._color_combinations()
+            ccontrol = control._all_combinations(idxstart=2) + control._color_combinations()
+
         else:
 
-            # Build combinations, but start with 2.
-            comb = zip(self._all_combinations(idxstart=2), control._all_combinations(idxstart=2))
+            # Build combinations without adding colors
+            cscience = self._all_combinations(idxstart=2)
+            ccontrol = control._all_combinations(idxstart=2)
 
         # Call PNICER
-        return self._pnicer_combinations(control=control, comb=comb, sampling=sampling, kernel=kernel)
+        return self._pnicer_combinations(combinations_science=cscience, combinations_control=ccontrol,
+                                         max_components=max_components, **kwargs)
 
     # -----------------------------------------------------------------------------
     def nicer(self, control=None, color0=None, color0_err=None, min_features=None):
@@ -138,8 +176,8 @@ class Magnitudes(DataBase):
 
         Returns
         -------
-        pnicer.extinction.Extinction
-            Extinction instance with the calcualted extinction and errors.
+        pnicer.extinction.DiscreteExtinction
+            DiscreteExtinction instance with the calculated extinction and errors.
 
         """
 
@@ -230,10 +268,13 @@ class Magnitudes(DataBase):
             mask = np.where(np.sum(np.vstack(self._features_masks), axis=0, dtype=int) < min_features)[0]
             ext[mask] = var[mask] = np.nan
 
-        # Return Extinction
-        from pnicer.extinction import Extinction
-        return Extinction(coordinates=self.coordinates.coordinates, extinction=ext.data, variance=var,
-                          extvec=self.extvec)
+        # Calculate intrinsic magnitudes
+        # intrinsic = [self.features[idx] - self.extvec.extvec[idx] * ext for idx in range(self.n_features)]
+
+        # Return Intrinsic instance
+        from pnicer.extinction import DiscreteExtinction
+        return DiscreteExtinction(extinction=ext, variance=var, extvec=self.extvec.extvec,
+                                  coord=self.coordinates.coordinates)
 
     # -----------------------------------------------------------------------------
     # noinspection PyPackageRequirements
@@ -489,6 +530,7 @@ class Magnitudes(DataBase):
         return beta, beta_err, ic, good_idx
 
     # -----------------------------------------------------------------------------
+    # noinspection PyUnboundLocalVariable
     @staticmethod
     def _plot_extinction_ratio(beta, ic, x_science, y_science, x_control=None, y_control=None):
         """
@@ -536,19 +578,21 @@ class Magnitudes(DataBase):
         plt.show()
 
 
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- #
+# ----------------------------------------------------------------------------- #
 # noinspection PyProtectedMember
-class Colors(DataBase):
+class ApparentColors(Colors):
 
-    def __init__(self, mag, err, extvec, coordinates=None, names=None):
+    # -----------------------------------------------------------------------------
+    def __init__(self, colors, errors, extvec, coordinates=None, names=None):
         """
-        Same as magnitudes class without NICER.
+        Main class for users with color data.
 
         Parameters
         ----------
-        mag : list
+        colors : list
             List of color arrays. All arrays must have the same length.
-        err : list
+        errors : list
             List off color error arrays.
         coordinates : SkyCoord, optional
             Astropy SkyCoord instance.
@@ -563,10 +607,11 @@ class Colors(DataBase):
         """
 
         # Call parent
-        super(Colors, self).__init__(mag=mag, err=err, extvec=extvec, coordinates=coordinates, names=names)
+        super(ApparentColors, self).__init__(colors=colors, errors=errors, extvec=extvec, coordinates=coordinates,
+                                             names=names)
 
     # -----------------------------------------------------------------------------
-    def pnicer(self, control, sampling=2, kernel="epanechnikov"):
+    def pnicer(self, control, max_components=3, **kwargs):
         """
         PNICER call method for colors.
 
@@ -574,12 +619,13 @@ class Colors(DataBase):
         ----------
         control
             Control field instance.
-        sampling : int, optional
-            Sampling of grid relative to bandwidth of kernel. Default is 2.
-        kernel : str, optional
-            Name of kernel for KDE. e.g. 'epanechnikov' or 'gaussian'. Default is 'epanechnikov'.
+        max_components : int, optional
+            Maximum number of components to fit. Default is 3.
+        kwargs
+            GMM setup ('covariance_type', or 'tol').
 
         """
 
-        comb = zip(self._all_combinations(idxstart=1), control._all_combinations(idxstart=1))
-        return self._pnicer_combinations(control=control, comb=comb, sampling=sampling, kernel=kernel)
+        return self._pnicer_combinations(combinations_science=self._all_combinations(idxstart=1),
+                                         combinations_control=control._all_combinations(idxstart=1),
+                                         max_components=max_components, **kwargs)
