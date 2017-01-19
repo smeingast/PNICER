@@ -9,6 +9,43 @@ std2fwhm = 2 * np.sqrt(2 * np.log(2))
 
 
 # -----------------------------------------------------------------------------
+def gauss_function(x, amp, x0, sigma, area=None):
+    """
+    Simple gauss function sampler.
+
+    Parameters
+    ----------
+    x : ndarray
+        X data range
+    amp : int, float
+        Amplitude of gaussian.
+    x0 : int, float
+        Mean of gaussian
+    sigma : int, float
+        Standard deviation of gaussian.
+    area : int, float, optional
+        If set, normalize gaussian to that area.
+
+    Returns
+    -------
+    ndarray
+        Y data range.
+
+    """
+
+    # Get samples
+    gauss = amp * np.exp(-(x - x0) ** 2. / (2. * sigma ** 2.))
+
+    # Normalize
+    if area is not None:
+        # noinspection PyTypeChecker
+        gauss /= np.trapz(gauss, x) / area
+
+    # Return
+    return gauss
+
+
+# -----------------------------------------------------------------------------
 def distance_sky(lon1, lat1, lon2, lat2, unit="radians"):
     """
     Returns the distance between two objects on a sphere along the connecting great circle. Also works with arrays.
