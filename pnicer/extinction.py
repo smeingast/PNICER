@@ -13,7 +13,7 @@ from multiprocessing.pool import Pool
 
 from pnicer.common import Coordinates
 from pnicer.utils.gmm import gmm_scale, gmm_expected_value, gmm_sample_xy, gmm_max, gmm_confidence_interval, \
-    gmm_population_variance
+    gmm_population_variance, gmm_sample_xy_components
 from pnicer.utils.plots import finalize_plot
 from pnicer.utils.algebra import centroid_sphere, distance_sky, std2fwhm
 
@@ -342,7 +342,7 @@ class ContinuousExtinction:
     # ----------------------------------------------------------------------------- #
 
     # -----------------------------------------------------------------------------
-    def _plot_models(self, path=None, ax_size=None, confidence_level=0.9):
+    def _plot_models(self, path=None, ax_size=None, confidence_level=0.9, draw_components=True):
         """
         Creates a plot of all unique Gaussian Mixture Models.
 
@@ -389,8 +389,14 @@ class ContinuousExtinction:
             # Get plot range and values
             x, y = gmm_sample_xy(gmm=gmm, kappa=3, sampling=10, nmin=100, nmax=5000)
 
-            # Draw
+            # Draw entire GMM
             ax.plot(x, y, color="black", lw=2)
+
+            # Draw individual components if set
+            if draw_components:
+                xc, yc = gmm_sample_xy_components(gmm=gmm, kappa=3, sampling=10, nmin=100, nmax=5000)
+                for y in yc:
+                    ax.plot(xc, y, color="black", linestyle="dashed", lw=1)
 
             # Add confidence interval if requested
             if confidence_level is not None:
