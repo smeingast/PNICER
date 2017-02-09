@@ -6,7 +6,7 @@ from itertools import combinations
 
 
 # -----------------------------------------------------------------------------
-def finalize_plot(path=None):
+def finalize_plot(path=None, dpi=150):
     """
     Helper method to save or show plot.
 
@@ -14,6 +14,8 @@ def finalize_plot(path=None):
     ----------
     path : str, optional
         If set, the path where the figure is saved
+    dpi : int, optional
+        DPI of save figure. Default is 150
 
     """
 
@@ -24,7 +26,7 @@ def finalize_plot(path=None):
     if path is None:
         plt.show()
     else:
-        plt.savefig(path, bbox_inches='tight')
+        plt.savefig(path, bbox_inches="tight", dpi=dpi)
     plt.close()
 
 
@@ -152,7 +154,7 @@ def caxes_delete_ticklabels(axes, xfirst=False, xlast=False, yfirst=False, ylast
 
 
 # -----------------------------------------------------------------------------
-def plot_gmm(gmm, path=None, ax_size=None, **kwargs):
+def plot_gmm(gmm, path=None, ax_size=None, draw_components=True, **kwargs):
     """
     Simple plotting routine for GMM instance
 
@@ -164,6 +166,8 @@ def plot_gmm(gmm, path=None, ax_size=None, **kwargs):
         Path to file when the plot should be saved.
     ax_size : list, optional
         List of axis size [xsize, ysize]. Defaults to [7, 5]
+    draw_components : bool, optional
+        Whether to also draw the components of the GMM. Default is True.
     kwargs
         Any additional pyplot.plot keyword argument (color, lw, etc.)
 
@@ -175,7 +179,7 @@ def plot_gmm(gmm, path=None, ax_size=None, **kwargs):
 
     # Import
     from matplotlib import pyplot as plt
-    from pnicer.utils.gmm import gmm_sample_xy
+    from pnicer.utils.gmm import gmm_sample_xy, gmm_sample_xy_components
 
     # Draw samples
     x, y = gmm_sample_xy(gmm=gmm, kappa=4, sampling=20)
@@ -183,6 +187,13 @@ def plot_gmm(gmm, path=None, ax_size=None, **kwargs):
     # Create figure and plot data
     fig, ax = plt.subplots(nrows=1, ncols=1, figsize=ax_size)
     ax.plot(x, y, **kwargs)
+
+    # Sample and draw components if set
+    if draw_components:
+        xc, yc = gmm_sample_xy_components(gmm=gmm, kappa=4, sampling=20)
+
+        for y in yc:
+            ax.plot(xc, y, color="gray", lw=1, ls="dashed")
 
     # Save or show
     finalize_plot(path=path)
