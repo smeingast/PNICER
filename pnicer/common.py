@@ -1020,6 +1020,10 @@ class Features:
             var_combinations.append(v)
             zp_combinations.append(zp)
 
+        # Save combinations
+        self.__setattr__("__gmm_combinations", gmm_combinations)
+        self.__setattr__("__zp_combinations", zp_combinations)
+
         # Stack unique GMMs and norms
         gmm_unique = np.hstack(gmm_combinations)
 
