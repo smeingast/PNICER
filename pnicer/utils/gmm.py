@@ -2,8 +2,8 @@
 # Import packages
 import numpy as np
 
-from itertools import repeat
-from multiprocessing import Pool
+# from itertools import repeat
+# from multiprocessing import Pool
 from scipy.integrate import cumtrapz
 # noinspection PyPackageRequirements
 from sklearn.mixture import GaussianMixture
@@ -330,6 +330,7 @@ def gmm_components(data, max_components, n_per_component=20):
     # Determine number of components for GMM
     n_components = np.round(len(data.ravel()) / n_per_component, decimals=0).astype(int)
     n_components = max_components if n_components > max_components else n_components
+    n_components = 1 if n_components < 1 else n_components
 
     # Return
     return n_components
@@ -360,9 +361,13 @@ def mp_gmm(data, max_components, **kwargs):
     # Determine number of components for each data vector
     n_components = [gmm_components(data=d, max_components=max_components) for d in data]
 
+    return [GaussianMixture(n_components=n, **kwargs).fit(X=d) if d is not None else None
+            for n, d in zip(n_components, data)]
+
     # Determine gaussian mixture model and return
-    with Pool() as pool:
-        return pool.starmap(_mp_gmm, zip(data, n_components, repeat(kwargs)))
+    # TODO: Test and reactivate. Also do performance test with and without parallelisation.
+    # with Pool() as pool:
+    #     return pool.starmap(_mp_gmm, zip(data[:1], n_components[:1], repeat(kwargs)))
 
 
 # -----------------------------------------------------------------------------
