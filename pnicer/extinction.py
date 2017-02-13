@@ -456,7 +456,7 @@ class ContinuousExtinction:
             ax.set_xlim(-xr, xr)
 
         # Save or show figure
-        finalize_plot(path=path)
+        finalize_plot(path=path, dpi=150)
 
     # -----------------------------------------------------------------------------
     def _plot_model_extinction_source(self, idx, path=None, ax_size=8, confidence_level=None, **kwargs):
