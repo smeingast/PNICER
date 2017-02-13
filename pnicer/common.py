@@ -820,9 +820,9 @@ class Features:
         if "covariance_type" not in kwargs:
             kwargs["covariance_type"] = "full"
         if "tol" not in kwargs:
-            kwargs["tol"] = 1E-4
+            kwargs["tol"] = 1E-3
         if "max_iter" not in kwargs:
-            kwargs["max_iter"] = 200
+            kwargs["max_iter"] = 100
         if "warm_start" not in kwargs:
             kwargs["warm_start"] = False
 
@@ -850,12 +850,12 @@ class Features:
         """
 
         # Generate outout arrays
-        idx_all = np.full(self.n_data, fill_value=self.n_data + 1, dtype=np.uint32)
+        idx_all = np.full(self.n_data, fill_value=-1, dtype=np.int64)
         var_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
         zp_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
 
-        # Reuqire a minimum of 20 sources
-        if self._n_data_strict_mask < 20:
+        # Reuqire a minimum of 20 sources in control fields
+        if control._n_data_strict_mask < 20:
             return [None], var_all, idx_all, zp_all
 
         # Set number of components
@@ -927,13 +927,15 @@ class Features:
         dis, idx = dis[:, 0], idx[:, 0]
 
         # Filter too large distances (in case the NN is further than the grid bin width)
-        idx[dis > bin_grid / 2] = grid_data.shape[-1] + 1
+        # TODO: The smaller the sampling, the less data in a vector!
+        idx[dis > bandwidth / 2] = grid_data.shape[-1] + 1
 
         # Build data vectors for GMM-fits
         vectors_data = [control_rot.features[0][idx == i].reshape(-1, 1) for i in range(grid_data.shape[-1])]
 
         # Each control field vector needs to contain at least 20 sources
         vectors_data = [None if len(v) < 20 else v for v in vectors_data]
+        # TODO: What to do if there are no valid vectors for this feature combination?
 
         # Fit GMM for each vector
         vectors_gmm = mp_gmm(data=vectors_data, max_components=max_components, **self._set_defaults_gmm(**kwargs))
@@ -944,8 +946,8 @@ class Features:
                          for gmm in vectors_gmm]
 
         # Scale GMMs to extinction
-        vectors_gmm = [gmm_scale(gmm=gmm, scale=scale, shift=shift) if isinstance(gmm, GaussianMixture) else None
-                       for gmm, shift in zip(vectors_gmm, vectors_shift)]
+        vectors_gmm = [gmm_scale(gmm=gmm, scale=scale, shift=shift, reverse=True)
+                       if isinstance(gmm, GaussianMixture) else None for gmm, shift in zip(vectors_gmm, vectors_shift)]
 
         # Determine variance for each vector
         vectors_var = [gmm_population_variance(gmm=gmm) if gmm is not None else np.nan for gmm in vectors_gmm]
@@ -967,7 +969,7 @@ class Features:
         var = np.array([vectors_var[idx] for idx in science_idx])
 
         # Create and index, variance and zp arrays for all sources
-        idx_all = np.full(self.n_data, fill_value=self.n_data + 1, dtype=np.uint32)
+        idx_all = np.full(self.n_data, fill_value=-1, dtype=np.int64)
         idx_all[self._strict_mask] = science_idx
 
         var_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
@@ -1027,19 +1029,26 @@ class Features:
         # Select model index
         sources_index = np.array(uidx_combinations)[minidx, np.arange(self.n_data)]
 
-        # TODO: Test results with and without rebasing the index
-        # Rebase index to remove models with no sources assigned
+        # Create clean index of models
         clean_index = list(set(sources_index))
         clean_index.sort()
+        clean_index = list(filter(lambda a: a != -1, clean_index))
+
+        # Create new index
         new_index = [i for i in range(len(clean_index))]
-        new_index[-1] = clean_index[-1]
+
+        # Get difference between indices
         diff_index = [c - n for c, n in zip(clean_index, new_index)]
 
+        # Fetch and sort all clean unique models
+        gmm_unique = gmm_unique[clean_index]
+
         # Rebase sources_index
-        gmm_unique = gmm_unique[clean_index[:-1]] if np.max(clean_index) > self.n_data else gmm_unique[clean_index]
         for c, d in zip(clean_index, diff_index):
-            sources_index[sources_index == c] = sources_index[sources_index == c] - d \
-                if c < self.n_data else self.n_data + 1
+            sources_index[sources_index == c] = sources_index[sources_index == c] - d
+
+        # Set all negative indices to bad value
+        sources_index[sources_index < 0] = sources_index.size + 1
 
         # Get zero point for each source
         sources_zp = np.array(zp_combinations)[minidx, np.arange(self.n_data)]
@@ -1047,11 +1056,11 @@ class Features:
 
         # Chech if all bad slices are also bad in the index
         # TODO: Do I need this check?
-        a = np.where(np.nansum(np.array(var_combinations), axis=0) >
-                     1E6 * (len(combinations_science) - 1) + 1)[0].shape  # All-bad variances
-        b = np.where(sources_index > self.n_data)[0].shape  # All bad indices
-        if not a == b:
-            raise ValueError("Bad data is being propagated")
+        # a = np.where(np.nansum(np.array(var_combinations), axis=0) >
+        #              1E6 * (len(combinations_science) - 1) + 1)[0].shape  # All-bad variances
+        # b = np.where(sources_index > self.n_data)[0].shape  # All bad indices
+        # if not a == b:
+        #     raise ValueError("Bad data is being propagated")
 
         # Return intrinsic class
         from pnicer.extinction import ContinuousExtinction
