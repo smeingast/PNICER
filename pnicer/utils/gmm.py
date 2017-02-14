@@ -2,8 +2,8 @@
 # Import packages
 import numpy as np
 
-# from itertools import repeat
-# from multiprocessing import Pool
+from itertools import repeat
+from multiprocessing import Pool
 from scipy.integrate import cumtrapz
 # noinspection PyPackageRequirements
 from sklearn.mixture import GaussianMixture
@@ -337,7 +337,7 @@ def gmm_components(data, max_components, n_per_component=20):
 
 
 # -----------------------------------------------------------------------------
-def mp_gmm(data, max_components, **kwargs):
+def mp_gmm(data, max_components, parallel=True, **kwargs):
     """
     Gaussian mixture model fitting with parallelisation. The parallelisation only works when mutliple sets need to be
     fit.
@@ -348,6 +348,8 @@ def mp_gmm(data, max_components, **kwargs):
         Iterable (list) of data vectors to be fit
     max_components : int, iterable
         Maximum number of components for all models.
+    parallel : bool, optional
+        Whether to use parallelisation.
     kwargs
         Additional keyword arguments for GaussianMixture class.
 
@@ -358,16 +360,30 @@ def mp_gmm(data, max_components, **kwargs):
 
     """
 
+    # TODO: Make parallelisation a user choice
+
     # Determine number of components for each data vector
     n_components = [gmm_components(data=d, max_components=max_components) for d in data]
 
-    return [GaussianMixture(n_components=n, **kwargs).fit(X=d) if d is not None else None
-            for n, d in zip(n_components, data)]
+    """
+    The parallelisation can break in some cases. See the following page for more info
+    http://stackoverflow.com/questions/19705200/multiprocessing-with-numpy-makes-python-quit-unexpectedly-on-osx
 
-    # Determine gaussian mixture model and return
-    # TODO: Test and reactivate. Also do performance test with and without parallelisation.
-    # with Pool() as pool:
-    #     return pool.starmap(_mp_gmm, zip(data[:1], n_components[:1], repeat(kwargs)))
+    To solve this on macOS, compile numpy (and maybe scipy) with e.g. openBLAS:
+
+    sudo port install py36-numpy +gfortran +openblas
+    sudo port install py36-scipy +gfortran +gcc6 +openblas
+    """
+
+    # Fit models with parallelisation
+    if parallel:
+        with Pool() as pool:
+            return pool.starmap(_mp_gmm, zip(data, n_components, repeat(kwargs)))
+
+    # or without
+    else:
+        return [GaussianMixture(n_components=n, **kwargs).fit(X=d) if d is not None else None
+                for n, d in zip(n_components, data)]
 
 
 # -----------------------------------------------------------------------------
