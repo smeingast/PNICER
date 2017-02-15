@@ -337,7 +337,7 @@ def gmm_components(data, max_components, n_per_component=20):
 
 
 # -----------------------------------------------------------------------------
-def mp_gmm(data, max_components, parallel=True, **kwargs):
+def mp_gmm(data, max_components, parallel=True, ndata_max=10000, **kwargs):
     """
     Gaussian mixture model fitting with parallelisation. The parallelisation only works when mutliple sets need to be
     fit.
@@ -350,6 +350,10 @@ def mp_gmm(data, max_components, parallel=True, **kwargs):
         Maximum number of components for all models.
     parallel : bool, optional
         Whether to use parallelisation.
+    ndata_max : int, optional
+        Maximum sample size used for fitting. If the given sample size exceeds this value, 'ndata_max' samples will be
+        randomly selected for the fit. Default is 10000. For samples larger than 1E6 fitting otherwise takes a very long
+        time and usually for a color or magnitude distribution such large samples are not necessary.
     kwargs
         Additional keyword arguments for GaussianMixture class.
 
@@ -360,27 +364,35 @@ def mp_gmm(data, max_components, parallel=True, **kwargs):
 
     """
 
-    # TODO: Make parallelisation a user choice
-
-    # Determine number of components for each data vector
-    n_components = [gmm_components(data=d, max_components=max_components) for d in data]
-
     """
     The parallelisation can break in some cases. See the following page for more info
     http://stackoverflow.com/questions/19705200/multiprocessing-with-numpy-makes-python-quit-unexpectedly-on-osx
 
-    To solve this on macOS, compile numpy (and maybe scipy) with e.g. openBLAS:
+    To solve this on macOS, compile numpy (and maybe scipy) with macports and e.g. openBLAS:
 
-    sudo port install py36-numpy +gfortran +openblas
-    sudo port install py36-scipy +gfortran +gcc6 +openblas
+    sudo port install py36-numpy +gcc6 +openblas
+    sudo port install py36-scipy +gcc6 +openblas
     """
 
+    # Determine number of components for each data vector
+    n_components = [gmm_components(data=d, max_components=max_components) for d in data]
+
+    # Pick subset to make fitting faster
+    if ndata_max is not None:
+        for idx in range(len(data)):
+            if data[idx] is not None:
+                if len(data[idx]) > ndata_max:
+                    ridx = np.random.choice(len(data[idx]), size=ndata_max, replace=False)
+                    data[idx] = data[idx][ridx]
+
+    # TODO: For short data vectors the list comprehension is faster. This is just an easy fix for now
+    # TODO: Make parallelisation a user choice
     # Fit models with parallelisation
-    if parallel:
+    if len(data) > 100 and parallel:
         with Pool() as pool:
             return pool.starmap(_mp_gmm, zip(data, n_components, repeat(kwargs)))
 
-    # or without
+    # or without in list comprehension
     else:
         return [GaussianMixture(n_components=n, **kwargs).fit(X=d) if d is not None else None
                 for n, d in zip(n_components, data)]
