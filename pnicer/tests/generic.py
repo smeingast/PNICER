@@ -1,7 +1,8 @@
 def orion():
-    """This method goes through a typical PNICER session and creates an extinction map of Orion A from 2MASS data. """
 
-    # Import stuff
+    """ This method goes through a typical PNICER session and creates an extinction map of Orion A from 2MASS data. """
+
+    # Import
     from astropy.io import fits
     from astropy.coordinates import SkyCoord
 
@@ -55,5 +56,3 @@ def orion():
 
     """ If no errors pop up, then the basic PNICER package works """
     print("{0:<80s}".format("PNICER routines terminated successfully! Happy extinction mapping :) "))
-
-orion()
