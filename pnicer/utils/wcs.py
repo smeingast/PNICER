@@ -4,6 +4,7 @@ import numpy as np
 
 from astropy import wcs
 from astropy.io import fits
+from astropy.coordinates import SkyCoord
 from pnicer.utils.algebra import centroid_sphere
 
 
@@ -90,7 +91,7 @@ def data2header(lon, lat, frame, proj_code="TAN", pixsize=1/3600, enlarge=1.05, 
 
 
 # -----------------------------------------------------------------------------
-def data2grid(lon, lat, frame, proj_code="TAN", pixsize=5. / 60, **kwargs):
+def data2grid(lon, lat, frame, proj_code="TAN", pixsize=5. / 60, return_skycoord=False, **kwargs):
     """
     Method to build a WCS grid with a valid projection given a pixel scale.
 
@@ -106,8 +107,10 @@ def data2grid(lon, lat, frame, proj_code="TAN", pixsize=5. / 60, **kwargs):
         Any WCS projection code (e.g. CAR, TAN, etc.). Default is 'TAN'.
     pixsize : int, float, optional
         Pixel size of grid. Default is 10 arcminutes.
+    return_skycoord : bool, optional
+        Whether to return the grid coordinates as a SkyCoord object. Default is False
     kwargs
-        Additioanl projection parameters if required (e.g. pv2_1=-30, pv2_2=0 for a given COE projection)
+        Additional projection parameters if required (e.g. pv2_1=-30, pv2_2=0 for a given COE projection)
 
     Returns
     -------
@@ -127,6 +130,10 @@ def data2grid(lon, lat, frame, proj_code="TAN", pixsize=5. / 60, **kwargs):
 
     # Convert to world coordinates and get WCS grid for this projection
     world_grid = mywcs.wcs_pix2world(image_grid[0], image_grid[1], 0)
+
+    # Convert to SkyCoord instance if set
+    if return_skycoord:
+        world_grid = SkyCoord(*world_grid, frame=frame, unit="degree")
 
     # Return header and grid
     return header, world_grid
