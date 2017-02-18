@@ -198,9 +198,14 @@ class ContinuousExtinction:
 
     # -----------------------------------------------------------------------------
     @property
-    def _models_expected_value(self):
+    def _models_expected_value(self, method="weighted"):
         """
         Calculates the expected value for all model probability density distributions.
+
+        Parameters
+        ----------
+        method : str, optional
+            Method to use to calculate the expected value. Either 'weighted' (default) or 'integral'.
 
         Returns
         -------
@@ -209,7 +214,7 @@ class ContinuousExtinction:
 
         """
 
-        return [gmm_expected_value(gmm=gmm) for gmm in self.models]
+        return [gmm_expected_value(gmm=gmm, method=method) for gmm in self.models]
 
     # -----------------------------------------------------------------------------
     @property
@@ -228,9 +233,14 @@ class ContinuousExtinction:
 
     # -----------------------------------------------------------------------------
     @property
-    def _models_population_variance(self):
+    def _models_population_variance(self, method="weighted"):
         """
         Determine the population variance of the probability density distributions for all unique models.
+
+        Parameters
+        ----------
+        method : str, optional
+            Method to use to calculate the variance. Either 'weighted' (default) or 'integral'.
 
         Returns
         -------
@@ -239,7 +249,7 @@ class ContinuousExtinction:
 
         """
 
-        return [gmm_population_variance(gmm=gmm) for gmm in self.models]
+        return [gmm_population_variance(gmm=gmm, method=method) for gmm in self.models]
 
     # -----------------------------------------------------------------------------
     def _models_confidence_interval(self, levels):
