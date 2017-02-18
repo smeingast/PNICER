@@ -180,7 +180,7 @@ def gmm_max(gmm, sampling=50):
 
 
 # -----------------------------------------------------------------------------
-def gmm_expected_value(gmm, sampling=50):
+def gmm_expected_value(gmm, method="weighted", sampling=50):
     """
     Returns the coordinates of the expected value of the probability density distribution defined by the GMM.
 
@@ -188,6 +188,8 @@ def gmm_expected_value(gmm, sampling=50):
     ----------
     gmm : GaussianMixture
         Input GMM for which the expected value should be determined.
+    method : str, optional
+        Method to use to calculate the expected value. Either 'weighted' (default) or 'integral'.
     sampling : int, optional
         Sampling factor for GMM. The larger, the better the expected value will be determined. Default is 50.
 
@@ -198,11 +200,67 @@ def gmm_expected_value(gmm, sampling=50):
 
     """
 
-    # Draw samples
-    xrange, yrange = gmm_sample_xy(gmm=gmm, kappa=10, sampling=sampling)
+    # Use the GMM attributes to calculate the expected value
+    if method == "weighted":
+        return np.sum(gmm.means_.ravel() * gmm.weights_.ravel())
 
-    # Return expected value
-    return np.trapz(xrange * yrange, xrange)
+    # Or draw samples and integrate
+    elif method == "integral":
+
+        # Draw samples
+        xrange, yrange = gmm_sample_xy(gmm=gmm, kappa=10, sampling=sampling)
+
+        # Return expected value
+        return np.trapz(xrange * yrange, xrange)
+
+    # Raise error if invalid method specified
+    else:
+        raise ValueError("Method {0} not known. Use either 'weighted' or integral".format(method))
+
+
+# -----------------------------------------------------------------------------
+def gmm_population_variance(gmm, method="weighted", sampling=50):
+    """
+    Determine the population variance of the probability density distribution given by a GMM.
+
+    Parameters
+    ----------
+    gmm : GaussianMixture
+        Input Gaussian Mixture Model.
+    method : str, optional
+        Method to use to calculate the variance. Either 'weighted' (default) or 'integral'.
+    sampling : int, optional
+        Sampling factor for GMM. The larger, the better the expected value will be determined. Default is 50.
+
+    Returns
+    -------
+    float
+        Population variance for GMM.
+
+    """
+
+    # Use the GMM attributes to calculate the population variance
+    # http://stats.stackexchange.com/questions/16608/what-is-the-variance-of-the-weighted-mixture-of-two-gaussians
+    if method == "weighted":
+
+        m, c, w = gmm.means_.ravel(), gmm.covariances_.ravel(), gmm.weights_.ravel()
+        return np.sum(w * c) + np.sum(w * np.power(m, 2)) - np.power(np.sum(w * m), 2)
+
+    # Or draw samples and integrate
+    elif method == "integral":
+
+        # Get expected value
+        ev = gmm_expected_value(gmm=gmm, method="weighted")
+
+        # Get query range
+        xrange, yrange = gmm_sample_xy(gmm=gmm, kappa=10, sampling=sampling)
+
+        # Return population variance
+        return np.trapz(np.power(xrange, 2) * yrange, xrange) - ev ** 2
+
+    # Raise error if invalid method specified
+    else:
+        raise ValueError("Method {0} not known. Use either 'weighted' or integral".format(method))
 
 
 # -----------------------------------------------------------------------------
@@ -234,33 +292,6 @@ def gmm_confidence_interval(gmm, level=0.9, sampling=50):
 
     # Return interval
     return tuple(np.interp([(1 - level) / 2, level + (1 - level) / 2], cumint, xrange))
-
-
-# -----------------------------------------------------------------------------
-def gmm_population_variance(gmm):
-    """
-    Determine the population variance of the probability density distribution given by a GMM.
-
-    Parameters
-    ----------
-    gmm : GaussianMixture
-        Input Gaussian Mixture Model.
-
-    Returns
-    -------
-    float
-        Population variance for GMM.
-
-    """
-
-    # Get expected value
-    ev = gmm_expected_value(gmm=gmm)
-
-    # Get query range
-    xrange, yrange = gmm_sample_xy(gmm=gmm, kappa=10, sampling=50)
-
-    # Return population variance
-    return np.trapz(np.power(xrange, 2) * yrange, xrange) - ev**2
 
 
 # -----------------------------------------------------------------------------
