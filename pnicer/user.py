@@ -271,6 +271,11 @@ class ApparentMagnitudes(Magnitudes):
         # Calculate intrinsic magnitudes
         # intrinsic = [self.features[idx] - self.extvec.extvec[idx] * ext for idx in range(self.n_features)]
 
+        # Convert to unmasked arrays
+        mask = ext.mask
+        ext, var = ext.data, var.data
+        ext[mask], var[mask] = np.nan, np.nan
+
         # Return Intrinsic instance
         from pnicer.extinction import DiscreteExtinction
         return DiscreteExtinction(extinction=ext, variance=var, extvec=self.extvec.extvec,
