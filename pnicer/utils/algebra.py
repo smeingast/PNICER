@@ -114,7 +114,7 @@ def weighted_avg(values, weights):
 # -----------------------------------------------------------------------------
 def centroid_sphere(lon, lat, units="radian"):
     """
-    Calcualte the centroid on a sphere. Strictly valid only for a unit sphere and for a coordinate system with latitudes
+    Calculate the centroid on a sphere. Strictly valid only for a unit sphere and for a coordinate system with latitudes
     from -90 to 90 degrees and longitudes from 0 to 360 degrees.
 
     Parameters
