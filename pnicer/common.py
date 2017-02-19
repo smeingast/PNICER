@@ -1190,6 +1190,8 @@ class Coordinates:
             Projection code. Default is 'TAN'.
         pixsize : int, float, optional
             Pixel size of grid.
+        return_skycoord : bool, optional
+            Whether to return the grid coordinates as a SkyCoord object. Default is False
         kwargs
             Any additional header arguments for the projection (e.g. PV2_1, ect.)
 
