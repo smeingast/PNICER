@@ -7,7 +7,7 @@ from itertools import combinations
 from pnicer.utils.kde import mp_kde
 from pnicer.utils.wcs import data2grid
 from pnicer.utils.auxiliary import flatten_lol
-from pnicer.utils.gmm import mp_gmm, gmm_scale, gmm_expected_value, gmm_population_variance, gmm_components
+from pnicer.utils.gmm import mp_gmm, gmm_scale, gmm_expected_value, gmm_population_variance
 from pnicer.utils.plots import caxes, caxes_delete_ticklabels, finalize_plot
 from pnicer.utils.algebra import round_partial, centroid_sphere, distance_sky
 
@@ -858,12 +858,9 @@ class Features:
         if control._n_data_strict_mask < 20:
             return [None], var_all, idx_all, zp_all
 
-        # Set number of components
-        n_components = gmm_components(data=control.features[0][control._strict_mask], max_components=max_components)
-
         # Define and fit Gaussian Mixture Model
-        gmm = GaussianMixture(n_components=n_components, **self._set_defaults_gmm(**kwargs))
-        gmm = gmm.fit(X=np.expand_dims(control.features[0][control._strict_mask], 1))
+        gmm = mp_gmm(data=[control.features[0][control._strict_mask].reshape(-1, 1)], max_components=max_components,
+                     parallel=False, **self._set_defaults_gmm(**kwargs))[0]
 
         # Scaling factor to extinction
         scale = self.extvec._extinction_norm
@@ -905,29 +902,43 @@ class Features:
 
         """
 
+        # Create and index, variance and zp arrays for all sources
+        idx_all = np.full(self.n_data, fill_value=-1, dtype=np.int64)
+        var_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
+        zp_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
+
         # Rotate the data spaces
         science_rot, control_rot = self._rotate(), control._rotate()
+
+        # Return if after rotation no valid photometry is left
+        if control_rot.n_data == 0:
+            return [None], var_all, idx_all, zp_all
 
         # Get bandwidth from photometric errors
         bandwidth = np.round(np.mean(np.nanmean(self.features_err, axis=1)), 2)
 
         # Determine bin widths for grid according to bandwidth and sampling
         # TODO: Optimize sampling or make it user choice
-        sampling = 4
+        sampling = 2
         bin_grid = np.float(bandwidth / sampling)
 
         # Now we build a grid from the rotated data for all components but the first
         grid_data = Features._build_feature_grid(data=np.vstack(science_rot.features)[1:, :], precision=bin_grid)
 
         # Define NN algorithm
-        nbrs = NearestNeighbors(n_neighbors=1, algorithm="ball_tree").fit(grid_data.T)
+        try:
+            nbrs = NearestNeighbors(n_neighbors=1, algorithm="auto").fit(grid_data.T)
+
+        # Return if bad grid
+        except ValueError:
+            return [None], var_all, idx_all, zp_all
 
         # Assign each control field source the nearest neighbor grid point
         dis, idx = nbrs.kneighbors(np.vstack(control_rot.features)[1:, :].T)
         dis, idx = dis[:, 0], idx[:, 0]
 
         # Filter too large distances (in case the NN is further than the grid bin width)
-        # TODO: The smaller the sampling, the less data in a vector!
+        # TODO: The smaller the sampling (here fixed at 2), the less data in a vector!
         idx[dis > bandwidth / 2] = grid_data.shape[-1] + 1
 
         # Build data vectors for GMM-fits
@@ -935,31 +946,35 @@ class Features:
 
         # Each control field vector needs to contain at least 20 sources
         vectors_data = [None if len(v) < 20 else v for v in vectors_data]
-        # TODO: What to do if there are no valid vectors for this feature combination?
+
+        # If there are no valid vectors, return
+        if len(vectors_data) == 0:
+            return [None], var_all, idx_all, zp_all
 
         # Fit GMM for each vector
         vectors_gmm = mp_gmm(data=vectors_data, max_components=max_components, **self._set_defaults_gmm(**kwargs))
 
         # Determine scaling and shifting factor for models
         scale = self.extvec._extinction_norm
-        vectors_shift = [-gmm_expected_value(gmm=gmm) if isinstance(gmm, GaussianMixture) else None
-                         for gmm in vectors_gmm]
+        vectors_shift = [-gmm_expected_value(gmm=gmm, method="weighted")
+                         if isinstance(gmm, GaussianMixture) else None for gmm in vectors_gmm]
 
         # Scale GMMs to extinction
         vectors_gmm = [gmm_scale(gmm=gmm, scale=scale, shift=shift, reverse=True)
                        if isinstance(gmm, GaussianMixture) else None for gmm, shift in zip(vectors_gmm, vectors_shift)]
 
         # Determine variance for each vector
-        vectors_var = [gmm_population_variance(gmm=gmm) if gmm is not None else np.nan for gmm in vectors_gmm]
+        vectors_var = [gmm_population_variance(gmm=gmm, method="weighted")
+                       if gmm is not None else np.nan for gmm in vectors_gmm]
 
         # Get good models
         grid_good_idx = [i for i, j in enumerate(vectors_gmm) if isinstance(j, GaussianMixture)]
         vectors_gmm = [vectors_gmm[i] for i in grid_good_idx]
         vectors_shift = [vectors_shift[i] for i in grid_good_idx]
 
-        # Raise error if no good models remain
-        if len(vectors_gmm) < 1:
-            raise ValueError("No Gaussian Mixture Model converged")
+        # Return if no model converged
+        if len(vectors_gmm) == 0:
+            return [None], var_all, idx_all, zp_all
 
         # Find the nearest neighbor for each science target in the cleaned grid
         nbrs = NearestNeighbors(n_neighbors=1, algorithm="ball_tree").fit(grid_data[:, grid_good_idx].T)
@@ -968,14 +983,9 @@ class Features:
         # Determine variance for each source
         var = np.array([vectors_var[idx] for idx in science_idx])
 
-        # Create and index, variance and zp arrays for all sources
-        idx_all = np.full(self.n_data, fill_value=-1, dtype=np.int64)
+        # Fill and index, variance and zp arrays for all sources
         idx_all[self._strict_mask] = science_idx
-
-        var_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
         var_all[self._strict_mask] = var
-
-        zp_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
         zp_all[self._strict_mask] = (science_rot.features[0] + np.array(vectors_shift)[science_idx]) / scale
 
         # Return
@@ -1170,7 +1180,7 @@ class Coordinates:
             return self.coordinates.dec.degree
 
     # -----------------------------------------------------------------------------
-    def build_wcs_grid(self, proj_code="TAN", pixsize=10 / 60, **kwargs):
+    def build_wcs_grid(self, proj_code="TAN", pixsize=10 / 60, return_skycoord=False, **kwargs):
         """
         Generates a WCS grid.
 
@@ -1179,7 +1189,7 @@ class Coordinates:
         proj_code : str, optional
             Projection code. Default is 'TAN'.
         pixsize : int, float, optional
-            Pixel soze of grid.
+            Pixel size of grid.
         kwargs
             Any additional header arguments for the projection (e.g. PV2_1, ect.)
 
@@ -1190,8 +1200,8 @@ class Coordinates:
 
         """
 
-        return data2grid(lon=self.lon, lat=self.lat, frame=self.frame_name, proj_code=proj_code, pixsize=pixsize,
-                         **kwargs)
+        return data2grid(lon=self.lon, lat=self.lat, frame=self.frame_name, proj_code=proj_code,
+                         pixsize=pixsize, return_skycoord=return_skycoord, **kwargs)
 
 
 # ----------------------------------------------------------------------------- #
