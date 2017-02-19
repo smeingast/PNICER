@@ -2,6 +2,7 @@
 # Import stuff
 import sys
 import time
+import warnings
 import numpy as np
 
 from copy import copy
@@ -10,6 +11,8 @@ from astropy.io import fits
 from itertools import repeat
 from astropy.table import Table
 from multiprocessing.pool import Pool
+# noinspection PyPackageRequirements
+from sklearn.neighbors import NearestNeighbors
 
 from pnicer.common import Coordinates
 from pnicer.utils.gmm import gmm_scale, gmm_expected_value, gmm_sample_xy, gmm_max, gmm_confidence_interval, \
@@ -597,6 +600,159 @@ class DiscreteExtinction:
             print("{0:<15}{1:<15}{2:<15}".format("Progress (%)", "Elapsed (s)", "ETA (s)"))
         else:
             pass
+
+    # -----------------------------------------------------------------------------
+    def _build_map(self, bandwidth, metric="median", sampling=2, nicest=False, alpha=1 / 3, use_fwhm=False, **kwargs):
+
+        # Sampling must be an integer
+        if not isinstance(sampling, int):
+            raise ValueError("Sampling factor must be an integer")
+
+        # FWHM can only be used with a gaussian metric
+        if use_fwhm & (metric != "gaussian"):
+            raise ValueError("FWHM only valid for gaussian kernel")
+
+        # Determine pixel size
+        pixsize = bandwidth / sampling
+
+        # Adjust bandwidth in case FWHM is to be used
+        if use_fwhm:
+            bandwidth /= std2fwhm
+
+        # Set default projection
+        if "proj_code" not in kwargs:
+            kwargs["proj_code"] = "TAN"
+
+        # Set truncation scale based on metric
+        trunc_radius = bandwidth if (metric == "average") | (metric == "median") else 3 * bandwidth
+
+        # Create primary header for map with metric information
+        p_hdr = self._make_prime_header(bandwidth=bandwidth, metric=metric, sampling=sampling, nicest=nicest)
+
+        # Create WCS grid
+        map_hdr, map_wcs = self.coordinates.build_wcs_grid(pixsize=pixsize, return_skycoord=True, **kwargs)
+
+        # Determine number of nearest neighbors to query from 10 random samples
+        ridx = np.random.choice(len(self.coordinates.lon), size=10, replace=False)
+
+        d = distance_sky(self.coordinates.lon[ridx].reshape(-1, 1), self.coordinates.lat[ridx].reshape(-1, 1),
+                         self.coordinates.lon, self.coordinates.lat, unit="degree")
+        nnbrs = np.ceil(np.median(np.sum(d < trunc_radius / 2, axis=1))).astype(np.int)
+
+        # Maximum of 500 nearest neighbors
+        nnbrs = 500 if nnbrs > 500 else nnbrs
+
+        # Convert coordinates to 3D cartesian
+        sci_car = np.array(self.coordinates.coordinates.cartesian.xyz).T
+        map_car = np.array(map_wcs.cartesian.xyz.reshape(3, -1).T)
+
+        # Find nearest neighbors of grid points to all sources
+        nbrs = NearestNeighbors(n_neighbors=nnbrs, algorithm="auto", metric="euclidean", n_jobs=-1).fit(sci_car)
+        nbrs_idx = nbrs.kneighbors(map_car, return_distance=False)
+
+        # Calculate all distances in grid (in float32 to save some memory)
+        a = map_wcs.spherical.lon.degree.ravel().astype(np.float32)
+        b = map_wcs.spherical.lat.degree.ravel().astype(np.float32)
+        c = self.coordinates.coordinates.spherical.lon.degree[nbrs_idx].T.astype(np.float32)
+        d = self.coordinates.coordinates.spherical.lat.degree[nbrs_idx].T.astype(np.float32)
+        map_dis = distance_sky(a, b, c, d, unit="degree").T
+
+        # Index to mask sources outside range
+        bad_idx = map_dis > trunc_radius / 2
+
+        # Get extinction and variance for all good neighbours
+        nbrs_ext, nbrs_var = self.extinction[nbrs_idx], self.variance[nbrs_idx]
+        nbrs_ext[bad_idx], nbrs_var[bad_idx] = np.nan, np.nan
+
+        # Conditional choice for different metrics
+        if metric == "average":
+
+            # 3 sig filter
+            map_ext = np.nanmean(nbrs_ext, axis=1)
+            sigfil = (np.abs(nbrs_ext.T - map_ext) > 3 * np.nanstd(nbrs_ext, axis=1)).T
+
+            # Apply filter
+            nbrs_ext[sigfil], nbrs_var[sigfil] = np.nan, np.nan
+
+            # Make final maps
+            map_ext = np.nanmean(nbrs_ext, axis=1).reshape(map_wcs.data.shape)
+            map_num = np.sum(np.isfinite(nbrs_ext), axis=1).reshape(map_wcs.data.shape).astype(np.uint32)
+            map_var = np.sqrt(np.nansum(nbrs_var, axis=1)).reshape(map_wcs.data.shape) / map_num
+            map_rho = np.full_like(map_ext, fill_value=np.nan)
+
+        elif metric == "median":
+
+            # Make final maps
+            map_ext = np.nanmedian(nbrs_ext, axis=1)
+            map_var = np.nanmedian(np.abs(nbrs_ext.T - map_ext).T, axis=1).reshape(map_wcs.data.shape)   # MAD
+            map_ext = map_ext.reshape(map_wcs.data.shape)
+            map_num = np.sum(np.isfinite(nbrs_ext), axis=1).reshape(map_wcs.data.shape).astype(np.uint32)
+            map_rho = np.full_like(map_ext, fill_value=np.nan)
+
+        # If not median or average, fetch weight function
+        else:
+            wfunc = _get_weight_func(metric=metric, bandwidth=bandwidth)
+
+            # Ignore Runtime warnings (due to NaNs) for the following steps
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=RuntimeWarning)
+
+                # Get spatial weights:
+                w_theta = wfunc(wdis=map_dis)
+                w_theta = (w_theta.T / np.nanmax(w_theta, axis=1)).T
+
+                # Total weight with variance
+                w_total = w_theta / nbrs_var   # type: np.ndarray
+
+                # Do sigma clipping in extinction
+                map_ext = np.nansum(w_total * nbrs_ext, axis=1) / np.nansum(w_total, axis=1)
+                sigfil = (np.abs(nbrs_ext.T - map_ext) > 3 * np.nanstd(nbrs_ext, axis=1)).T
+
+                # Apply sigma clipping
+                nbrs_ext[sigfil], nbrs_var[sigfil], w_theta[sigfil], w_total[sigfil] = np.nan, np.nan, np.nan, np.nan
+
+                # Get approximate integral and normalize weights
+                w_theta = np.divide(w_theta, np.trapz(y=wfunc(np.arange(-100, 100, 0.01)),
+                                                      x=np.arange(-100, 100, 0.01)))
+
+                # Modify weights for NICEST and calculate variance
+                if nicest:
+
+                    # Set parameters for density correction
+                    k_lambda = np.max(self.extvec) if self.extvec is not None else 1
+                    beta = np.log(10) * alpha * k_lambda
+
+                    # Modify weights
+                    w_theta *= 10 ** (alpha * k_lambda * nbrs_ext)
+                    w_total *= 10 ** (alpha * k_lambda * nbrs_ext)
+
+                    # Correction factor (Equ. 34 in NICEST paper)
+                    map_cor = beta * np.nansum(w_total * nbrs_var, axis=1) / np.nansum(w_total, axis=1)
+
+                    # Calculate error for NICEST (private communication with M. Lombardi)
+                    map_var = np.nansum((w_total**2*np.exp(2*beta*nbrs_ext) * (1+beta*nbrs_ext)**2) / nbrs_var, axis=1)
+                    map_var /= np.nansum(w_total * np.exp(beta * nbrs_ext) / nbrs_var, axis=1) ** 2
+                    map_var = map_var.reshape(map_wcs.data.shape)
+
+                # Variance without NICEST
+                else:
+
+                    map_var = np.divide(np.nansum(w_total ** 2. * nbrs_var, axis=1), np.nansum(w_total, axis=1) ** 2)
+                    map_cor = np.full_like(map_var, fill_value=0.)
+                    map_var = map_var.reshape(map_wcs.data.shape)
+
+                # Determine weighted extinction
+                map_ext = np.nansum(w_total * nbrs_ext, axis=1) / np.nansum(w_total, axis=1) - map_cor
+                map_ext = map_ext.reshape(map_wcs.data.shape)
+
+                # Determine the number of sources used for each pixel
+                map_num = np.sum(np.isfinite(w_total), axis=1).reshape(map_wcs.data.shape).astype(np.uint32)
+
+                # Get source density
+                map_rho = np.nansum(w_theta, axis=1).reshape(map_wcs.data.shape)
+
+        # Return extinction map
+        return ExtinctionMap(ext=map_ext, var=map_var, num=map_num, rho=map_rho, map_header=map_hdr, prime_header=p_hdr)
 
     # -----------------------------------------------------------------------------
     def build_map(self, bandwidth, metric="median", sampling=2, nicest=False, alpha=1/3, use_fwhm=False, silent=False,
