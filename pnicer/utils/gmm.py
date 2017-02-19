@@ -461,3 +461,53 @@ def _mp_gmm(data, n_components, kwargs):
         return gmm
     else:
         return None
+
+
+# -----------------------------------------------------------------------------
+def combine_gmms(gmms, weights=None):
+    """
+
+    Parameters
+    ----------
+    gmms : list
+        List of GMMs to combine
+    weights : list, optional
+        List of weights for each model
+
+    Returns
+    -------
+    GaussianMixture
+        Combined GaussianMixture instance.
+
+    """
+
+    # Dummy checks
+    if not isinstance(gmms, list):
+        raise ValueError("Models must be provided in a list")
+
+    if np.sum([isinstance(g, GaussianMixture) for g in gmms]) != len(gmms):
+        raise ValueError("Must only supply GaussianMixture instances")
+
+    # Set weights to unity if not specified
+    if weights is None:
+        weights = [1 for _ in range(len(gmms))]
+
+    # Instantiate new GMM
+    gmm_combined = GaussianMixture(**gmms[0].get_params())
+
+    # Build components
+    gmm_means, gmm_variances, gmm_weights = gmms[0].means_, gmms[0].covariances_, gmms[0].weights_ * weights[0]
+    for gmm, w in zip(gmms[1:], weights[1:]):
+        gmm_means = np.vstack([gmm_means, gmm.means_])
+        gmm_weights = np.hstack([gmm_weights, gmm.weights_ * w])
+        gmm_variances = np.vstack([gmm_variances, gmm.covariances_])
+
+    # Add attributes to new mixture
+    gmm_combined.means_ = gmm_means
+    gmm_combined.covariances_ = gmm_variances
+    gmm_combined.weights_ = gmm_weights / np.sum(gmm_weights)
+    gmm_combined.precisions_ = np.linalg.inv(gmm_combined.covariances_)
+    gmm_combined.precisions_cholesky_ = np.linalg.cholesky(gmm_combined.precisions_)
+
+    # Return
+    return gmm_combined
