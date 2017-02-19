@@ -49,7 +49,7 @@ class Features:
         self.extvec = ExtinctionVector(extvec=feature_extvec)
 
         # Set coordinate attributes
-        self.coordinates = Coordinates(coordinates=feature_coordinates)
+        self.coordinates = feature_coordinates
 
         # Generate simple names for the magnitudes if not set
         if self.features_names is None:
@@ -399,8 +399,8 @@ class Features:
         extvec = self.extvec._extvec_rot
 
         # In case no coordinates are supplied they need to be masked
-        if self.coordinates.coordinates is not None:
-            coordinates = self.coordinates.coordinates[self._strict_mask]
+        if self.coordinates is not None:
+            coordinates = self.coordinates[self._strict_mask]
         else:
             coordinates = None
 
@@ -442,13 +442,79 @@ class Features:
 
             if isinstance(self, ApparentMagnitudes):
                 combination_instances.append(self.__class__(magnitudes=cdata, errors=cerror, extvec=extvec,
-                                                            coordinates=self.coordinates.coordinates, names=cnames))
+                                                            coordinates=self.coordinates, names=cnames))
             elif isinstance(self, ApparentColors):
                 combination_instances.append(self.__class__(colors=cdata, errors=cerror, extvec=extvec,
-                                                            coordinates=self.coordinates.coordinates, names=cnames))
+                                                            coordinates=self.coordinates, names=cnames))
 
         # Return list of combinations.
         return combination_instances
+
+    # ----------------------------------------------------------------------------- #
+    #                       Coordinate methods and attributes                       #
+    # ----------------------------------------------------------------------------- #
+
+    # -----------------------------------------------------------------------------
+    # noinspection PyUnresolvedReferences
+    def _build_wcs_grid(self, proj_code="TAN", pixsize=10 / 60, return_skycoord=False, **kwargs):
+        """
+        Generates a WCS grid.
+
+        Parameters
+        ----------
+        proj_code : str, optional
+            Projection code. Default is 'TAN'.
+        pixsize : int, float, optional
+            Pixel size of grid.
+        return_skycoord : bool, optional
+            Whether to return the grid coordinates as a SkyCoord object. Default is False
+        kwargs
+            Any additional header arguments for the projection (e.g. PV2_1, ect.)
+
+        Returns
+        -------
+        tuple
+            Tuple holding an astropy fits header and the world coordinate grid
+
+        """
+
+        return data2grid(lon=self.coordinates.spherical.lon.degree, lat=self.coordinates.spherical.lat.degree,
+                         frame=self._frame_name, proj_code=proj_code, pixsize=pixsize,
+                         return_skycoord=return_skycoord, **kwargs)
+
+    # -----------------------------------------------------------------------------
+    # noinspection PyUnresolvedReferences
+    @property
+    def _lon_deg(self):
+        """ Longitudes in degrees """
+        return self.coordinates.spherical.lon.degree
+
+    # -----------------------------------------------------------------------------
+    # noinspection PyUnresolvedReferences
+    @property
+    def _lat_deg(self):
+        """ Latitudes in degrees """
+        return self.coordinates.spherical.lat.degree
+
+    # -----------------------------------------------------------------------------
+    # noinspection PyUnresolvedReferences
+    @property
+    def _lon_rad(self):
+        """ Longitudes in radian """
+        return self.coordinates.spherical.lon.radian
+
+    # -----------------------------------------------------------------------------
+    # noinspection PyUnresolvedReferences
+    @property
+    def _lat_rad(self):
+        """ Latitudes in radian """
+        return self.coordinates.spherical.lat.radian
+
+    # -----------------------------------------------------------------------------
+    @property
+    def _frame_name(self):
+        """ Latitudes in radian """
+        return self.coordinates.frame.name
 
     # ----------------------------------------------------------------------------- #
     #                                Plotting methods                               #
@@ -485,7 +551,7 @@ class Features:
         """
 
         # Build a wcs gruid with the defaults
-        header, _ = self.coordinates.build_wcs_grid(proj_code="TAN", pixsize=1/60)
+        header, _ = self._build_wcs_grid(proj_code="TAN", pixsize=1 / 60)
 
         # Get footprint coordinates
         flon, flat = wcs.WCS(header=header).calc_footprint().T
@@ -559,7 +625,7 @@ class Features:
         from matplotlib.gridspec import GridSpec
 
         # Get a WCS grid
-        header, grid_world = self.coordinates.build_wcs_grid(proj_code=proj_code, pixsize=pixsize)
+        header, grid_world = self._build_wcs_grid(proj_code=proj_code, pixsize=pixsize)
 
         # Get aspect ratio of grid
         ar = header["NAXIS2"] / header["NAXIS1"]
@@ -579,8 +645,8 @@ class Features:
         axes = [plt.subplot(grid_plot[idx], projection=wcs.WCS(header=header)) for idx in range(self.n_features)]
 
         # Generate labels
-        llon, llat = "GLON" if "gal" in self.coordinates.frame_name else "RA", "GLAT" \
-            if "gal" in self.coordinates.frame_name else "DEC"
+        llon, llat = "GLON" if "gal" in self._frame_name else "RA", "GLAT" \
+            if "gal" in self._frame_name else "DEC"
 
         # Add feature labels
         [axes[idx].annotate(self.features_names[idx], xy=[0.5, 1.01], xycoords="axes fraction",
@@ -727,9 +793,9 @@ class Features:
             # Grab axes
             ax = axes[idx]
 
-            ax.scatter(self.coordinates.lon[self._features_masks[idx]][::skip],
-                       self.coordinates.lat[self._features_masks[idx]][::skip],
-                       transform=ax.get_transform(self.coordinates.frame_name), **kwargs)
+            ax.scatter(self._lon_deg[self._features_masks[idx]][::skip],
+                       self._lat_deg[self._features_masks[idx]][::skip],
+                       transform=ax.get_transform(self._frame_name), **kwargs)
 
             # Set axes limits
             ax.set_xlim(lim[0])
@@ -771,8 +837,8 @@ class Features:
 
             # Get density
             xgrid = np.vstack([grid_world[0].ravel(), grid_world[1].ravel()]).T
-            data = np.vstack([self.coordinates.lon[self._features_masks[idx]][::skip],
-                              self.coordinates.lat[self._features_masks[idx]][::skip]]).T
+            data = np.vstack([self._lon_deg[self._features_masks[idx]][::skip],
+                              self._lat_deg[self._features_masks[idx]][::skip]]).T
             dens = mp_kde(grid=xgrid, data=data, bandwidth=bandwidth, kernel=kernel,
                           norm=None).reshape(grid_world[0].shape)
 
@@ -1098,112 +1164,6 @@ class Features:
         """
 
         return [f - extinction * v for f, v in zip(self.features, self.extvec.extvec)]
-
-
-# ----------------------------------------------------------------------------- #
-# ----------------------------------------------------------------------------- #
-class Coordinates:
-
-    # -----------------------------------------------------------------------------
-    def __init__(self, coordinates):
-        """
-        Additional coordinates class to add a few convenient attributes to Sky coordinates.
-
-        Parameters
-        ----------
-        coordinates : SkyCoord
-            Astropy SkyCoord object.
-
-        """
-
-        self.coordinates = coordinates
-
-    # -----------------------------------------------------------------------------
-    def __len__(self):
-        return len(self.coordinates)
-
-    # -----------------------------------------------------------------------------
-    @property
-    def frame_name(self):
-        """
-        Coordinate frame type
-
-        Returns
-        -------
-        str
-
-        """
-
-        # Check coordinate system
-        if self.coordinates.frame.name not in ["icrs", "galactic"]:
-            raise ValueError("Frame '{0:s}' not supported".format(self.coordinates.frame.name))
-
-        # Otherwise return
-        return self.coordinates.frame.name
-
-    # -----------------------------------------------------------------------------
-    @property
-    def lon(self):
-        """
-        Longitude coordinate array.
-
-        Returns
-        -------
-        np.ndarray
-
-        """
-
-        if self.frame_name is None:
-            return None
-        elif self.frame_name == "galactic":
-            return self.coordinates.l.degree
-        elif self.frame_name == "icrs":
-            return self.coordinates.ra.degree
-
-    # -----------------------------------------------------------------------------
-    @property
-    def lat(self):
-        """
-        Latitude coordinate array.
-
-        Returns
-        -------
-        np.ndarray
-
-        """
-
-        if self.frame_name is None:
-            return None
-        elif self.frame_name == "galactic":
-            return self.coordinates.b.degree
-        elif self.frame_name == "icrs":
-            return self.coordinates.dec.degree
-
-    # -----------------------------------------------------------------------------
-    def build_wcs_grid(self, proj_code="TAN", pixsize=10 / 60, return_skycoord=False, **kwargs):
-        """
-        Generates a WCS grid.
-
-        Parameters
-        ----------
-        proj_code : str, optional
-            Projection code. Default is 'TAN'.
-        pixsize : int, float, optional
-            Pixel size of grid.
-        return_skycoord : bool, optional
-            Whether to return the grid coordinates as a SkyCoord object. Default is False
-        kwargs
-            Any additional header arguments for the projection (e.g. PV2_1, ect.)
-
-        Returns
-        -------
-        tuple
-            Tuple holding an astropy fits header and the world coordinate grid
-
-        """
-
-        return data2grid(lon=self.lon, lat=self.lat, frame=self.frame_name, proj_code=proj_code,
-                         pixsize=pixsize, return_skycoord=return_skycoord, **kwargs)
 
 
 # ----------------------------------------------------------------------------- #

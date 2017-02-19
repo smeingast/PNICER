@@ -59,7 +59,7 @@ class Magnitudes(Features):
 
         # Return Colors instance
         return ApparentColors(colors=colors, errors=colors_error, extvec=color_extvec,
-                              coordinates=self.coordinates.coordinates, names=names)
+                              coordinates=self.coordinates, names=names)
 
 
 # ----------------------------------------------------------------------------- #
@@ -278,8 +278,7 @@ class ApparentMagnitudes(Magnitudes):
 
         # Return Intrinsic instance
         from pnicer.extinction import DiscreteExtinction
-        return DiscreteExtinction(extinction=ext, variance=var, extvec=self.extvec.extvec,
-                                  coord=self.coordinates.coordinates)
+        return DiscreteExtinction(features=self, extinction=ext, variance=var)
 
     # -----------------------------------------------------------------------------
     # noinspection PyPackageRequirements

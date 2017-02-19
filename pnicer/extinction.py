@@ -14,7 +14,6 @@ from multiprocessing.pool import Pool
 # noinspection PyPackageRequirements
 from sklearn.neighbors import NearestNeighbors
 
-from pnicer.common import Coordinates
 from pnicer.utils.gmm import gmm_scale, gmm_expected_value, gmm_sample_xy, gmm_max, gmm_confidence_interval, \
     gmm_population_variance, gmm_sample_xy_components
 from pnicer.utils.plots import finalize_plot
@@ -359,8 +358,7 @@ class ContinuousExtinction:
         var[self._sources_mask] = np.array(self._models_population_variance)[idx]
 
         # Return
-        return DiscreteExtinction(extinction=ext, variance=var, coord=self.features.coordinates.coordinates,
-                                  extvec=self.features.extvec.extvec)
+        return DiscreteExtinction(features=self.features, extinction=ext, variance=var)
 
     # ----------------------------------------------------------------------------- #
     #                               Plotting methods                                #
@@ -536,7 +534,7 @@ class ContinuousExtinction:
 class DiscreteExtinction:
 
     # -----------------------------------------------------------------------------
-    def __init__(self, extinction, variance=None, coord=None, extvec=None):
+    def __init__(self, features, extinction, variance=None):
         """
         Class for Intrisic features and extinction.
 
@@ -546,18 +544,15 @@ class DiscreteExtinction:
             Extinction data.
         variance : np.ndarray, optional
             Variance in extinction.
-        coord : SkyCoord
-            Astropy SkyCoord instance.
-        extvec : ExtinctionVector, optional
-            Extinction Vector instance.
 
         """
 
+        # TODO: Add features to docstring
+
         # Set attributes
-        self.coordinates = Coordinates(coordinates=coord)
+        self.features = features
         self.extinction = extinction
         self.variance = np.zeros_like(extinction) if variance is None else variance
-        self.extvec = extvec
 
         # Sanity checks
         if len(self.extinction) != len(self.variance):
@@ -630,20 +625,20 @@ class DiscreteExtinction:
         p_hdr = self._make_prime_header(bandwidth=bandwidth, metric=metric, sampling=sampling, nicest=nicest)
 
         # Create WCS grid
-        map_hdr, map_wcs = self.coordinates.build_wcs_grid(pixsize=pixsize, return_skycoord=True, **kwargs)
+        map_hdr, map_wcs = self.features._build_wcs_grid(pixsize=pixsize, return_skycoord=True, **kwargs)
 
         # Determine number of nearest neighbors to query from 10 random samples
-        ridx = np.random.choice(len(self.coordinates.lon), size=10, replace=False)
+        ridx = np.random.choice(len(self.features._lon_deg), size=10, replace=False)
 
-        d = distance_sky(self.coordinates.lon[ridx].reshape(-1, 1), self.coordinates.lat[ridx].reshape(-1, 1),
-                         self.coordinates.lon, self.coordinates.lat, unit="degree")
+        d = distance_sky(self.features._lon_deg[ridx].reshape(-1, 1), self.features._lat_deg[ridx].reshape(-1, 1),
+                         self.features._lon_deg, self.features._lat_deg, unit="degree")
         nnbrs = np.ceil(np.median(np.sum(d < trunc_radius / 2, axis=1))).astype(np.int)
 
         # Maximum of 500 nearest neighbors
         nnbrs = 500 if nnbrs > 500 else nnbrs
 
         # Convert coordinates to 3D cartesian
-        sci_car = np.array(self.coordinates.coordinates.cartesian.xyz).T
+        sci_car = np.array(self.features.coordinates.cartesian.xyz).T
         map_car = np.array(map_wcs.cartesian.xyz.reshape(3, -1).T)
 
         # Find nearest neighbors of grid points to all sources
@@ -653,8 +648,8 @@ class DiscreteExtinction:
         # Calculate all distances in grid (in float32 to save some memory)
         a = map_wcs.spherical.lon.degree.ravel().astype(np.float32)
         b = map_wcs.spherical.lat.degree.ravel().astype(np.float32)
-        c = self.coordinates.coordinates.spherical.lon.degree[nbrs_idx].T.astype(np.float32)
-        d = self.coordinates.coordinates.spherical.lat.degree[nbrs_idx].T.astype(np.float32)
+        c = self.features._lon_deg[nbrs_idx].T.astype(np.float32)
+        d = self.features._lat_deg[nbrs_idx].T.astype(np.float32)
         map_dis = distance_sky(a, b, c, d, unit="degree").T
 
         # Index to mask sources outside range
@@ -719,7 +714,7 @@ class DiscreteExtinction:
                 if nicest:
 
                     # Set parameters for density correction
-                    k_lambda = np.max(self.extvec) if self.extvec is not None else 1
+                    k_lambda = np.max(self.features.extvec.extvec) if self.features.extvec.extvec is not None else 1
                     beta = np.log(10) * alpha * k_lambda
 
                     # Modify weights
@@ -805,10 +800,10 @@ class DiscreteExtinction:
             kwargs["proj_code"] = "TAN"
 
         # Set k_lambda for nicest
-        k_lambda = np.max(self.extvec) if self.extvec is not None else 1
+        k_lambda = np.max(self.features.extvec.extvec) if self.features.extvec.extvec is not None else 1
 
         # Create WCS grid
-        grid_header, (grid_lon, grid_lat) = self.coordinates.build_wcs_grid(pixsize=pixsize, **kwargs)
+        grid_header, (grid_lon, grid_lat) = self.features._build_wcs_grid(pixsize=pixsize, **kwargs)
 
         # Create pixel grid
         grid_x, grid_y = wcs.WCS(grid_header).wcs_world2pix(grid_lon, grid_lat, 0)
@@ -817,7 +812,7 @@ class DiscreteExtinction:
         grid_shape = grid_x.shape
 
         # Get pixel coordinates of sources
-        sources_x, sources_y = wcs.WCS(grid_header).wcs_world2pix(self.coordinates.lon, self.coordinates.lat, 0)
+        sources_x, sources_y = wcs.WCS(grid_header).wcs_world2pix(self.features._lon_deg, self.features._lat_deg, 0)
 
         # Split into a minimum of ~1x1 deg2 patches
         n = np.ceil(np.min(grid_shape) * pixsize)
@@ -870,12 +865,12 @@ class DiscreteExtinction:
 
                 # Get all sources within patch range
                 pfil = distance_sky(lon1=center_plon, lat1=center_plat,
-                                    lon2=self.coordinates.lon[self._clean_index],
-                                    lat2=self.coordinates.lat[self._clean_index], unit="degree") < pmax
+                                    lon2=self.features._lon_deg[self._clean_index],
+                                    lat2=self.features._lat_deg[self._clean_index], unit="degree") < pmax
 
                 # Filter data
-                splon = self.coordinates.lon[self._clean_index][pfil]
-                splat = self.coordinates.lat[self._clean_index][pfil]
+                splon = self.features._lon_deg[self._clean_index][pfil]
+                splat = self.features._lat_deg[self._clean_index][pfil]
                 sx, sy = sources_x[self._clean_index][pfil], sources_y[self._clean_index][pfil]
                 pext, pvar = self.extinction[self._clean_index][pfil], self.variance[self._clean_index][pfil]
 
@@ -982,8 +977,8 @@ class DiscreteExtinction:
         """
 
         # Create FITS columns
-        col1 = fits.Column(name="Lon", format="D", array=self.coordinates.lon)
-        col2 = fits.Column(name="Lat", format="D", array=self.coordinates.lat)
+        col1 = fits.Column(name="Lon", format="D", array=self.features._lon_deg)
+        col2 = fits.Column(name="Lat", format="D", array=self.features._lat_deg)
         col3 = fits.Column(name="Extinction", format="E", array=self.extinction)
         col4 = fits.Column(name="Variance", format="E", array=self.variance)
 
