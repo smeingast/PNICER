@@ -1,9 +1,10 @@
 # -----------------------------------------------------------------------------
 # Import packages
 import numpy as np
+import multiprocessing
 
 from itertools import repeat
-from multiprocessing import Pool
+from collections import Iterable
 from scipy.integrate import cumtrapz
 # noinspection PyPackageRequirements
 from sklearn.mixture import GaussianMixture
@@ -420,7 +421,7 @@ def mp_gmm(data, max_components, parallel=True, ndata_max=10000, **kwargs):
     # TODO: Make parallelisation a user choice
     # Fit models with parallelisation
     if len(data) > 100 and parallel:
-        with Pool() as pool:
+        with multiprocessing.Pool() as pool:
             return pool.starmap(_mp_gmm, zip(data, n_components, repeat(kwargs)))
 
     # or without in list comprehension
@@ -464,15 +465,30 @@ def _mp_gmm(data, n_components, kwargs):
 
 
 # -----------------------------------------------------------------------------
-def combine_gmms(gmms, weights=None):
+def gmm_combine(gmms, weights=None, params=None, good_idx=None,
+                gmms_means=None, gmms_variances=None, gmms_weights=None, gmms_zps=None):
     """
+    Method to combine Gaussian Mixture Models. This function create a new GaussianMixture instance and adds all
+    mixture components from the input models.
 
     Parameters
     ----------
-    gmms : list
-        List of GMMs to combine
-    weights : list, optional
-        List of weights for each model
+    gmms
+        List of GaussianMixture instances to combine.
+    weights : iterable, optional
+        Weights for each GaussianMixture instance in the input list.
+    params : dict, optional
+        GaussianMixture parameter dictionary for faster instantiation.
+    good_idx : iterable, optional
+        Boolean array or list for masking. True indicates a good entry in the input list, False a bad entry.
+    gmms_means : np.ndarray, optional
+        The means of all components for all input GMMs in an array. Can be used to speed up the combination process-
+    gmms_variances : np.ndarray, optional
+        Same as gmms_means, but for all variances of all components.
+    gmms_weights : np.ndarray, optional
+        Same as gmms_means, but for all weights of all components.
+    gmms_zps : np.ndarray, optional
+        Zero point for all models. If None is given, no shift is applied.
 
     Returns
     -------
@@ -482,32 +498,112 @@ def combine_gmms(gmms, weights=None):
     """
 
     # Dummy checks
-    if not isinstance(gmms, list):
-        raise ValueError("Models must be provided in a list")
+    if not isinstance(gmms, Iterable):
+        raise ValueError("Models must be provided as an iterable")
 
-    if np.sum([isinstance(g, GaussianMixture) for g in gmms]) != len(gmms):
-        raise ValueError("Must only supply GaussianMixture instances")
+    # Set good_idx
+    if good_idx is None:
+        good_idx = [True for _ in range(len(gmms))]
+
+    # Extract good GMMs
+    gmms = gmms[good_idx]
 
     # Set weights to unity if not specified
     if weights is None:
         weights = [1 for _ in range(len(gmms))]
+    else:
+        weights = weights[good_idx]
 
-    # Instantiate new GMM
-    gmm_combined = GaussianMixture(**gmms[0].get_params())
+    # Return None if weights are all bad
+    if np.sum(np.isfinite(weights)) == 0:
+        return None
 
-    # Build components
-    gmm_means, gmm_variances, gmm_weights = gmms[0].means_, gmms[0].covariances_, gmms[0].weights_ * weights[0]
-    for gmm, w in zip(gmms[1:], weights[1:]):
-        gmm_means = np.vstack([gmm_means, gmm.means_])
-        gmm_weights = np.hstack([gmm_weights, gmm.weights_ * w])
-        gmm_variances = np.vstack([gmm_variances, gmm.covariances_])
+    # Set zeropoints if not specified
+    if gmms_zps is None:
+        gmms_zps = [0. for _ in range(len(gmms))]
+    else:
+        gmms_zps = gmms_zps[good_idx]
+
+    # Get parameters if not set from first entry
+    if params is None:
+        params = gmms[0].get_params()
+
+    # Dummy check
+    if np.sum([isinstance(g, GaussianMixture) for g in gmms]) != len(gmms):
+        raise ValueError("Must only supply GaussianMixture instances")
+
+    # Instantiate combined GMM
+    gmm_combined = GaussianMixture(**params)
+
+    # Build combined components from supplied models if not given as attributes
+    if gmms_means is None or gmms_variances is None or gmms_weights is None:
+
+        gmm_combined_means = gmms[0].means_ + gmms_zps[0]
+        gmm_combined_variances = gmms[0].covariances_
+        gmm_combined_weights = gmms[0].weights_ * weights[0]
+        for gmm, w, zp in zip(gmms[1:], weights[1:], gmms_zps[1:]):
+            gmm_combined_means = np.vstack([gmm_combined_means, gmm.means_ + zp])
+            gmm_combined_variances = np.vstack([gmm_combined_variances, gmm.covariances_])
+            gmm_combined_weights = np.hstack([gmm_combined_weights, gmm.weights_ * w])
+
+    # If the attributes are provided, extract the parameters directly (much faster)
+    else:
+        gmm_combined_means = np.vstack(gmms_means[good_idx] + gmms_zps)
+        gmm_combined_variances = np.vstack(gmms_variances[good_idx])
+        gmm_combined_weights = np.hstack(gmms_weights[good_idx])
 
     # Add attributes to new mixture
-    gmm_combined.means_ = gmm_means
-    gmm_combined.covariances_ = gmm_variances
-    gmm_combined.weights_ = gmm_weights / np.sum(gmm_weights)
+    gmm_combined.n_components = len(gmm_combined_means)
+    gmm_combined.means_ = gmm_combined_means
+    gmm_combined.covariances_ = gmm_combined_variances
+    gmm_combined.weights_ = gmm_combined_weights / np.sum(gmm_combined_weights)
     gmm_combined.precisions_ = np.linalg.inv(gmm_combined.covariances_)
     gmm_combined.precisions_cholesky_ = np.linalg.cholesky(gmm_combined.precisions_)
 
-    # Return
+    # Add attribute to store number of input models used to create this model
+    gmm_combined.n_models = len(gmms)
+
+    # Return new GMM
     return gmm_combined
+
+
+# -----------------------------------------------------------------------------
+def mp_gmm_combine(gmms, weights=None, params=None, good_idx=None,
+                   gmms_means=None, gmms_variances=None, gmms_weights=None, gmms_zps=None):
+    """
+    Parallel routine for GMM combination.
+
+    Parameters
+    ----------
+    gmms : iterable
+        List of lists containing all GaussianMixture instances to combine.
+    weights : iterable, optional
+        Weights for all input models.
+    params : dict, optional
+        GaussianMixture parameter dictionary for faster instantiation.
+    good_idx : iterable, optional
+        Boolean array or list for masking. True indicates a good entry in the input list, False a bad entry.
+    gmms_means : np.ndarray, optional
+        The means of all components for all input GMMs in an array. Can be used to speed up the combination process-
+    gmms_variances : np.ndarray, optional
+        Same as gmms_means, but for all variances of all components.
+    gmms_weights : np.ndarray, optional
+        Same as gmms_means, but for all weights of all components.
+    gmms_zps : np.ndarray, optional
+        Zero point for all models. If None is given, no shift is applied.
+
+    Returns
+    -------
+    list
+        List of combined models.
+
+    """
+
+    # If no weights are given, use repeat for starmap call
+    if weights is None:
+        weights = repeat(weights)
+
+    # Run
+    with multiprocessing.Pool() as pool:
+        return pool.starmap(gmm_combine, zip(gmms, weights, repeat(params), good_idx,
+                                             gmms_means, gmms_variances, gmms_weights, gmms_zps))
