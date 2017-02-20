@@ -5,6 +5,7 @@ import numpy as np
 from copy import copy
 from astropy import wcs
 from astropy.io import fits
+from pnicer.utils.gmm import gmm_expected_value, gmm_population_variance
 
 
 # ----------------------------------------------------------------------------- #
@@ -12,8 +13,14 @@ from astropy.io import fits
 class ExtinctionMap:
 
     # -----------------------------------------------------------------------------
-    def __init__(self, map_ext):
+    def __init__(self, map_ext, map_header=None, prime_header=None,):
+
+        # Map
         self.map_ext = map_ext
+
+        # Headers
+        self.prime_header = fits.Header() if prime_header is None else prime_header
+        self.map_header = fits.Header() if map_header is None else map_header
 
     # -----------------------------------------------------------------------------
     @property
@@ -25,10 +32,94 @@ class ExtinctionMap:
 # ----------------------------------------------------------------------------- #
 class ContinuousExtinctionMap(ExtinctionMap):
 
-    def __index__(self, map_ext):
+    # -----------------------------------------------------------------------------
+    def __init__(self, map_models, map_header, prime_header=None):
 
         # Set instance attributes
-        super(ContinuousExtinctionMap, self).__init__(map_ext=map_ext)
+        super(ContinuousExtinctionMap, self).__init__(map_ext=map_models, map_header=map_header,
+                                                      prime_header=prime_header)
+
+    # -----------------------------------------------------------------------------
+    def _models_set_expected_value(self):
+        """ Set expected value for all models as attribute. """
+        for gmm in self.map_ext.ravel():
+            if gmm is not None:
+                setattr(gmm, "expected_value", gmm_expected_value(gmm=gmm, method="weighted"))
+
+    # -----------------------------------------------------------------------------
+    def _models_set_population_variance(self):
+        """ Set variance for all models as attribute. """
+        for gmm in self.map_ext.ravel():
+            if gmm is not None:
+                setattr(gmm, "population_variance", gmm_population_variance(gmm=gmm, method="weighted"))
+
+    # ----------------------------------------------------------------------------- #
+    #                               Map contructors                                 #
+    # ----------------------------------------------------------------------------- #
+
+    # -----------------------------------------------------------------------------
+    def __map_attr(self, attr, dtype=None):
+        """
+        Build map from model attributes
+
+        Parameters
+        ----------
+        attr : str
+            Model attribute to build the map from.
+        dtype : optional
+            Output data type
+
+        Returns
+        -------
+        np.ndarray
+            Map array built from attribute
+
+        """
+
+        # Initialize empty map
+        map_attr = np.full_like(self.map_ext, fill_value=0, dtype=dtype)
+
+        # Fill map
+        for idx in range(self.map_ext.size):
+
+            if self.map_ext.ravel()[idx] is not None:
+                map_attr.ravel()[idx] = getattr(self.map_ext.ravel()[idx], attr)
+            else:
+                map_attr.ravel()[idx] = 0
+
+        return map_attr
+
+    # -----------------------------------------------------------------------------
+    @property
+    def map_num(self):
+        """ Map with number of sources used for each pixel. """
+        return self.__map_attr(attr="n_models", dtype=np.uint32)
+
+    # -----------------------------------------------------------------------------
+    @property
+    def map_ncomponents(self):
+        """ Map with number of GMM components in each pixel. """
+        return self.__map_attr(attr="n_components", dtype=np.uint32)
+
+    # -----------------------------------------------------------------------------
+    @property
+    def map_expected_value(self):
+        """ Map with expected value of models. """
+        try:
+            return self.__map_attr(attr="expected_value", dtype=np.uint32)
+        except AttributeError:
+            self._models_set_expected_value()
+            return self.__map_attr(attr="expected_value", dtype=np.float32)
+
+    # -----------------------------------------------------------------------------
+    @property
+    def map_variance(self):
+        """ Map with population variances of models. """
+        try:
+            return self.__map_attr(attr="population_variance", dtype=np.float32)
+        except AttributeError:
+            self._models_set_population_variance()
+            return self.__map_attr(attr="population_variance", dtype=np.float32)
 
 
 # ----------------------------------------------------------------------------- #
@@ -56,13 +147,10 @@ class DiscreteExtinctionMap(ExtinctionMap):
         """
 
         # Set instance attributes
-        super(DiscreteExtinctionMap, self).__init__(map_ext=map_ext)
+        super(DiscreteExtinctionMap, self).__init__(map_ext=map_ext, map_header=map_header, prime_header=prime_header)
         self.map_var = map_var
         self.map_num = np.full_like(self.map_ext, fill_value=np.nan, dtype=np.uint32) if map_num is None else map_num
         self.map_rho = np.full_like(self.map_ext, fill_value=np.nan, dtype=np.float32) if map_num is None else map_rho
-        # Headers
-        self.prime_header = fits.Header() if prime_header is None else prime_header
-        self.map_header = map_header
 
         # Sanity check for dimensions
         if (self.map_ext.ndim != 2) | (self.map_var.ndim != 2) | (self.map_num.ndim != 2) | (self.map_rho.ndim != 2):
