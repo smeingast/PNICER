@@ -134,10 +134,16 @@ class Extinction:
         # Create dictionary with map properties
         map_dict = {"map_shape": map_shape, "prime_header": p_hdr, "map_header": map_hdr}
 
-        # Build map
+        # Build map for Discretized extinction
         if isinstance(self, DiscreteExtinction):
             return self._build_map(nbrs_idx=nbrs_idx.T, w_spatial=w_spatial, metric=metric,
                                    nicest=nicest, alpha=alpha, map_dict=map_dict)
+
+        # ...or continous extinction
+        elif isinstance(self, ContinuousExtinction):
+            return self._build_map(nbrs_idx=nbrs_idx.T, w_spatial=w_spatial, metric=metric,
+                                   nicest=nicest, alpha=alpha, map_dict=map_dict)
+        # Or raise an Error
         else:
             raise NotImplementedError
 
@@ -536,8 +542,12 @@ class ContinuousExtinction(Extinction):
         return DiscreteExtinction(features=self.features, extinction=ext, variance=var)
 
     # ----------------------------------------------------------------------------- #
-    #                               Extinction map                                  #
+    #                                Extinction map                                 #
     # ----------------------------------------------------------------------------- #
+
+    # -----------------------------------------------------------------------------
+    def _build_map(self, nbrs_idx, w_spatial, metric, nicest, alpha, map_dict):
+        raise NotImplementedError
 
     # ----------------------------------------------------------------------------- #
     #                               Plotting methods                                #
@@ -867,9 +877,9 @@ class DiscreteExtinction(Extinction):
 
         # Return extinction map
         map_shape = map_dict["map_shape"]
-        return ExtinctionMap(ext=map_ext.reshape(map_shape), var=map_var.reshape(map_shape),
-                             num=map_num.reshape(map_shape), rho=map_rho.reshape(map_shape),
-                             map_header=map_dict["map_header"], prime_header=map_dict["prime_header"])
+        return DiscreteExtinctionMap(map_ext=map_ext.reshape(map_shape), map_var=map_var.reshape(map_shape),
+                                     map_num=map_num.reshape(map_shape), map_rho=map_rho.reshape(map_shape),
+                                     map_header=map_dict["map_header"], prime_header=map_dict["prime_header"])
 
     # -----------------------------------------------------------------------------
     def _build_map_(self, bandwidth, metric="median", sampling=2, nicest=False, alpha=1/3, use_fwhm=False, **kwargs):
@@ -1022,7 +1032,8 @@ class DiscreteExtinction(Extinction):
                 map_rho = np.nansum(w_theta, axis=1).reshape(map_wcs.data.shape)
 
         # Return extinction map
-        return ExtinctionMap(ext=map_ext, var=map_var, num=map_num, rho=map_rho, map_header=map_hdr, prime_header=p_hdr)
+        return DiscreteExtinctionMap(map_ext=map_ext, map_var=map_var, map_num=map_num, map_rho=map_rho,
+                                     map_header=map_hdr, prime_header=p_hdr)
 
     # -----------------------------------------------------------------------------
     def _build_map_old(self, bandwidth, metric="median", sampling=2, nicest=False, alpha=1/3, use_fwhm=False,
@@ -1201,8 +1212,8 @@ class DiscreteExtinction(Extinction):
             print("All done in {0:0.1f}s".format(time.time() - tstart))
 
         # Return extinction map instance
-        return ExtinctionMap(ext=full[0], var=full[1], num=full[2], rho=full[3],
-                             map_header=grid_header, prime_header=phdr)
+        return DiscreteExtinctionMap(map_ext=full[0], map_var=full[1], map_num=full[2], map_rho=full[3],
+                                     map_header=grid_header, prime_header=phdr)
 
     # -----------------------------------------------------------------------------
     def save_fits(self, path):
@@ -1237,40 +1248,61 @@ class DiscreteExtinction(Extinction):
 class ExtinctionMap:
 
     # -----------------------------------------------------------------------------
-    def __init__(self, ext, var, map_header, prime_header=None, num=None, rho=None):
+    def __init__(self, map_ext):
+        self.map_ext = map_ext
+
+    # -----------------------------------------------------------------------------
+    @property
+    def shape(self):
+        return self.map_ext.shape
+
+
+# ----------------------------------------------------------------------------- #
+# ----------------------------------------------------------------------------- #
+class ContinuousExtinctionMap(ExtinctionMap):
+
+    def __index__(self, map_ext):
+
+        # Set instance attributes
+        super(ContinuousExtinctionMap, self).__init__(map_ext=map_ext)
+
+
+# ----------------------------------------------------------------------------- #
+# ----------------------------------------------------------------------------- #
+class DiscreteExtinctionMap(ExtinctionMap):
+
+    # -----------------------------------------------------------------------------
+    def __init__(self, map_ext, map_var, map_header, prime_header=None, map_num=None, map_rho=None):
         """
         Extinction map class.
 
         Parameters
         ----------
-        ext : np.ndarray
+        map_ext : np.ndarray
             2D Extintion map.
-        var : np.ndarray
+        map_var : np.ndarray
             2D Extinction variance map.
         map_header : astropy.fits.Header
             Header of grid from which extinction map was built.
-        num : np.ndarray, optional
+        map_num : np.ndarray, optional
             2D source count map.
-        rho : np.ndarray, optional
+        map_rho : np.ndarray, optional
             2D source density map.
 
         """
 
         # Set instance attributes
-        self.map, self.var = ext, var
-        self.num = np.full_like(self.map, fill_value=np.nan, dtype=np.uint32) if num is None else num
-        self.rho = np.full_like(self.map, fill_value=np.nan, dtype=np.float32) if num is None else rho
+        super(DiscreteExtinctionMap, self).__init__(map_ext=map_ext)
+        self.map_var = map_var
+        self.map_num = np.full_like(self.map_ext, fill_value=np.nan, dtype=np.uint32) if map_num is None else map_num
+        self.map_rho = np.full_like(self.map_ext, fill_value=np.nan, dtype=np.float32) if map_num is None else map_rho
+        # Headers
         self.prime_header = fits.Header() if prime_header is None else prime_header
         self.map_header = map_header
 
         # Sanity check for dimensions
-        if (self.map.ndim != 2) | (self.var.ndim != 2) | (self.num.ndim != 2) | (self.rho.ndim != 2):
+        if (self.map_ext.ndim != 2) | (self.map_var.ndim != 2) | (self.map_num.ndim != 2) | (self.map_rho.ndim != 2):
             raise TypeError("Input must be 2D arrays")
-
-    # -----------------------------------------------------------------------------
-    @property
-    def shape(self):
-        return self.map.shape
 
     # -----------------------------------------------------------------------------
     @staticmethod
@@ -1316,14 +1348,14 @@ class ExtinctionMap:
 
             # Plot Extinction map
             if idx == 0:
-                vmin, vmax = self._get_vlim(data=self.map, percentiles=[0.1, 90], r=100)
-                im = ax.imshow(self.map, origin="lower", interpolation="nearest", vmin=vmin, vmax=vmax, cmap=cmap)
+                vmin, vmax = self._get_vlim(data=self.map_ext, percentiles=[0.1, 90], r=100)
+                im = ax.imshow(self.map_ext, origin="lower", interpolation="nearest", vmin=vmin, vmax=vmax, cmap=cmap)
                 fig.colorbar(im, cax=cax, label="Extinction (mag)")
 
             # Plot error map
             elif idx == 2:
-                vmin, vmax = self._get_vlim(data=np.sqrt(self.var), percentiles=[1, 90], r=100)
-                im = ax.imshow(np.sqrt(self.var), origin="lower", interpolation="nearest", vmin=vmin, vmax=vmax,
+                vmin, vmax = self._get_vlim(data=np.sqrt(self.map_var), percentiles=[1, 90], r=100)
+                im = ax.imshow(np.sqrt(self.map_var), origin="lower", interpolation="nearest", vmin=vmin, vmax=vmax,
                                cmap=cmap)
                 if self.prime_header["METRIC"] == "median":
                     fig.colorbar(im, cax=cax, label="MAD (mag)")
@@ -1332,13 +1364,13 @@ class ExtinctionMap:
 
             # Plot source count map
             elif idx == 4:
-                vmin, vmax = self._get_vlim(data=self.num, percentiles=[1, 99], r=1)
-                im = ax.imshow(self.num, origin="lower", interpolation="nearest", vmin=vmin, vmax=vmax, cmap=cmap)
+                vmin, vmax = self._get_vlim(data=self.map_num, percentiles=[1, 99], r=1)
+                im = ax.imshow(self.map_num, origin="lower", interpolation="nearest", vmin=vmin, vmax=vmax, cmap=cmap)
                 fig.colorbar(im, cax=cax, label="N")
 
             elif idx == 6:
-                vmin, vmax = self._get_vlim(data=self.rho, percentiles=[1, 99], r=1)
-                im = ax.imshow(self.rho, origin="lower", interpolation="nearest", vmin=vmin, vmax=vmax, cmap=cmap)
+                vmin, vmax = self._get_vlim(data=self.map_rho, percentiles=[1, 99], r=1)
+                im = ax.imshow(self.map_rho, origin="lower", interpolation="nearest", vmin=vmin, vmax=vmax, cmap=cmap)
                 fig.colorbar(im, cax=cax, label=r"$\rho$")
 
             # Grab axes
@@ -1377,10 +1409,10 @@ class ExtinctionMap:
         # Create HDU list
         # noinspection PyTypeChecker
         hdulist = fits.HDUList([fits.PrimaryHDU(header=self.prime_header),
-                                fits.ImageHDU(data=self.map, header=self.map_header),
-                                fits.ImageHDU(data=self.var, header=self.map_header),
-                                fits.ImageHDU(data=self.num, header=self.map_header),
-                                fits.ImageHDU(data=self.rho, header=self.map_header)])
+                                fits.ImageHDU(data=self.map_ext, header=self.map_header),
+                                fits.ImageHDU(data=self.map_var, header=self.map_header),
+                                fits.ImageHDU(data=self.map_num, header=self.map_header),
+                                fits.ImageHDU(data=self.map_rho, header=self.map_header)])
 
         # Write
         hdulist.writeto(path, clobber=clobber)
