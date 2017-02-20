@@ -1121,7 +1121,7 @@ class Features:
         diff_index = [c - n for c, n in zip(clean_index, new_index)]
 
         # Fetch and sort all clean unique models
-        gmm_unique = gmm_unique[clean_index]
+        gmm_unique = list(gmm_unique[clean_index])
 
         # Rebase sources_index
         for c, d in zip(clean_index, diff_index):
