@@ -22,7 +22,182 @@ from pnicer.utils.algebra import centroid_sphere, distance_sky, std2fwhm, round_
 
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
-class ContinuousExtinction:
+# noinspection PyProtectedMember
+class Extinction:
+
+    def __init__(self, features):
+        self.features = features
+
+    # -----------------------------------------------------------------------------
+    def __len__(self):
+        return self.features.n_data
+
+    # -----------------------------------------------------------------------------
+    @staticmethod
+    def _make_prime_header(bandwidth, metric, sampling, nicest):
+        """
+        Creates a header with information about extinction mapping.
+
+        Parameters
+        ----------
+        bandwidth : int, float
+            Bandwidth used to create the map.
+        metric : str
+            Metric used to create the map.
+        sampling : int
+            Sampling factor of map.
+        nicest : bool
+            Whether NICEST tuning was activated.
+
+        Returns
+        -------
+        fits.Header
+            Astropy Fits header instance.
+
+        """
+
+        # Create empty header
+        header = fits.Header()
+
+        # Add keywords
+        header["BWIDTH"] = (bandwidth, "Bandwidth of kernel (degrees)")
+        header["METRIC"] = (metric, "Metric used to create this map")
+        header["SAMPLING"] = (sampling, "Sampling factor of map")
+        header["NICEST"] = (nicest, "Whether NICEST was activated")
+
+        return header
+
+    # -----------------------------------------------------------------------------
+    def build_map(self, bandwidth, metric="gaussian", use_fwhm=True, nicest=False, alpha=1/3, sampling=2, **kwargs):
+
+        # Sampling must be an integer
+        if not isinstance(sampling, int):
+            raise ValueError("Sampling factor must be an integer")
+
+        # FWHM can only be used with a gaussian metric
+        if use_fwhm & (metric != "gaussian"):
+            raise ValueError("FWHM only valid for gaussian kernel")
+
+        # Determine pixel size
+        pixsize = bandwidth / sampling
+
+        # Adjust bandwidth in case FWHM is to be used
+        if use_fwhm:
+            bandwidth /= std2fwhm
+
+        # Set default projection
+        if "proj_code" not in kwargs:
+            kwargs["proj_code"] = "TAN"
+
+        # Set truncation scale based on metric
+        trunc_radius = bandwidth if (metric == "average") | (metric == "median") else 3 * bandwidth
+
+        # Create WCS grid
+        map_hdr, map_wcs = self.features._build_wcs_grid(pixsize=pixsize, return_skycoord=True, **kwargs)
+
+        # Create primary header for map with metric information
+        p_hdr = self._make_prime_header(bandwidth=bandwidth, metric=metric, sampling=sampling, nicest=nicest)
+
+        # Get shape of map
+        map_shape = map_wcs.data.shape
+
+        # Determine number of nearest neighbors to query from 10 random samples
+        ridx = np.random.choice(len(self.features._lon_deg), size=10, replace=False)
+
+        d = distance_sky(self.features._lon_deg[ridx].reshape(-1, 1), self.features._lat_deg[ridx].reshape(-1, 1),
+                         self.features._lon_deg, self.features._lat_deg, unit="degree")
+        nnbrs = np.ceil(np.median(np.sum(d < trunc_radius / 2, axis=1))).astype(np.int)
+
+        # Maximum of 500 nearest neighbors
+        nnbrs = 500 if nnbrs > 500 else nnbrs
+
+        # Convert coordinates to 3D cartesian
+        sci_car = self.features.coordinates.cartesian.xyz.value.T
+        map_car = map_wcs.cartesian.xyz.reshape(3, -1).value.T
+
+        # Find nearest neighbors of grid points to all sources
+        nbrs = NearestNeighbors(n_neighbors=nnbrs, algorithm="auto", metric="euclidean", n_jobs=-1).fit(sci_car)
+        nbrs_idx = nbrs.kneighbors(map_car, return_distance=False)
+
+        # Calculate all distances in grid (in float32 to save some memory)
+        map_dis = distance_sky(map_wcs.spherical.lon.degree.ravel().astype(np.float32),
+                               map_wcs.spherical.lat.degree.ravel().astype(np.float32),
+                               self.features._lon_deg[nbrs_idx].T.astype(np.float32),
+                               self.features._lat_deg[nbrs_idx].T.astype(np.float32), unit="degree")
+
+        # Get spatial weights
+        w_spatial = self._get_weights(distances=map_dis, metric=metric, bandwidth=bandwidth)
+
+        # Mask sources outside of truncation scale
+        w_spatial[map_dis > trunc_radius / 2] = np.nan
+
+        # Create dictionary with map properties
+        map_dict = {"map_shape": map_shape, "prime_header": p_hdr, "map_header": map_hdr}
+
+        # Build map
+        if isinstance(self, DiscreteExtinction):
+            return self._build_map(nbrs_idx=nbrs_idx.T, w_spatial=w_spatial, metric=metric,
+                                   nicest=nicest, alpha=alpha, map_dict=map_dict)
+        else:
+            raise NotImplementedError
+
+    # -----------------------------------------------------------------------------
+    @staticmethod
+    def _get_weights(distances, metric, bandwidth):
+        """
+        Defines the weight function for extinction mapping.
+
+        Parameters
+        ----------
+        metric : str
+            The mtric to be used. One of 'uniform', 'triangular', 'gaussian', 'epanechnikov'
+        bandwidth : int, float
+            Bandwidth of metric (kernel).
+
+        """
+
+        if metric == "uniform" or metric == "average" or metric == "median":
+            def wfunc(wdis):
+                """
+                Returns
+                -------
+                float, np.ndarray
+
+                """
+                return np.ones_like(wdis)
+
+        elif metric == "gaussian":
+            def wfunc(wdis):
+                return np.exp(-0.5 * (wdis / bandwidth) ** 2)
+
+        elif metric == "epanechnikov":
+            # noinspection PyUnresolvedReferences
+            def wfunc(wdis):
+                val = 1 - (wdis / bandwidth) ** 2
+                val[val < 0] = 0
+                return val
+
+        elif metric == "triangular":
+            # noinspection PyUnresolvedReferences
+            def wfunc(wdis):
+                val = 1 - np.abs(wdis / bandwidth)
+                val[val < 0] = 0
+                return val
+
+        else:
+            raise TypeError("metric {0:s} not implemented".format(metric))
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=RuntimeWarning)
+            weights = wfunc(distances)
+
+            return np.divide(weights, np.trapz(y=wfunc(np.arange(-100, 100, 0.01)), x=np.arange(-100, 100, 0.01)))
+            # return weights / np.nanmax(weights, axis=0)
+
+
+# -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+class ContinuousExtinction(Extinction):
 
     def __init__(self, features, models, index, zp):
 
@@ -31,12 +206,12 @@ class ContinuousExtinction:
             raise ValueError("Incompatible input for InstrinsicProbability")
 
         # Set instance attributes
-        self.features = features
         self.models = models
         self.index = index
         self.zp = zp
+        super(ContinuousExtinction, self).__init__(features=features)
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     @property
     def _sources_mask(self):
         """
@@ -52,7 +227,7 @@ class ContinuousExtinction:
 
         return self.index < self.features.n_data
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     @property
     def _n_models(self):
         """
@@ -66,7 +241,7 @@ class ContinuousExtinction:
 
         return len(self.models)
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     @property
     def _n_sources_models(self):
         """
@@ -85,7 +260,7 @@ class ContinuousExtinction:
     #                             Model attribute tools                             #
     # ----------------------------------------------------------------------------- #
 
-    # ----------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     @property
     def _model_params(self):
         """
@@ -361,6 +536,10 @@ class ContinuousExtinction:
         return DiscreteExtinction(features=self.features, extinction=ext, variance=var)
 
     # ----------------------------------------------------------------------------- #
+    #                               Extinction map                                  #
+    # ----------------------------------------------------------------------------- #
+
+    # ----------------------------------------------------------------------------- #
     #                               Plotting methods                                #
     # ----------------------------------------------------------------------------- #
 
@@ -531,7 +710,7 @@ class ContinuousExtinction:
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
 # noinspection PyProtectedMember
-class DiscreteExtinction:
+class DiscreteExtinction(Extinction):
 
     # -----------------------------------------------------------------------------
     def __init__(self, features, extinction, variance=None):
@@ -540,6 +719,8 @@ class DiscreteExtinction:
 
         Parameters
         ----------
+        features
+            Features instance.
         extinction : np.ndarray
             Extinction data.
         variance : np.ndarray, optional
@@ -550,17 +731,13 @@ class DiscreteExtinction:
         # TODO: Add features to docstring
 
         # Set attributes
-        self.features = features
         self.extinction = extinction
         self.variance = np.zeros_like(extinction) if variance is None else variance
+        super(DiscreteExtinction, self).__init__(features=features)
 
         # Sanity checks
         if len(self.extinction) != len(self.variance):
             raise ValueError("Extinction and variance arrays must have equal length")
-
-    # -----------------------------------------------------------------------------
-    def __len__(self):
-        return len(self.extinction)
 
     # -----------------------------------------------------------------------------
     def __str__(self):
@@ -596,8 +773,106 @@ class DiscreteExtinction:
         else:
             pass
 
+    # ----------------------------------------------------------------------------- #
+    #                               Extinction map                                  #
+    # ----------------------------------------------------------------------------- #
+
     # -----------------------------------------------------------------------------
-    def _build_map(self, bandwidth, metric="median", sampling=2, nicest=False, alpha=1 / 3, use_fwhm=False, **kwargs):
+    def _build_map(self, nbrs_idx, w_spatial, metric, nicest, alpha, map_dict):
+
+        # Get extinction and variance for all good neighbours
+        bad_idx = ~np.isfinite(w_spatial)
+        nbrs_ext, nbrs_var = self.extinction[nbrs_idx], self.variance[nbrs_idx]
+        nbrs_ext[bad_idx], nbrs_var[bad_idx] = np.nan, np.nan
+
+        # Conditional choice for different metrics
+        if metric == "average":
+
+            # 3 sig filter
+            map_ext = np.nanmean(nbrs_ext, axis=0)
+            sigfil = (np.abs(nbrs_ext - map_ext) > 3 * np.nanstd(nbrs_ext, axis=0))
+
+            # Apply filter
+            nbrs_ext[sigfil], nbrs_var[sigfil] = np.nan, np.nan
+
+            # Make final maps
+            map_ext = np.nanmean(nbrs_ext, axis=0)
+            map_num = np.sum(np.isfinite(nbrs_ext), axis=0).astype(np.uint32)
+            map_var = np.sqrt(np.nansum(nbrs_var, axis=0)) / map_num
+            map_rho = np.full_like(map_ext, fill_value=np.nan)
+
+        elif metric == "median":
+
+            # Make final maps
+            map_ext = np.nanmedian(nbrs_ext, axis=0)
+            map_var = np.nanmedian(np.abs(nbrs_ext - map_ext), axis=0)   # MAD
+            map_ext = map_ext
+            map_num = np.sum(np.isfinite(nbrs_ext), axis=0).astype(np.uint32)
+            map_rho = np.full_like(map_ext, fill_value=np.nan)
+
+        # If not median or average, fetch weight function
+        else:
+
+            # Ignore Runtime warnings (due to NaNs) for the following steps
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=RuntimeWarning)
+
+                # Total weight with variance
+                w_total = w_spatial / nbrs_var  # type: np.ndarray
+
+                # Do sigma clipping in extinction
+                map_ext = np.nansum(w_total * nbrs_ext, axis=0) / np.nansum(w_total, axis=0)
+                sigfil = (np.abs(nbrs_ext - map_ext) > 3 * np.nanstd(nbrs_ext, axis=0))
+
+                # Apply sigma clipping
+                nbrs_ext[sigfil], nbrs_var[sigfil], w_spatial[sigfil], w_total[sigfil] = np.nan, np.nan, np.nan, np.nan
+
+                # TODO: Check and possibly fix this
+                # Get approximate integral and normalize weights
+                # w_spatial = np.divide(w_spatial, np.trapz(y=wfunc(np.arange(-100, 100, 0.01)),
+                #                                           x=np.arange(-100, 100, 0.01)))
+
+                # Modify weights for NICEST and calculate variance
+                if nicest:
+
+                    # Set parameters for density correction
+                    k_lambda = np.max(self.features.extvec.extvec) if self.features.extvec.extvec is not None else 1
+                    beta = np.log(10) * alpha * k_lambda
+
+                    # Modify weights
+                    w_spatial *= 10 ** (alpha * k_lambda * nbrs_ext)
+                    w_total *= 10 ** (alpha * k_lambda * nbrs_ext)
+
+                    # Correction factor (Equ. 34 in NICEST paper)
+                    map_cor = beta * np.nansum(w_total * nbrs_var, axis=0) / np.nansum(w_total, axis=0)
+
+                    # Calculate error for NICEST (private communication with M. Lombardi)
+                    map_var = np.nansum((w_total**2*np.exp(2*beta*nbrs_ext) * (1+beta*nbrs_ext)**2) / nbrs_var, axis=0)
+                    map_var /= np.nansum(w_total * np.exp(beta * nbrs_ext) / nbrs_var, axis=0) ** 2
+
+                # Variance without NICEST
+                else:
+
+                    map_var = np.divide(np.nansum(w_total ** 2. * nbrs_var, axis=0), np.nansum(w_total, axis=0) ** 2)
+                    map_cor = np.full_like(map_var, fill_value=0.)
+
+                # Determine weighted extinction
+                map_ext = np.nansum(w_total * nbrs_ext, axis=0) / np.nansum(w_total, axis=0) - map_cor
+
+                # Determine the number of sources used for each pixel
+                map_num = np.sum(np.isfinite(w_total), axis=0).astype(np.uint32)
+
+                # Get source density
+                map_rho = np.nansum(w_spatial, axis=0)
+
+        # Return extinction map
+        map_shape = map_dict["map_shape"]
+        return ExtinctionMap(ext=map_ext.reshape(map_shape), var=map_var.reshape(map_shape),
+                             num=map_num.reshape(map_shape), rho=map_rho.reshape(map_shape),
+                             map_header=map_dict["map_header"], prime_header=map_dict["prime_header"])
+
+    # -----------------------------------------------------------------------------
+    def _build_map_(self, bandwidth, metric="median", sampling=2, nicest=False, alpha=1/3, use_fwhm=False, **kwargs):
 
         # Sampling must be an integer
         if not isinstance(sampling, int):
@@ -750,8 +1025,8 @@ class DiscreteExtinction:
         return ExtinctionMap(ext=map_ext, var=map_var, num=map_num, rho=map_rho, map_header=map_hdr, prime_header=p_hdr)
 
     # -----------------------------------------------------------------------------
-    def build_map(self, bandwidth, metric="median", sampling=2, nicest=False, alpha=1/3, use_fwhm=False, silent=False,
-                  **kwargs):
+    def _build_map_old(self, bandwidth, metric="median", sampling=2, nicest=False, alpha=1/3, use_fwhm=False,
+                       silent=False, **kwargs):
         """
         Method to build an extinction map.
 
@@ -928,41 +1203,6 @@ class DiscreteExtinction:
         # Return extinction map instance
         return ExtinctionMap(ext=full[0], var=full[1], num=full[2], rho=full[3],
                              map_header=grid_header, prime_header=phdr)
-
-    # -----------------------------------------------------------------------------
-    @staticmethod
-    def _make_prime_header(bandwidth, metric, sampling, nicest):
-        """
-        Creates a header with information about extinction mapping.
-
-        Parameters
-        ----------
-        bandwidth : int, float
-            Bandwidth used to create the map.
-        metric : str
-            Metric used to create the map.
-        sampling : int
-            Sampling factor of map.
-        nicest : bool
-            Whether NICEST tuning was activated.
-
-        Returns
-        -------
-        fits.Header
-            Astropy Fits header instance.
-
-        """
-
-        # Create empty header
-        header = fits.Header()
-
-        # Add keywords
-        header["BWIDTH"] = (bandwidth, "Bandwidth of kernel (degrees)")
-        header["METRIC"] = (metric, "Metric used to create this map")
-        header["SAMPLING"] = (sampling, "Sampling factor of map")
-        header["NICEST"] = (nicest, "Whether NICEST was activated")
-
-        return header
 
     # -----------------------------------------------------------------------------
     def save_fits(self, path):
