@@ -124,6 +124,37 @@ def gmm_sample_xy(gmm, kappa=3, sampling=10, nmin=100, nmax=100000):
 
 
 # -----------------------------------------------------------------------------
+def gmm_score_samples_absolute(gmm, xmin, xmax, xstep):
+    """
+    Score probability density samples in a given range.
+
+    Parameters
+    ----------
+    gmm : GaussianMixture
+        Input GaussianMixtre to sample.
+    xmin : int, float
+        Minimum in query range.
+    xmax : int, float
+        Maximum in query range.
+    xstep : int, float
+        Step in query range.
+
+    Returns
+    -------
+        Array of scored samples
+
+    """
+    return np.exp(gmm.score_samples(np.expand_dims(np.arange(start=xmin, stop=xmax + xstep / 2, step=xstep), 1)))
+
+
+# -----------------------------------------------------------------------------
+def mp_gmm_score_samples_absolute(gmms, xmin, xmax, xstep):
+    """ Parallel sampling for multiple GMMs """
+    with multiprocessing.Pool() as pool:
+        return pool.starmap(gmm_score_samples_absolute, zip(gmms, repeat(xmin), repeat(xmax), repeat(xstep)))
+
+
+# -----------------------------------------------------------------------------
 def gmm_sample_xy_components(gmm, **kwargs):
     """
     Gets samples for each GMM component individually.
