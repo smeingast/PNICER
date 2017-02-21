@@ -72,6 +72,40 @@ def gmm_scale(gmm, shift=None, scale=None, reverse=False, params=None):
 
 
 # -----------------------------------------------------------------------------
+def gmm_query_range(gmm, kappa=3, means=None, variances=None):
+    """
+    Range determination for sampling of a given gmm.
+
+    Parameters
+    ----------
+    gmm : GaussianMixture
+        Mixture instance.
+    kappa : int, float, optional
+        Width of query range (in units of standard deviations).
+    means : array, optional
+        The means of the components for the GMM (faster is already known)
+    variances : array, optional
+        The variances of the components for the GMM.
+
+    Returns
+    -------
+    tuple
+        Min and Max of query range.
+
+    """
+
+    # Get GMM attributes
+    m = gmm.means_.ravel() if means is None else means.ravel()
+    s = np.sqrt(gmm.covariances_.ravel()) if variances is None else variances.ravel()
+
+    # Get min-max range options
+    roptions = list(zip(*[(float(mm - kappa * ss), float(mm + kappa * ss)) for ss, mm in zip(s, m)]))
+
+    # Determine min and max of range
+    return np.min(roptions[0]), np.max(roptions[1])
+
+
+# -----------------------------------------------------------------------------
 def gmm_sample_xy(gmm, kappa=3, sampling=10, nmin=100, nmax=100000):
     """
     Creates discrete values (x, y) for a given GMM instance.
@@ -96,15 +130,11 @@ def gmm_sample_xy(gmm, kappa=3, sampling=10, nmin=100, nmax=100000):
 
     """
 
-    # Get GMM attributes
+    # Get standard deviations of components
     s = np.sqrt(gmm.covariances_.ravel())
-    m = gmm.means_.ravel()
-
-    # Get min-max range options
-    roptions = list(zip(*[(float(mm - kappa * ss), float(mm + kappa * ss)) for ss, mm in zip(s, m)]))
 
     # Determine min and max of range
-    qmin, qmax = np.min(roptions[0]), np.max(roptions[1])
+    qmin, qmax = gmm_query_range(gmm=gmm, kappa=kappa)
 
     # Determine number of samples (number of samples from smallest standard deviation with 'sampling' samples)
     nsamples = (qmax - qmin) / (np.min(s) / sampling)
