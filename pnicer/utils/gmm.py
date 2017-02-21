@@ -611,7 +611,7 @@ def gmm_combine(gmms, weights=None, params=None, good_idx=None,
     else:
         gmm_combined_means = np.vstack(gmms_means[good_idx] + gmms_zps)
         gmm_combined_variances = np.vstack(gmms_variances[good_idx])
-        gmm_combined_weights = np.hstack(gmms_weights[good_idx])
+        gmm_combined_weights = np.hstack(gmms_weights[good_idx] * weights)
 
     # Add attributes to new mixture
     gmm_combined.n_components = len(gmm_combined_means)
