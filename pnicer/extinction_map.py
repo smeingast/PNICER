@@ -5,7 +5,7 @@ import numpy as np
 from copy import copy
 from astropy import wcs
 from astropy.io import fits
-from pnicer.utils.gmm import gmm_expected_value, gmm_population_variance
+from pnicer.utils.gmm import gmm_expected_value, gmm_population_variance, mp_gmm_score_samples_absolute
 
 
 # ----------------------------------------------------------------------------- #
@@ -24,8 +24,20 @@ class ExtinctionMap:
 
     # -----------------------------------------------------------------------------
     @property
-    def shape(self):
+    def map_shape(self):
+        """ Shape of map array. """
         return self.map_ext.shape
+
+    # -----------------------------------------------------------------------------
+    # noinspection PyTypeChecker
+    @property
+    def map_mask(self):
+        """ Mask for bad entries in map. """
+        try:
+            # TODO: Check this
+            return np.isnan(self.map_ext)
+        except TypeError:
+            return np.equal(self.map_ext, None)
 
 
 # ----------------------------------------------------------------------------- #
@@ -121,6 +133,64 @@ class ContinuousExtinctionMap(ExtinctionMap):
             self._models_set_population_variance()
             return self.__map_attr(attr="population_variance", dtype=np.float32)
 
+    # ----------------------------------------------------------------------------- #
+    #                               Cube contructors                                #
+    # ----------------------------------------------------------------------------- #
+
+    # -----------------------------------------------------------------------------
+    def _map2cube_header(self, naxis3, crval3, crpix3, cdelt3, ctype3=None):
+
+        # Get map header and modify NAXIS
+        cube_header = self.map_header.copy()
+        cube_header["NAXIS"] = 3
+
+        # Add cards
+        cube_header.insert("NAXIS2", fits.Card(keyword="NAXIS3", value=naxis3), after=True)
+        cube_header.insert("CRVAL2", fits.Card(keyword="CRVAL3", value=crval3), after=True)
+        cube_header.insert("CRPIX2", fits.Card(keyword="CRPIX3", value=crpix3), after=True)
+        cube_header.insert("CDELT2", fits.Card(keyword="CDELT3", value=cdelt3), after=True)
+        if ctype3 is not None:
+            cube_header.insert("CTYPE2", fits.Card(keyword="CTYPE3", value=ctype3), after=True)
+
+        return cube_header
+
+    # -----------------------------------------------------------------------------
+    def cube_probability_density(self, ext_min=-0.1, ext_max=2, ext_step=0.1):
+
+        # Get all models of map
+        models = self.map_ext[~self.map_mask]
+
+        # Score samples for given range
+        samples = mp_gmm_score_samples_absolute(gmms=models, xmin=ext_min, xmax=ext_max, xstep=ext_step)
+        nsamples = len(samples[0])
+
+        # Construct cube FITS header
+        cube_header = self._map2cube_header(naxis3=nsamples, crval3=ext_min, crpix3=0,
+                                            cdelt3=ext_step, ctype3="extinction")
+
+        # Create cube with probability densities
+        cube = np.full((self.map_ext.size, nsamples), fill_value=np.nan, dtype=np.float32)
+        cube[np.nonzero(~self.map_mask.ravel()), :] = np.vstack(samples)
+        cube = cube.reshape(*self.map_shape, -1)
+        cube = np.rollaxis(cube, 2, 0)
+
+        return ExtinctionCube(cube=cube, header=cube_header)
+
+
+# ----------------------------------------------------------------------------- #
+# ----------------------------------------------------------------------------- #
+class ExtinctionCube:
+
+    # -----------------------------------------------------------------------------
+    def __init__(self, cube, header=None):
+        self.cube = cube
+        self.header = header if header is not None else fits.Header()
+
+    # -----------------------------------------------------------------------------
+    def save_fits(self, path, overwrite=True):
+        hdu = fits.PrimaryHDU(self.cube, header=self.header)
+        hdu.writeto(path, overwrite=overwrite)
+
 
 # ----------------------------------------------------------------------------- #
 # ----------------------------------------------------------------------------- #
@@ -185,7 +255,7 @@ class DiscreteExtinctionMap(ExtinctionMap):
         # If the density should be plotted, set to 4
         nfig = 3
 
-        fig = plt.figure(figsize=[figsize, nfig * 0.9 * figsize * (self.shape[0] / self.shape[1])])
+        fig = plt.figure(figsize=[figsize, nfig * 0.9 * figsize * (self.map_shape[0] / self.map_shape[1])])
         grid = matplotlib.gridspec.GridSpec(ncols=2, nrows=nfig, bottom=0.1, top=0.9, left=0.1, right=0.9, hspace=0.08,
                                             wspace=0, height_ratios=[1] * nfig, width_ratios=[1, 0.05])
 
