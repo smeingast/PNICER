@@ -14,10 +14,10 @@ from multiprocessing.pool import Pool
 from sklearn.neighbors import NearestNeighbors
 
 from pnicer.utils.gmm import gmm_scale, gmm_expected_value, gmm_sample_xy, gmm_max, gmm_confidence_interval, \
-    gmm_population_variance, gmm_sample_xy_components
+    gmm_population_variance, gmm_sample_xy_components, mp_gmm_combine
 from pnicer.utils.plots import finalize_plot
 from pnicer.utils.algebra import centroid_sphere, distance_sky, std2fwhm, round_partial
-from pnicer.extinction_map import DiscreteExtinctionMap
+from pnicer.extinction_map import DiscreteExtinctionMap, ContinuousExtinctionMap
 
 
 # -----------------------------------------------------------------------------
@@ -141,8 +141,7 @@ class Extinction:
 
         # ...or continous extinction
         elif isinstance(self, ContinuousExtinction):
-            return self._build_map(nbrs_idx=nbrs_idx.T, w_spatial=w_spatial, metric=metric,
-                                   nicest=nicest, alpha=alpha, map_dict=map_dict)
+            return self._build_map(nbrs_idx=nbrs_idx.T, w_spatial=w_spatial, map_dict=map_dict)
         # Or raise an Error
         else:
             raise NotImplementedError
@@ -546,8 +545,34 @@ class ContinuousExtinction(Extinction):
     # ----------------------------------------------------------------------------- #
 
     # -----------------------------------------------------------------------------
-    def _build_map(self, nbrs_idx, w_spatial, metric, nicest, alpha, map_dict):
-        raise NotImplementedError
+    def _build_map(self, nbrs_idx, w_spatial, map_dict):
+
+        idx = self.index[nbrs_idx]
+        idx[~np.isfinite(w_spatial)] = self.features.n_data + 1
+        good_idx = idx < self.features.n_data   # type: np.ndarray
+        idx[~good_idx] = 0
+
+        # Get model index for all neighbors
+        nbrs_models = np.array(self.models)[idx]
+
+        # Get GMM attributes for neighbors
+        nbrs_means = np.array(self._models_means)[idx]
+        nbrs_variances = np.array(self._models_variances)[idx]
+        nbrs_weights = np.array(self._models_weights)[idx]
+        nbrs_zp = self.zp[nbrs_idx]
+
+        # Build combined Models
+        params = self.models[0].get_params()
+        map_gmms = mp_gmm_combine(gmms=nbrs_models.T, weights=w_spatial.T, params=params, good_idx=good_idx.T,
+                                  gmms_means=nbrs_means.T, gmms_variances=nbrs_variances.T,
+                                  gmms_weights=nbrs_weights.T, gmms_zps=nbrs_zp.T)
+
+        # Reshape to map
+        map_shape = map_dict["map_shape"]
+        map_gmms = np.array(map_gmms).reshape(map_shape)
+
+        return ContinuousExtinctionMap(map_models=map_gmms, map_header=map_dict["map_header"],
+                                       prime_header=map_dict["prime_header"])
 
     # ----------------------------------------------------------------------------- #
     #                               Plotting methods                                #
