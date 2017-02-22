@@ -545,7 +545,7 @@ class ContinuousExtinction(Extinction):
     # ----------------------------------------------------------------------------- #
 
     # -----------------------------------------------------------------------------
-    def _build_map(self, nbrs_idx, w_spatial, map_dict):
+    def _build_map(self, nbrs_idx, w_spatial, map_dict, nicest=False):
 
         idx = self.index[nbrs_idx]
         idx[~np.isfinite(w_spatial)] = self.features.n_data + 1
@@ -561,9 +561,17 @@ class ContinuousExtinction(Extinction):
         nbrs_weights = np.array(self._models_weights)[idx]
         nbrs_zp = self.zp[nbrs_idx]
 
+        # Adjust weights with variance
+        var_weights = np.array(self._models_population_variance)[idx]
+        w_total = w_spatial / var_weights
+
+        # Modify weights with NICEST factor
+        if nicest:
+            w_total *= 10**(0.33 * 2.5 * nbrs_zp)
+
         # Build combined Models
         params = self.models[0].get_params()
-        map_gmms = mp_gmm_combine(gmms=nbrs_models.T, weights=w_spatial.T, params=params, good_idx=good_idx.T,
+        map_gmms = mp_gmm_combine(gmms=nbrs_models.T, weights=w_total.T, params=params, good_idx=good_idx.T,
                                   gmms_means=nbrs_means.T, gmms_variances=nbrs_variances.T,
                                   gmms_weights=nbrs_weights.T, gmms_zps=nbrs_zp.T)
 
