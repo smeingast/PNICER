@@ -918,7 +918,7 @@ class Features:
         # Generate outout arrays
         idx_all = np.full(self.n_data, fill_value=-1, dtype=np.int64)
         var_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
-        zp_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
+        zp_all = np.full(self.n_data, fill_value=0, dtype=np.float32)
 
         # Reuqire a minimum of 20 sources in control fields
         if control._n_data_strict_mask < 20:
