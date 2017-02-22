@@ -140,8 +140,8 @@ def gmm_sample_xy(gmm, kappa=3, sampling=10, nmin=100, nmax=100000):
     nsamples = (qmax - qmin) / (np.min(s) / sampling)
 
     # Set min/max numer of samples
-    nsamples = 100 if nsamples < nmin else nsamples
-    nsamples = 100000 if nsamples > nmax else nsamples
+    nsamples = nmin if nsamples < nmin else nsamples
+    nsamples = nmax if nsamples > nmax else nsamples
 
     # Get query range
     xrange = np.linspace(start=qmin, stop=qmax, num=nsamples)
