@@ -1,5 +1,6 @@
 # -----------------------------------------------------------------------------
 # Import stuff
+import warnings
 import numpy as np
 
 from copy import copy
@@ -9,7 +10,9 @@ from scipy.integrate import cumtrapz
 from scipy.interpolate import interp1d
 
 from pnicer.utils.algebra import round_partial
-from pnicer.utils.gmm import gmm_expected_value, gmm_population_variance, mp_gmm_score_samples_absolute, gmm_query_range
+from pnicer.utils.gmm import gmm_expected_value, gmm_population_variance, mp_gmm_score_samples_absolute,\
+    gmm_query_range, gmm_sample_xy
+from pnicer.utils.plots import finalize_plot
 
 
 # ----------------------------------------------------------------------------- #
@@ -60,6 +63,11 @@ class ContinuousExtinctionMap(ExtinctionMap):
     def _models(self):
         """ All models in the map. """
         return self.map_ext[~self.map_mask]
+
+    # -----------------------------------------------------------------------------
+    @property
+    def _n_models(self):
+        return len(self._models)
 
     # -----------------------------------------------------------------------------
     @property
@@ -187,6 +195,13 @@ class ContinuousExtinctionMap(ExtinctionMap):
         except AttributeError:
             self._models_set_population_variance()
             return self.__map_attr(attr="population_variance", dtype=np.float32)
+
+    # -----------------------------------------------------------------------------
+    def discretize(self):
+        # TODO: Add rho to continuous extinction map
+        return DiscreteExtinctionMap(map_ext=self.map_expected_value, map_var=self.map_variance,
+                                     map_num=self.map_num, map_rho=None,
+                                     map_header=self.map_header, prime_header=self.prime_header)
 
     # ----------------------------------------------------------------------------- #
     #                               Cube contructors                                #
@@ -379,19 +394,74 @@ class ContinuousExtinctionMap(ExtinctionMap):
         return ExtinctionCube(cube=1 - cube.cube, header=cube.header)
 
     # -----------------------------------------------------------------------------
-    def map2cube(self, mode="probability density", ext_min=0, ext_max=2, ext_step=0.1):
+    def __cube_extinction_max(self):
+        """
+        Cube of extinction with probabilites in the third axis. Each pixel gives information on the maximum extinction
+        at a certain probability.
+
+        Returns
+        -------
+        ExtinctionCube
+
+        """
+
+        # Get full probability density cube
+        cube_pd = self.__cube_prob_dens_full()
+
+        # Construct cumulative integral
+        cube = cumtrapz(cube_pd.cube, dx=cube_pd.header["CDELT3"], axis=0, initial=0)
+
+        # Construct new matrix
+        cube_extinction = np.full((99, *self.map_shape), fill_value=np.nan, dtype=np.float32)
+
+        # Construct loop mesh
+        cube_xx, cube_yy = np.meshgrid(np.arange(self.map_shape[0]), np.arange(self.map_shape[1]))
+
+        # Loop over all pixels in interpolate probabilities
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=RuntimeWarning)
+
+            for ix, iy in zip(cube_xx.ravel(), cube_yy.ravel()):
+                f = interp1d(cube[:, ix, iy], cube_pd.crange3)
+                cube_extinction[:, ix, iy] = f((np.arange(99) + 1) / 100)
+
+        # Modify reference value in header
+        header = cube_pd.header.copy()
+        header["CRPIX3"] = 1
+        header["CRVAL3"] = 0.01
+        header["CDELT3"] = 0.01
+        header["CTYPE3"] = "probability"
+
+        return ExtinctionCube(cube=cube_extinction, header=header)
+
+    # -----------------------------------------------------------------------------
+    def __cube_extinction_min(self):
+        """
+        Cube of extinction with probabilites in the third axis. Each pixel gives information on the minimum extinction
+        at a certain probability.
+
+        Returns
+        -------
+        ExtinctionCube
+
+        """
+
+        # Get full query range of GMM map
+        cube_extinction = self.__cube_extinction_max()
+        cube_extinction.cube = np.flip(cube_extinction.cube, axis=0)
+
+        return cube_extinction
+
+    # -----------------------------------------------------------------------------
+    def map2cube(self, mode="probability density", **kwargs):
         """
         Frontend user method to constuct FITS cubes of various kinds.
 
         Parameters
         ----------
-        mode
-        ext_min : int, float, optional
-            Minimum extinction to sample.
-        ext_max : int, float, optional
-            Maximum extinction to sample.
-        ext_step : int, float, optional
-            Step size in extinction.
+        mode : str, optional
+            Type of cube to return. Can be one of 'probability density', 'probability max', 'probability max',
+            'extinction max', or 'extinction min'
 
         Returns
         -------
@@ -400,11 +470,15 @@ class ContinuousExtinctionMap(ExtinctionMap):
         """
 
         if mode == "probability density":
-            return self.__cube_probability_density(ext_min=ext_min, ext_max=ext_max, ext_step=ext_step)
+            return self.__cube_probability_density(**kwargs)
         elif mode == "probability max":
-            return self.__cube_probability_max(ext_min=ext_min, ext_max=ext_max, ext_step=ext_step)
+            return self.__cube_probability_max(**kwargs)
         elif mode == "probability min":
-            return self.__cube_probability_min(ext_min=ext_min, ext_max=ext_max, ext_step=ext_step)
+            return self.__cube_probability_min(**kwargs)
+        elif mode == "extinction max":
+            return self.__cube_extinction_max()
+        elif mode == "extinction min":
+            return self.__cube_extinction_min()
         else:
             raise ValueError("Mode {0} not implemented".format(mode))
 
@@ -467,7 +541,7 @@ class DiscreteExtinctionMap(ExtinctionMap):
         self.map_rho = np.full_like(self.map_ext, fill_value=np.nan, dtype=np.float32) if map_num is None else map_rho
 
         # Sanity check for dimensions
-        if (self.map_ext.ndim != 2) | (self.map_var.ndim != 2) | (self.map_num.ndim != 2) | (self.map_rho.ndim != 2):
+        if (self.map_ext.ndim != 2) | (self.map_var.ndim != 2):
             raise TypeError("Input must be 2D arrays")
 
     # -----------------------------------------------------------------------------
