@@ -8,6 +8,8 @@ from astropy import wcs
 from astropy.io import fits
 from scipy.integrate import cumtrapz
 from scipy.interpolate import interp1d
+# noinspection PyPackageRequirements
+from sklearn.mixture import GaussianMixture
 
 from pnicer.utils.algebra import round_partial
 from pnicer.utils.gmm import gmm_expected_value, gmm_population_variance, mp_gmm_score_samples_absolute,\
@@ -312,7 +314,7 @@ class ContinuousExtinctionMap(ExtinctionMap):
         cube_pd = self.__cube_prob_dens_full()
 
         # Construct interpolator for probability density
-        f = interp1d(cube_pd.crange3, cube_pd.cube, axis=0, fill_value=0)
+        f = interp1d(cube_pd.crange3, cube_pd.cube, axis=0, bounds_error=False, fill_value=0)
 
         # Get actual query range
         cube = f(np.arange(ext_min, ext_max + ext_step / 2, step=ext_step))
@@ -603,8 +605,8 @@ class ExtinctionCube:
         return self.cube.shape
 
     # -----------------------------------------------------------------------------
-    def save_fits(self, path, overwrite=True):
-        hdu = fits.PrimaryHDU(self.cube, header=self.header)
+    def save_fits(self, path, overwrite=True, precision=1E-4):
+        hdu = fits.PrimaryHDU(round_partial(self.cube, precision=precision), header=self.header)
         hdu.writeto(path, overwrite=overwrite)
 
 
