@@ -68,7 +68,7 @@ class Extinction:
         return header
 
     # -----------------------------------------------------------------------------
-    def build_map(self, bandwidth, metric="gaussian", use_fwhm=True, nicest=False, alpha=1/3, sampling=2, **kwargs):
+    def build_map(self, bandwidth, metric="gaussian", use_fwhm=False, nicest=False, alpha=1/3, sampling=2, **kwargs):
 
         # Sampling must be an integer
         if not isinstance(sampling, int):
