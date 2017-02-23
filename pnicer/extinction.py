@@ -823,42 +823,42 @@ class DiscreteExtinction(Extinction):
     # -----------------------------------------------------------------------------
     def _build_map(self, nbrs_idx, w_spatial, metric, nicest, alpha, map_dict):
 
-        # Get extinction and variance for all good neighbours
-        bad_idx = ~np.isfinite(w_spatial)
-        nbrs_ext, nbrs_var = self.extinction[nbrs_idx], self.variance[nbrs_idx]
-        nbrs_ext[bad_idx], nbrs_var[bad_idx] = np.nan, np.nan
+        # Ignore Runtime warnings (due to NaNs) for the following steps
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=RuntimeWarning)
 
-        # Conditional choice for different metrics
-        if metric == "average":
+            # Get extinction and variance for all good neighbours
+            bad_idx = ~np.isfinite(w_spatial)
+            nbrs_ext, nbrs_var = self.extinction[nbrs_idx], self.variance[nbrs_idx]
+            nbrs_ext[bad_idx], nbrs_var[bad_idx] = np.nan, np.nan
 
-            # 3 sig filter
-            map_ext = np.nanmean(nbrs_ext, axis=0)
-            sigfil = (np.abs(nbrs_ext - map_ext) > 3 * np.nanstd(nbrs_ext, axis=0))
+            # Conditional choice for different metrics
+            if metric == "average":
 
-            # Apply filter
-            nbrs_ext[sigfil], nbrs_var[sigfil] = np.nan, np.nan
+                # 3 sig filter
+                map_ext = np.nanmean(nbrs_ext, axis=0)
+                sigfil = (np.abs(nbrs_ext - map_ext) > 3 * np.nanstd(nbrs_ext, axis=0))
 
-            # Make final maps
-            map_ext = np.nanmean(nbrs_ext, axis=0)
-            map_num = np.sum(np.isfinite(nbrs_ext), axis=0).astype(np.uint32)
-            map_var = np.sqrt(np.nansum(nbrs_var, axis=0)) / map_num
-            map_rho = np.full_like(map_ext, fill_value=np.nan)
+                # Apply filter
+                nbrs_ext[sigfil], nbrs_var[sigfil] = np.nan, np.nan
 
-        elif metric == "median":
+                # Make final maps
+                map_ext = np.nanmean(nbrs_ext, axis=0)
+                map_num = np.sum(np.isfinite(nbrs_ext), axis=0).astype(np.uint32)
+                map_var = np.sqrt(np.nansum(nbrs_var, axis=0)) / map_num
+                map_rho = np.full_like(map_ext, fill_value=np.nan)
 
-            # Make final maps
-            map_ext = np.nanmedian(nbrs_ext, axis=0)
-            map_var = np.nanmedian(np.abs(nbrs_ext - map_ext), axis=0)   # MAD
-            map_ext = map_ext
-            map_num = np.sum(np.isfinite(nbrs_ext), axis=0).astype(np.uint32)
-            map_rho = np.full_like(map_ext, fill_value=np.nan)
+            elif metric == "median":
 
-        # If not median or average, fetch weight function
-        else:
+                # Make final maps
+                map_ext = np.nanmedian(nbrs_ext, axis=0)
+                map_var = np.nanmedian(np.abs(nbrs_ext - map_ext), axis=0)   # MAD
+                map_ext = map_ext
+                map_num = np.sum(np.isfinite(nbrs_ext), axis=0).astype(np.uint32)
+                map_rho = np.full_like(map_ext, fill_value=np.nan)
 
-            # Ignore Runtime warnings (due to NaNs) for the following steps
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", category=RuntimeWarning)
+            # If not median or average, fetch weight function
+            else:
 
                 # Total weight with variance
                 w_total = w_spatial / nbrs_var  # type: np.ndarray
