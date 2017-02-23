@@ -482,6 +482,104 @@ class ContinuousExtinctionMap(ExtinctionMap):
         else:
             raise ValueError("Mode {0} not implemented".format(mode))
 
+    # -----------------------------------------------------------------------------
+    def _plot_models(self, path=None, ax_size=None, silent=False):
+        """
+        Creates a plot extinction map containing subplots for all models at rach pixel. Warning: This can take a very
+        long time to run.
+
+        Parameters
+        ----------
+        path : str, optional
+            Figure file path.
+        ax_size : list, optional
+            Size of axis for a single model (e.g. [5, 4]). Defaults to [4, 4].
+        silent : bool, optional
+            Whether to print plot progress.
+
+        """
+
+        # Import
+        import matplotlib.pyplot as plt
+        from matplotlib.cm import get_cmap
+        from matplotlib.pyplot import GridSpec
+        from matplotlib.ticker import AutoMinorLocator
+
+        # Set axis size
+        if ax_size is None:
+            ax_size = [4, 4]
+
+        nrows = self.map_shape[0]
+        ncols = self.map_shape[1]
+
+        # Generate plot grid
+        plt.figure(figsize=[ax_size[0] * ncols, ax_size[1] * nrows])
+        grid = GridSpec(ncols=ncols, nrows=nrows, bottom=0.05, top=0.95, left=0.05, right=0.95,
+                        hspace=0.15, wspace=0.15)
+
+        plot_idx, plot_range, gmm_ev = [], [], []
+        for idx in range(np.prod(self.map_shape)):
+
+            if not silent:
+                print(idx + 1, "/", np.prod(self.map_shape))
+
+            # Grab GMM
+            gmm = np.flipud(self.map_ext).ravel()[idx]
+
+            if gmm is None:
+                continue
+
+            # Save expected value
+            gmm_ev.append(gmm_expected_value(gmm=gmm))
+
+            # Add axis
+            ax = plt.subplot(grid[idx])
+
+            # Get plot range and values
+            x, y = gmm_sample_xy(gmm=gmm, kappa=2, sampling=3, nmin=100, nmax=1000)
+
+            # Draw entire GMM
+            ax.plot(x, y, color="black", lw=2)
+
+            # Annotate
+            if idx % ncols == 0:
+                ax.set_ylabel("Probability Density")
+            if idx >= self._n_models - ncols:
+                ax.set_xlabel("Extinction + ZP")
+
+            # Ticks
+            ax.xaxis.set_minor_locator(AutoMinorLocator())
+            ax.yaxis.set_minor_locator(AutoMinorLocator())
+
+            # Save plot range and index
+            plot_range.append((np.min(x), np.max(x)))
+            plot_idx.append(idx)
+
+        # Set color range of plots
+        gmm_ev = np.array(gmm_ev) - np.min(gmm_ev)
+        gmm_ev = np.array(gmm_ev) / np.max(gmm_ev)
+        cmap = get_cmap("viridis")
+
+        # Get common xrange
+        xmin, xmax = zip(*plot_range)
+        xl = round_partial(np.percentile(xmin, 10) - 0.1, precision=0.1)
+        xr = round_partial(np.percentile(xmax, 90) + 0.1, precision=0.1)
+
+        # Modify axes
+        for idx in range(len(plot_idx)):
+            # Grab axis
+            ax = plt.subplot(grid[plot_idx[idx]])
+
+            # Set plot color
+            rgba = cmap(gmm_ev[idx])
+            ax.set_facecolor(rgba)
+
+            # Set symmetric range
+            ax.set_xlim(xl, xr)
+
+        # Save or show figure
+        finalize_plot(path=path, dpi=150)
+
 
 # ----------------------------------------------------------------------------- #
 # ----------------------------------------------------------------------------- #
