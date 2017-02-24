@@ -154,7 +154,7 @@ def caxes_delete_ticklabels(axes, xfirst=False, xlast=False, yfirst=False, ylast
 
 
 # -----------------------------------------------------------------------------
-def plot_gmm(gmm, path=None, ax_size=None, draw_components=True, **kwargs):
+def plot_gmm(gmm, path=None, ax_size=None, draw_components=False, **kwargs):
     """
     Simple plotting routine for GMM instance
 
