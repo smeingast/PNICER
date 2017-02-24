@@ -69,6 +69,7 @@ class Extinction:
 
     # -----------------------------------------------------------------------------
     def build_map(self, bandwidth, metric="gaussian", use_fwhm=False, nicest=False, alpha=1/3, sampling=2, **kwargs):
+        # TODO: Write docstring
 
         # Sampling must be an integer
         if not isinstance(sampling, int):
@@ -141,7 +142,8 @@ class Extinction:
 
         # ...or continous extinction
         elif isinstance(self, ContinuousExtinction):
-            return self._build_map(nbrs_idx=nbrs_idx.T, w_spatial=w_spatial, map_dict=map_dict)
+            return self._build_map(nbrs_idx=nbrs_idx.T, w_spatial=w_spatial, map_dict=map_dict,
+                                   nicest=nicest)
         # Or raise an Error
         else:
             raise NotImplementedError
@@ -545,7 +547,7 @@ class ContinuousExtinction(Extinction):
     # ----------------------------------------------------------------------------- #
 
     # -----------------------------------------------------------------------------
-    def _build_map(self, nbrs_idx, w_spatial, map_dict, nicest=False):
+    def _build_map(self, nbrs_idx, w_spatial, map_dict, nicest=False, alpha=1/3):
 
         idx = self.index[nbrs_idx]
         idx[~np.isfinite(w_spatial)] = self.features.n_data + 1
@@ -567,7 +569,8 @@ class ContinuousExtinction(Extinction):
 
         # Modify weights with NICEST factor
         if nicest:
-            w_total *= 10**(0.33 * 2.5 * nbrs_zp)
+            # TODO: k_lambda factor missing
+            w_total *= 10**(alpha * 2.5 * nbrs_zp)
 
         # Build combined Models
         params = self.models[0].get_params()
