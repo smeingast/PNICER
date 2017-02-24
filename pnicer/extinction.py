@@ -135,15 +135,29 @@ class Extinction:
         # Create dictionary with map properties
         map_dict = {"map_shape": map_shape, "prime_header": p_hdr, "map_header": map_hdr}
 
-        # Build map for Discretized extinction
+        # Build map for discretized extinction
         if isinstance(self, DiscreteExtinction):
-            return self._build_map(nbrs_idx=nbrs_idx.T, w_spatial=w_spatial, metric=metric,
-                                   nicest=nicest, alpha=alpha, map_dict=map_dict)
+
+            # Calcualte values for all map pixels
+            ext, var, num, rho = self._get_extinction_average(nbrs_idx=nbrs_idx.T, w_spatial=w_spatial,
+                                                              metric=metric, nicest=nicest, alpha=alpha)
+
+            # Make map
+            map_shape = map_dict["map_shape"]
+            return DiscreteExtinctionMap(map_ext=ext.reshape(map_shape), map_var=var.reshape(map_shape),
+                                         map_num=num.reshape(map_shape), map_rho=rho.reshape(map_shape),
+                                         map_header=map_dict["map_header"], prime_header=map_dict["prime_header"])
 
         # ...or continous extinction
         elif isinstance(self, ContinuousExtinction):
-            return self._build_map(nbrs_idx=nbrs_idx.T, w_spatial=w_spatial, map_dict=map_dict,
-                                   nicest=nicest)
+
+            # Get combined models for
+            gmms = self._get_extinction_model(nbrs_idx=nbrs_idx.T, w_spatial=w_spatial, nicest=nicest)
+
+            # Return continuous extinction map
+            return ContinuousExtinctionMap(map_models=np.array(gmms).reshape(map_dict["map_shape"]),
+                                           map_header=map_dict["map_header"], prime_header=map_dict["prime_header"])
+
         # Or raise an Error
         else:
             raise NotImplementedError
@@ -157,7 +171,7 @@ class Extinction:
         Parameters
         ----------
         metric : str
-            The mtric to be used. One of 'uniform', 'triangular', 'gaussian', 'epanechnikov'
+            The metric to be used. One of 'uniform', 'triangular', 'gaussian', 'epanechnikov'
         bandwidth : int, float
             Bandwidth of metric (kernel).
 
@@ -547,7 +561,7 @@ class ContinuousExtinction(Extinction):
     # ----------------------------------------------------------------------------- #
 
     # -----------------------------------------------------------------------------
-    def _build_map(self, nbrs_idx, w_spatial, map_dict, nicest=False, alpha=1/3):
+    def _get_extinction_model(self, nbrs_idx, w_spatial, nicest=False, alpha=1/3):
 
         idx = self.index[nbrs_idx]
         idx[~np.isfinite(w_spatial)] = self.features.n_data + 1
@@ -574,16 +588,9 @@ class ContinuousExtinction(Extinction):
 
         # Build combined Models
         params = self.models[0].get_params()
-        map_gmms = mp_gmm_combine(gmms=nbrs_models.T, weights=w_total.T, params=params, good_idx=good_idx.T,
-                                  gmms_means=nbrs_means.T, gmms_variances=nbrs_variances.T,
-                                  gmms_weights=nbrs_weights.T, gmms_zps=nbrs_zp.T)
-
-        # Reshape to map
-        map_shape = map_dict["map_shape"]
-        map_gmms = np.array(map_gmms).reshape(map_shape)
-
-        return ContinuousExtinctionMap(map_models=map_gmms, map_header=map_dict["map_header"],
-                                       prime_header=map_dict["prime_header"])
+        return mp_gmm_combine(gmms=nbrs_models.T, weights=w_total.T, params=params, good_idx=good_idx.T,
+                              gmms_means=nbrs_means.T, gmms_variances=nbrs_variances.T,
+                              gmms_weights=nbrs_weights.T, gmms_zps=nbrs_zp.T)
 
     # ----------------------------------------------------------------------------- #
     #                               Plotting methods                                #
@@ -824,7 +831,8 @@ class DiscreteExtinction(Extinction):
     # ----------------------------------------------------------------------------- #
 
     # -----------------------------------------------------------------------------
-    def _build_map(self, nbrs_idx, w_spatial, metric, nicest, alpha, map_dict):
+    def _get_extinction_average(self, nbrs_idx, w_spatial, metric, nicest, alpha):
+        # TODO: Write docstring
 
         # Ignore Runtime warnings (due to NaNs) for the following steps
         with warnings.catch_warnings():
@@ -839,25 +847,25 @@ class DiscreteExtinction(Extinction):
             if metric == "average":
 
                 # 3 sig filter
-                map_ext = np.nanmean(nbrs_ext, axis=0)
-                sigfil = (np.abs(nbrs_ext - map_ext) > 3 * np.nanstd(nbrs_ext, axis=0))
+                ext = np.nanmean(nbrs_ext, axis=0)
+                sigfil = (np.abs(nbrs_ext - ext) > 3 * np.nanstd(nbrs_ext, axis=0))
 
                 # Apply filter
                 nbrs_ext[sigfil], nbrs_var[sigfil] = np.nan, np.nan
 
                 # Make final maps
-                map_ext = np.nanmean(nbrs_ext, axis=0)
-                map_num = np.sum(np.isfinite(nbrs_ext), axis=0).astype(np.uint32)
-                map_var = np.nansum(nbrs_var, axis=0) / map_num**2
-                map_rho = np.full_like(map_ext, fill_value=np.nan)
+                ext = np.nanmean(nbrs_ext, axis=0)
+                num = np.sum(np.isfinite(nbrs_ext), axis=0).astype(np.uint32)
+                var = np.nansum(nbrs_var, axis=0) / num**2
+                rho = np.full_like(ext, fill_value=np.nan)
 
             elif metric == "median":
 
                 # Make final maps
-                map_ext = np.nanmedian(nbrs_ext, axis=0)
-                map_var = np.nanmedian(np.abs(nbrs_ext - map_ext), axis=0)   # MAD
-                map_num = np.sum(np.isfinite(nbrs_ext), axis=0).astype(np.uint32)
-                map_rho = np.full_like(map_ext, fill_value=np.nan)
+                ext = np.nanmedian(nbrs_ext, axis=0)
+                var = np.nanmedian(np.abs(nbrs_ext - ext), axis=0)   # MAD
+                num = np.sum(np.isfinite(nbrs_ext), axis=0).astype(np.uint32)
+                rho = np.full_like(ext, fill_value=np.nan)
 
             # If not median or average, fetch weight function
             else:
@@ -866,8 +874,8 @@ class DiscreteExtinction(Extinction):
                 w_total = w_spatial / nbrs_var  # type: np.ndarray
 
                 # Do sigma clipping in extinction
-                map_ext = np.nansum(w_total * nbrs_ext, axis=0) / np.nansum(w_total, axis=0)
-                sigfil = (np.abs(nbrs_ext - map_ext) > 3 * np.nanstd(nbrs_ext, axis=0))
+                ext = np.nansum(w_total * nbrs_ext, axis=0) / np.nansum(w_total, axis=0)
+                sigfil = (np.abs(nbrs_ext - ext) > 3 * np.nanstd(nbrs_ext, axis=0))
 
                 # Apply sigma clipping
                 nbrs_ext[sigfil], nbrs_var[sigfil], w_spatial[sigfil], w_total[sigfil] = np.nan, np.nan, np.nan, np.nan
@@ -892,29 +900,26 @@ class DiscreteExtinction(Extinction):
                     map_cor = beta * np.nansum(w_total * nbrs_var, axis=0) / np.nansum(w_total, axis=0)
 
                     # Calculate error for NICEST (private communication with M. Lombardi)
-                    map_var = np.nansum((w_total**2*np.exp(2*beta*nbrs_ext) * (1+beta*nbrs_ext)**2) / nbrs_var, axis=0)
-                    map_var /= np.nansum(w_total * np.exp(beta * nbrs_ext) / nbrs_var, axis=0) ** 2
+                    var = np.nansum((w_total**2*np.exp(2*beta*nbrs_ext) * (1+beta*nbrs_ext)**2) / nbrs_var, axis=0)
+                    var /= np.nansum(w_total * np.exp(beta * nbrs_ext) / nbrs_var, axis=0) ** 2
 
                 # Variance without NICEST
                 else:
 
-                    map_var = np.divide(np.nansum(w_total ** 2. * nbrs_var, axis=0), np.nansum(w_total, axis=0) ** 2)
-                    map_cor = np.full_like(map_var, fill_value=0.)
+                    var = np.divide(np.nansum(w_total ** 2. * nbrs_var, axis=0), np.nansum(w_total, axis=0) ** 2)
+                    map_cor = np.full_like(var, fill_value=0.)
 
                 # Determine weighted extinction
-                map_ext = np.nansum(w_total * nbrs_ext, axis=0) / np.nansum(w_total, axis=0) - map_cor
+                ext = np.nansum(w_total * nbrs_ext, axis=0) / np.nansum(w_total, axis=0) - map_cor
 
                 # Determine the number of sources used for each pixel
-                map_num = np.sum(np.isfinite(w_total), axis=0).astype(np.uint32)
+                num = np.sum(np.isfinite(w_total), axis=0).astype(np.uint32)
 
                 # Get source density
-                map_rho = np.nansum(w_spatial, axis=0)
+                rho = np.nansum(w_spatial, axis=0)
 
         # Return extinction map
-        map_shape = map_dict["map_shape"]
-        return DiscreteExtinctionMap(map_ext=map_ext.reshape(map_shape), map_var=map_var.reshape(map_shape),
-                                     map_num=map_num.reshape(map_shape), map_rho=map_rho.reshape(map_shape),
-                                     map_header=map_dict["map_header"], prime_header=map_dict["prime_header"])
+        return ext, var, num, rho
 
     # -----------------------------------------------------------------------------
     def _build_map_(self, bandwidth, metric="median", sampling=2, nicest=False, alpha=1/3, use_fwhm=False, **kwargs):
