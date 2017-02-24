@@ -845,7 +845,7 @@ class DiscreteExtinction(Extinction):
                 # Make final maps
                 map_ext = np.nanmean(nbrs_ext, axis=0)
                 map_num = np.sum(np.isfinite(nbrs_ext), axis=0).astype(np.uint32)
-                map_var = np.sqrt(np.nansum(nbrs_var, axis=0)) / map_num
+                map_var = np.nansum(nbrs_var, axis=0) / map_num**2
                 map_rho = np.full_like(map_ext, fill_value=np.nan)
 
             elif metric == "median":
@@ -853,7 +853,6 @@ class DiscreteExtinction(Extinction):
                 # Make final maps
                 map_ext = np.nanmedian(nbrs_ext, axis=0)
                 map_var = np.nanmedian(np.abs(nbrs_ext - map_ext), axis=0)   # MAD
-                map_ext = map_ext
                 map_num = np.sum(np.isfinite(nbrs_ext), axis=0).astype(np.uint32)
                 map_rho = np.full_like(map_ext, fill_value=np.nan)
 
