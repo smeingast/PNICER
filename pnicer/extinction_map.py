@@ -162,7 +162,7 @@ class DiscreteExtinctionMap(ExtinctionMap):
         plt.close()
 
     # -----------------------------------------------------------------------------
-    def save_fits(self, path, clobber=True):
+    def save_fits(self, path, overwrite=True):
         """
         Save extinciton map as FITS file.
 
@@ -170,7 +170,7 @@ class DiscreteExtinctionMap(ExtinctionMap):
         ----------
         path : str
             File path. e.g. "/path/to/table.fits".
-        clobber : bool, optional
+        overwrite : bool, optional
             Whether to overwrite exisiting files. Default is True.
 
         """
@@ -184,4 +184,4 @@ class DiscreteExtinctionMap(ExtinctionMap):
                                 fits.ImageHDU(data=self.map_rho, header=self.map_header)])
 
         # Write
-        hdulist.writeto(path, clobber=clobber)
+        hdulist.writeto(path, overwrite=overwrite)

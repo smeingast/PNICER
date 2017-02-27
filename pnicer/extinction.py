@@ -1266,7 +1266,7 @@ class DiscreteExtinction(Extinction):
                                      map_header=grid_header, prime_header=phdr)
 
     # -----------------------------------------------------------------------------
-    def save_fits(self, path):
+    def save_fits(self, path, overwrite=True):
         """
         Write the extinction data to a FITS table file.
 
@@ -1274,6 +1274,8 @@ class DiscreteExtinction(Extinction):
         ----------
         path : str
             File path; e.g. "/path/to/table.fits"
+        overwrite : bool, optional
+            Whether to overwrite an existing file.
 
         """
 
@@ -1290,7 +1292,7 @@ class DiscreteExtinction(Extinction):
         tbhdu = fits.BinTableHDU.from_columns(cols)
 
         # Write to file
-        tbhdu.writeto(path, clobber=True)
+        tbhdu.writeto(path, overwrite=overwrite)
 
 
 # -----------------------------------------------------------------------------
