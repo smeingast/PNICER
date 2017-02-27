@@ -61,6 +61,75 @@ class Magnitudes(Features):
         return ApparentColors(colors=colors, errors=colors_error, extvec=color_extvec,
                               coordinates=self.coordinates, names=names)
 
+    # -----------------------------------------------------------------------------
+    @classmethod
+    def from_fits(cls, path, mag_names, err_names, extvec, extension=1,
+                  lon_name=None, lat_name=None, coo_unit="deg", frame=None):
+        """
+        Read data from a given FITS file and return a PNICER Magnitude (or Color) instance.
+
+        Parameters
+        ----------
+        path : str
+            The path to the FITS file.
+        mag_names : list
+            List of magnitude names.
+        err_names : list
+            List of error names.
+        extvec : list
+            Extinction vector given as list for each magnitude component.
+        extension : int, optional
+            The extenstion of the FITS file in which the data can be found. Defaults to 1.
+        lon_name : str, optional
+            String pointing to the longitude of all sources in the file (e.g. 'RA').
+        lat_name : str, optional
+            String pointing to the latitude of all sources in the file (e.g. 'DEC')
+        coo_unit : str, optional
+            The unit of the coordinates. Default is 'deg'.
+        frame : str, optional
+            The coordinate system. Either 'icrs' or 'galactic'.
+
+        Returns
+        -------
+        Magnitudes
+            Magnitudes instance for further PNICER calculations.
+
+        """
+
+        # Import packages
+        from astropy.io import fits
+        from astropy.coordinates import SkyCoord
+
+        # Open file
+        with fits.open(path) as f:
+
+            # Read data
+            data = f[extension].data
+
+            # Photometry
+            mag = [data[n] for n in mag_names]
+
+            # Errors
+            err = [data[n] for n in err_names]
+
+            # Coordinates if given
+            if lon_name is not None and lat_name is not None:
+
+                # Choose system
+                if frame == "icrs":
+                    coo = SkyCoord(ra=data[lon_name], dec=data[lat_name], frame="icrs", unit=coo_unit)
+                elif frame == "galactic":
+                    coo = SkyCoord(l=data[lon_name], b=data[lat_name], frame="galactic", unit=coo_unit)
+                else:
+                    coo = None
+                    raise ValueError("Frame type '{0}' not supported. Use either 'icrs' or 'galactic'.".format(frame))
+
+            else:
+                coo = None
+
+        # Instantiate and return
+        return cls(magnitudes=mag, errors=err, extvec=extvec, coordinates=coo, names=mag_names)
+
 
 # ----------------------------------------------------------------------------- #
 # ----------------------------------------------------------------------------- #
