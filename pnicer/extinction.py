@@ -14,10 +14,10 @@ from multiprocessing.pool import Pool
 from sklearn.neighbors import NearestNeighbors
 
 from pnicer.utils.gmm import gmm_scale, gmm_expected_value, gmm_sample_xy, gmm_max, gmm_confidence_interval, \
-    gmm_population_variance, gmm_sample_xy_components, mp_gmm_combine
+    gmm_population_variance, gmm_sample_xy_components, mp_gmm_combine, gmm_combine
 from pnicer.utils.plots import finalize_plot
 from pnicer.utils.algebra import centroid_sphere, distance_sky, std2fwhm, round_partial
-from pnicer.extinction_map import DiscreteExtinctionMap, ContinuousExtinctionMap
+from pnicer.extinction_map import DiscreteExtinctionMap
 
 
 # -----------------------------------------------------------------------------
@@ -150,13 +150,14 @@ class Extinction:
 
         # ...or continous extinction
         elif isinstance(self, ContinuousExtinction):
+            raise NotImplementedError("Extinction mapping for probabilistic data will be implemented soon.")
 
-            # Get combined models for
-            gmms = self._get_extinction_model(nbrs_idx=nbrs_idx.T, w_spatial=w_spatial, nicest=nicest)
-
-            # Return continuous extinction map
-            return ContinuousExtinctionMap(map_models=np.array(gmms).reshape(map_dict["map_shape"]),
-                                           map_header=map_dict["map_header"], prime_header=map_dict["prime_header"])
+            # # Get combined models for
+            # gmms = self._get_extinction_model(nbrs_idx=nbrs_idx.T, w_spatial=w_spatial, nicest=nicest)
+            #
+            # # Return continuous extinction map
+            # return ContinuousExtinctionMap(map_models=np.array(gmms).reshape(map_dict["map_shape"]),
+            #                                map_header=map_dict["map_header"], prime_header=map_dict["prime_header"])
 
         # Or raise an Error
         else:
@@ -588,9 +589,18 @@ class ContinuousExtinction(Extinction):
 
         # Build combined Models
         params = self.models[0].get_params()
-        return mp_gmm_combine(gmms=nbrs_models.T, weights=w_total.T, params=params, good_idx=good_idx.T,
-                              gmms_means=nbrs_means.T, gmms_variances=nbrs_variances.T,
-                              gmms_weights=nbrs_weights.T, gmms_zps=nbrs_zp.T)
+
+        # In case multiple coordinates are queried
+        if isinstance(nbrs_models.T[0], list):
+            return mp_gmm_combine(gmms=nbrs_models.T, weights=w_total.T, params=params, good_idx=good_idx.T,
+                                  gmms_means=nbrs_means.T, gmms_variances=nbrs_variances.T,
+                                  gmms_weights=nbrs_weights.T, gmms_zps=nbrs_zp.T)
+
+        # Otherwise just combine all models in the list
+        else:
+            return gmm_combine(gmms=nbrs_models, weights=w_total, params=params, good_idx=good_idx,
+                               gmms_means=nbrs_means, gmms_variances=nbrs_variances,
+                               gmms_weights=nbrs_weights, gmms_zps=nbrs_zp)
 
     # ----------------------------------------------------------------------------- #
     #                               Plotting methods                                #

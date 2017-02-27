@@ -55,4 +55,4 @@ def orion():
     pnicer_emap.plot_map(figsize=10)
 
     """ If no errors pop up, then the basic PNICER package works """
-    print("{0:<80s}".format("PNICER routines terminated successfully! Happy extinction mapping :) "))
+    print("{0:<80s}".format("PNICER routines terminated successfully! Happy hunting for extinction :) "))
