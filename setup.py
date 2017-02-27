@@ -9,11 +9,10 @@ if sys.version_info < (3, 4):
 setup(
     name="PNICER",
     version="0.1",
-    packages=["pnicer", "pnicer.tests", "pnicer.tests_resources"],
+    packages=["pnicer", "pnicer.tests", "pnicer.tests_resources", "pnicer.utils"],
     package_dir={"pnicer": "pnicer"},
     package_data={"pnicer": ["tests_resources/*.fits"]},
-    install_requires=["numpy>=1.11", "scipy>=0.18", "scikit-learn>=0.18", "matplotlib>=1.5",
-                      "astropy>=1.3", "wcsaxes>=0.9"],
+    install_requires=["numpy>=1.11", "scipy>=0.18", "scikit-learn>=0.18", "matplotlib>=1.5", "astropy>=1.3"],
     url="",
     license="",
     author="Stefan Meingast",
