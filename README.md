@@ -1,5 +1,3 @@
-## PNICER
-
 PNICER is an astronomical software suite for estimating extinction for individual sources and creating extinction maps using unsupervised machine learning algorithms. If you want to know more about the technique, you are invited to study the published manuscript, which is currently available on Astro-ph.
 
 ## Installation
