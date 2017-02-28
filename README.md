@@ -13,7 +13,7 @@ To install the package, download the latest release to your computer [here](http
 pip install --user /path/to/PNICER/
 ```
 
-where the last argument points to the directory of the saved and unpacked downloaded directory. All dependencies will be installed automatically.
+where the last argument points to the saved and unpacked downloaded directory. All dependencies will be installed automatically.
 
 ### Test
 
