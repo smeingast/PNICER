@@ -15,11 +15,11 @@ from sklearn.mixture import GaussianMixture
 # noinspection PyPackageRequirements
 from sklearn.neighbors import NearestNeighbors
 
+from pnicer.utils.plots import finalize_plot
+from pnicer.extinction_map import ContinuousExtinctionMap, DiscreteExtinctionMap
+from pnicer.utils.algebra import centroid_sphere, distance_sky, std2fwhm, round_partial
 from pnicer.utils.gmm import gmm_scale, gmm_expected_value, gmm_sample_xy, gmm_max, gmm_confidence_interval, \
     gmm_population_variance, gmm_sample_xy_components, mp_gmm_combine, gmm_combine
-from pnicer.utils.plots import finalize_plot
-from pnicer.utils.algebra import centroid_sphere, distance_sky, std2fwhm, round_partial
-from pnicer.extinction_map import DiscreteExtinctionMap
 
 
 # -----------------------------------------------------------------------------
@@ -119,7 +119,8 @@ class Extinction:
             raise ValueError("Extinction query not supported for {0}".format(self.__class__))
 
     # -----------------------------------------------------------------------------
-    def build_map(self, bandwidth, metric="gaussian", use_fwhm=False, nicest=False, alpha=1/3, sampling=2, **kwargs):
+    def build_map(self, bandwidth, mode="average", metric="gaussian", use_fwhm=False,
+                  nicest=False, alpha=1/3, sampling=2, **kwargs):
         # TODO: Add docstring
 
         # Sampling must be an integer
@@ -162,6 +163,7 @@ class Extinction:
 
         # Maximum of 500 nearest neighbors
         nnbrs = 500 if nnbrs > 500 else nnbrs
+        # TODO: Issue warning when the farthest neighbor is outside the truncation radius.
 
         # Convert coordinates to 3D cartesian
         sci_car = self.features.coordinates.cartesian.xyz.value.T
@@ -183,32 +185,61 @@ class Extinction:
         # Mask sources outside of truncation scale
         w_spatial[map_dis > trunc_radius / 2] = np.nan
 
-        # Create dictionary with map properties
-        map_dict = {"map_shape": map_shape, "prime_header": p_hdr, "map_header": map_hdr}
-
         # Build map for discretized extinction
         if isinstance(self, DiscreteExtinction):
 
-            # Calcualte values for all map pixels
-            ext, var, num, rho = self._get_extinction_average(nbrs_idx=nbrs_idx.T, w_spatial=w_spatial,
-                                                              metric=metric, nicest=nicest, alpha=alpha)
+            # In case an average extinction map should be built
+            if mode == "average":
 
-            # Make map
-            map_shape = map_dict["map_shape"]
-            return DiscreteExtinctionMap(map_ext=ext.reshape(map_shape), map_var=var.reshape(map_shape),
-                                         map_num=num.reshape(map_shape), map_rho=rho.reshape(map_shape),
-                                         map_header=map_dict["map_header"], prime_header=map_dict["prime_header"])
+                # Calculate values for all map pixels
+                ext, var, num, rho = self._get_extinction_average(nbrs_idx=nbrs_idx.T, w_spatial=w_spatial,
+                                                                  metric=metric, nicest=nicest, alpha=alpha)
+
+                # Reshape to map and return
+                return DiscreteExtinctionMap(map_ext=ext.reshape(map_shape), map_var=var.reshape(map_shape),
+                                             map_num=num.reshape(map_shape), map_rho=rho.reshape(map_shape),
+                                             map_header=map_hdr, prime_header=p_hdr)
+
+            if mode == "model":
+
+                # Build new GMMs for each pixel
+                gmms = [self._get_extinction_model(nbrs_idx=n, w_spatial=w, nicest=nicest, alpha=alpha)
+                        for n, w in zip(nbrs_idx, w_spatial.T)]
+
+                # Return continuous extinction map
+                return ContinuousExtinctionMap(map_models=np.array(gmms).reshape(map_shape),
+                                               map_header=map_hdr, prime_header=p_hdr)
+
+            # Raise error if mode is not recognized
+            else:
+                raise ValueError("Mode '{0}' not implemented. Use either 'model' or 'average'.".format(mode))
 
         # ...or continous extinction
         elif isinstance(self, ContinuousExtinction):
-            raise NotImplementedError("Extinction mapping for probabilistic data will be implemented soon.")
 
-            # # Get combined models for
-            # gmms = self._get_extinction_model(nbrs_idx=nbrs_idx.T, w_spatial=w_spatial, nicest=nicest)
-            #
-            # # Return continuous extinction map
-            # return ContinuousExtinctionMap(map_models=np.array(gmms).reshape(map_dict["map_shape"]),
-            #                                map_header=map_dict["map_header"], prime_header=map_dict["prime_header"])
+            # In case an average extinction map should be built
+            if mode == "average":
+
+                ext, var, num, rho = self._get_extinction_average(nbrs_idx=nbrs_idx.T, w_spatial=w_spatial,
+                                                                  nicest=nicest, alpha=alpha)
+
+                # Reshape to map and return
+                return DiscreteExtinctionMap(map_ext=ext.reshape(map_shape), map_var=var.reshape(map_shape),
+                                             map_num=num.reshape(map_shape), map_rho=rho.reshape(map_shape),
+                                             map_header=map_hdr, prime_header=p_hdr)
+
+            # In case extinction map with full models should be built
+            elif mode == "model":
+
+                # Get combined models for
+                gmms = self._get_extinction_model(nbrs_idx=nbrs_idx.T, w_spatial=w_spatial, nicest=nicest, alpha=alpha)
+
+                # Return continuous extinction map
+                return ContinuousExtinctionMap(map_models=np.array(gmms).reshape(map_shape),
+                                               map_header=map_hdr, prime_header=p_hdr)
+
+            else:
+                raise ValueError("Mode '{0}' not implemented. Use either 'model' or 'average'.".format(mode))
 
         # Or raise an Error
         else:
@@ -572,7 +603,7 @@ class ContinuousExtinction(Extinction):
         return gmm_scale(gmm=self.models[midx], shift=self.zp[idx], scale=None, reverse=False)
 
     # -----------------------------------------------------------------------------
-    def discretize(self, metric="expected value"):
+    def __discretize(self, metric="expected value"):
         """
         Discretize extinction from probability density distributions.
 
@@ -587,6 +618,7 @@ class ContinuousExtinction(Extinction):
             DiscreteExtinction object with the discretized values and errors.
 
         """
+        # TODO: This does not correctly reflect the average extinction (error estimate is wrong)
 
         if "expect" in metric.lower():
             attr = "_models_expected_value"
@@ -613,38 +645,61 @@ class ContinuousExtinction(Extinction):
     # ----------------------------------------------------------------------------- #
     # -----------------------------------------------------------------------------
     def _get_extinction_average(self, nbrs_idx, w_spatial, nicest=False, alpha=1/3):
-        # TODO: Add docstring
+        """
+        Calcualtes the average extinction given a set of models as defined by the nbrs_index and the spatial weights.
 
-        # Get model index for all neighbors
-        model_idx = self.index[nbrs_idx]
+        Parameters
+        ----------
+        nbrs_idx : np.array
+            Array containing the model indices for all neighbors.
+        w_spatial : np.array
+            Array with the weights for all sources.
+        nicest : bool, optional
+            Whether the NICEST correction factor should be used. Default is False.
+        alpha : int, float, optional
+            Slope in luminosity function for NICEST. Default is 1/3 (for NIR bands).
 
-        # Mask bad neighbors
-        model_idx[~np.isfinite(w_spatial)] = self.features.n_data + 1
-        good_idx = model_idx < self.features.n_data   # type: np.ndarray
-        model_idx[~good_idx] = 0
+        Returns
+        -------
+        np.array, np.array, np.array, np.array
+            Tuple holing the average extinction, the variance, the number of sources used, and the density of sources.
 
-        # Get GMM attributes for neighbors
-        nbrs_popvar = np.array(self._models_population_variance)[model_idx]
-        nbrs_zp = self.zp[nbrs_idx]
+        """
 
-        # Adjust weights with variance
-        var_weights = np.array(self._models_population_variance)[model_idx]
-        w_total = w_spatial / var_weights   # type: np.ndarray
+        # Ignore Runtime warnings (due to NaNs) for the following steps
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=RuntimeWarning)
 
-        # Modify weights with NICEST factor
-        if nicest:
-            k_lambda = np.max(self.features.extvec.extvec) if self.features.extvec.extvec is not None else 1
-            w_total *= 10**(alpha * k_lambda * nbrs_zp)
+            # Get model index for all neighbors
+            model_idx = self.index[nbrs_idx]
 
-        # Calculate weighted mean
-        m = np.nansum(w_total * nbrs_zp) / np.nansum(w_total)
-        v = np.nansum(w_total ** 2. * nbrs_popvar) / np.nansum(w_total)**2
+            # Mask bad neighbors
+            model_idx[~np.isfinite(w_spatial)] = self.features.n_data + 1
+            good_idx = model_idx < self.features.n_data   # type: np.ndarray
+            model_idx[~good_idx] = 0
 
-        # Get source density
-        rho = np.nansum(w_spatial, axis=0)
+            # Get GMM attributes for neighbors
+            nbrs_popvar = np.array(self._models_population_variance)[model_idx]
+            nbrs_zp = self.zp[nbrs_idx]
+
+            # Adjust weights with variance
+            var_weights = np.array(self._models_population_variance)[model_idx]
+            w_total = w_spatial / var_weights   # type: np.ndarray
+
+            # Modify weights with NICEST factor
+            if nicest:
+                k_lambda = np.max(self.features.extvec.extvec) if self.features.extvec.extvec is not None else 1
+                w_total *= 10**(alpha * k_lambda * nbrs_zp)
+
+            # Calculate weighted mean
+            m = np.nansum(w_total * nbrs_zp, axis=0) / np.nansum(w_total, axis=0)
+            v = np.nansum(w_total ** 2. * nbrs_popvar, axis=0) / np.nansum(w_total, axis=0)**2
+
+            # Get source density
+            rho = np.nansum(w_spatial, axis=0)
 
         # Return
-        return m, v, np.nansum(np.isfinite(w_total)), rho
+        return m, v, np.nansum(np.isfinite(w_total), axis=0), rho
 
     # -----------------------------------------------------------------------------
     def _get_extinction_model(self, nbrs_idx, w_spatial, nicest=False, alpha=1/3):
@@ -926,7 +981,26 @@ class DiscreteExtinction(Extinction):
 
     # -----------------------------------------------------------------------------
     def _get_extinction_average(self, nbrs_idx, w_spatial, metric, nicest, alpha):
-        # TODO: Write docstring
+        """
+        Calcualtes the average extinction defined by the nbrs_index and the spatial weights.
+
+        Parameters
+        ----------
+        nbrs_idx : np.array
+            Array containing the extinction indices for all neighbors.
+        w_spatial : np.array
+            Array with the weights for all sources.
+        nicest : bool, optional
+            Whether the NICEST correction factor should be used. Default is False.
+        alpha : int, float, optional
+            Slope in luminosity function for NICEST. Default is 1/3 (for NIR bands).
+
+        Returns
+        -------
+        np.array, np.array, np.array, np.array
+            Tuple holing the average extinction, the variance, the number of sources used, and the density of sources.
+
+        """
 
         # Ignore Runtime warnings (due to NaNs) for the following steps
         with warnings.catch_warnings():
@@ -1022,7 +1096,7 @@ class DiscreteExtinction(Extinction):
         # Get extinction and variance for all good neighbours
         good_idx = np.isfinite(w_spatial)
         nbrs_ext, nbrs_var = self.extinction[nbrs_idx][good_idx], self.variance[nbrs_idx][good_idx]
-        w_total = w_spatial[nbrs_idx][good_idx] / nbrs_var
+        w_total = w_spatial[good_idx] / nbrs_var
 
         # Number of components for new GMM
         n_components = len(nbrs_ext)
