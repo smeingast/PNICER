@@ -26,7 +26,7 @@ orion()
 
 which will go through all major PNICER methods. At the end you should see a plot window with an extinction map of Orion A created from 2MASS data:
 
-![Orion](https://github.com/smeingast/PNICER/blob/master/pnicer/tests_resources/orion.png)
+![Orion](https://raw.githubusercontent.com/smeingast/PNICER/master/pnicer/tests_resources/orion.png)
 
 ## Introduction
 
