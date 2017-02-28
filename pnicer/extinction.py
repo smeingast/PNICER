@@ -643,6 +643,7 @@ class ContinuousExtinction(Extinction):
     # ----------------------------------------------------------------------------- #
     #                                Extinction map                                 #
     # ----------------------------------------------------------------------------- #
+
     # -----------------------------------------------------------------------------
     def _get_extinction_average(self, nbrs_idx, w_spatial, nicest=False, alpha=1/3):
         """
@@ -1094,8 +1095,8 @@ class DiscreteExtinction(Extinction):
         # TODO: Add docstring
 
         # Get extinction and variance for all good neighbours
-        good_idx = np.isfinite(w_spatial)
-        nbrs_ext, nbrs_var = self.extinction[nbrs_idx][good_idx], self.variance[nbrs_idx][good_idx]
+        good_idx = np.isfinite(w_spatial) & np.isfinite(self.extinction) & np.isfinite(self.variance)
+        nbrs_ext, nbrs_var = self.extinction[good_idx], self.variance[good_idx]
         w_total = w_spatial[good_idx] / nbrs_var
 
         # Number of components for new GMM

@@ -91,7 +91,6 @@ class Magnitudes(Features):
 
         Returns
         -------
-        Magnitudes
             Magnitudes instance for further PNICER calculations.
 
         """
