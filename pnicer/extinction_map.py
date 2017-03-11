@@ -113,7 +113,7 @@ class ContinuousExtinctionMap(ExtinctionMap):
         qmin, qmax = zip(*test)
 
         # Return min and max ranges
-        return np.min(qmin), np.max(qmax)
+        return np.nanmin(qmin), np.nanmax(qmax)
 
     # -----------------------------------------------------------------------------
     def _models_set_expected_value(self):
