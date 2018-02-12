@@ -1426,7 +1426,7 @@ class DiscreteExtinction(Extinction):
                 row.append([np.array(x).reshape(pshape).astype(d) for
                             x, d in zip(list(zip(*mp)), [np.float32, np.float32, np.uint32, np.float32])])
 
-                # Calcualte ETA
+                # Calculate ETA
                 i += 1
                 progress, telapsed = i / n_patches, time.time() - tstart
                 remaining = 1 - progress
@@ -1483,9 +1483,17 @@ class DiscreteExtinction(Extinction):
 
         """
 
+        # Select output column names
+        if "gal" in self.features._frame_name.lower():
+            name_lon, name_lat = "GLON", "GLAT"
+        elif "icrs" in self.features._frame_name.lower():
+            name_lon, name_lat = "RA", "DEC"
+        else:
+            name_lon, name_lat = "Lon", "Lat"
+
         # Create FITS columns
-        col1 = fits.Column(name="Lon", format="D", array=self.features._lon_deg)
-        col2 = fits.Column(name="Lat", format="D", array=self.features._lat_deg)
+        col1 = fits.Column(name=name_lon, format="D", array=self.features._lon_deg)
+        col2 = fits.Column(name=name_lat, format="D", array=self.features._lat_deg)
         col3 = fits.Column(name="Extinction", format="E", array=self.extinction)
         col4 = fits.Column(name="Variance", format="E", array=self.variance)
 
