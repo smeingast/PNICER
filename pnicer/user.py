@@ -3,6 +3,7 @@
 import numpy as np
 
 from pnicer.common import Features
+
 # from pnicer.utils.plots import finalize_plot
 from pnicer.utils.algebra import get_sample_covar, get_color_covar
 
@@ -10,7 +11,6 @@ from pnicer.utils.algebra import get_sample_covar, get_color_covar
 # ----------------------------------------------------------------------------- #
 # ----------------------------------------------------------------------------- #
 class Magnitudes(Features):
-
     def __init__(self, magnitudes, errors, extvec, coordinates=None, names=None):
         """
         Generic magnitude data class.
@@ -30,8 +30,13 @@ class Magnitudes(Features):
 
         """
 
-        super(Magnitudes, self).__init__(features=magnitudes, feature_err=errors, feature_extvec=extvec,
-                                         feature_names=names, feature_coordinates=coordinates)
+        super(Magnitudes, self).__init__(
+            features=magnitudes,
+            feature_err=errors,
+            feature_extvec=extvec,
+            feature_names=names,
+            feature_coordinates=coordinates,
+        )
 
     # -----------------------------------------------------------------------------
     def mag2color(self):
@@ -46,26 +51,51 @@ class Magnitudes(Features):
         """
 
         # Calculate colors
-        colors = [self.features[k - 1] - self.features[k] for k in range(1, self.n_features)]
+        colors = [
+            self.features[k - 1] - self.features[k] for k in range(1, self.n_features)
+        ]
 
         # Calculate color errors
-        colors_error = [np.sqrt(self.features_err[k - 1] ** 2 + self.features_err[k] ** 2)
-                        for k in range(1, self.n_features)]
+        colors_error = [
+            np.sqrt(self.features_err[k - 1] ** 2 + self.features_err[k] ** 2)
+            for k in range(1, self.n_features)
+        ]
 
         # Color names
-        color_extvec = [self.extvec.extvec[k - 1] - self.extvec.extvec[k] for k in range(1, self.n_features)]
+        color_extvec = [
+            self.extvec.extvec[k - 1] - self.extvec.extvec[k]
+            for k in range(1, self.n_features)
+        ]
 
         # Generate color names
-        names = [self.features_names[k - 1] + "-" + self.features_names[k] for k in range(1, self.n_features)]
+        names = [
+            self.features_names[k - 1] + "-" + self.features_names[k]
+            for k in range(1, self.n_features)
+        ]
 
         # Return Colors instance
-        return ApparentColors(colors=colors, errors=colors_error, extvec=color_extvec,
-                              coordinates=self.coordinates, names=names)
+        return ApparentColors(
+            colors=colors,
+            errors=colors_error,
+            extvec=color_extvec,
+            coordinates=self.coordinates,
+            names=names,
+        )
 
     # -----------------------------------------------------------------------------
     @classmethod
-    def from_fits(cls, path, mag_names, err_names, extvec, extension=1,
-                  lon_name=None, lat_name=None, coo_unit="deg", frame=None):
+    def from_fits(
+        cls,
+        path,
+        mag_names,
+        err_names,
+        extvec,
+        extension=1,
+        lon_name=None,
+        lat_name=None,
+        coo_unit="deg",
+        frame=None,
+    ):
         """
         Read data from a given FITS file and return a PNICER Magnitude (or Color) instance.
 
@@ -117,26 +147,47 @@ class Magnitudes(Features):
 
                 # Choose system
                 if frame == "icrs":
-                    coo = SkyCoord(ra=data[lon_name], dec=data[lat_name], frame="icrs", unit=coo_unit)
+                    coo = SkyCoord(
+                        ra=data[lon_name],
+                        dec=data[lat_name],
+                        frame="icrs",
+                        unit=coo_unit,
+                    )
                 elif frame == "galactic":
-                    coo = SkyCoord(l=data[lon_name], b=data[lat_name], frame="galactic", unit=coo_unit)
+                    coo = SkyCoord(
+                        l=data[lon_name],
+                        b=data[lat_name],
+                        frame="galactic",
+                        unit=coo_unit,
+                    )
                 else:
                     coo = None
-                    raise ValueError("Frame type '{0}' not supported. Use either 'icrs' or 'galactic'.".format(frame))
+                    raise ValueError(
+                        "Frame type '{0}' not supported. Use either 'icrs' or 'galactic'.".format(
+                            frame
+                        )
+                    )
 
             else:
                 coo = None
 
         # Instantiate and return
-        return cls(magnitudes=mag, errors=err, extvec=extvec, coordinates=coo, names=mag_names)
+        return cls(
+            magnitudes=mag, errors=err, extvec=extvec, coordinates=coo, names=mag_names
+        )
 
 
 # ----------------------------------------------------------------------------- #
 # ----------------------------------------------------------------------------- #
 class Colors(Features):
     def __init__(self, colors, errors, extvec, coordinates=None, names=None):
-        super(Colors, self).__init__(features=colors, feature_err=errors, feature_extvec=extvec, feature_names=names,
-                                     feature_coordinates=coordinates)
+        super(Colors, self).__init__(
+            features=colors,
+            feature_err=errors,
+            feature_extvec=extvec,
+            feature_names=names,
+            feature_coordinates=coordinates,
+        )
 
 
 # ----------------------------------------------------------------------------- #
@@ -165,8 +216,13 @@ class ApparentMagnitudes(Magnitudes):
         """
 
         # Call parent
-        super(ApparentMagnitudes, self).__init__(magnitudes=magnitudes, errors=errors, extvec=extvec,
-                                                 coordinates=coordinates, names=names)
+        super(ApparentMagnitudes, self).__init__(
+            magnitudes=magnitudes,
+            errors=errors,
+            extvec=extvec,
+            coordinates=coordinates,
+            names=names,
+        )
 
     # -----------------------------------------------------------------------------
     def _color_combinations(self):
@@ -213,7 +269,9 @@ class ApparentMagnitudes(Magnitudes):
 
             # Build all combinations by adding colors to parameter space; also require at least two magnitudes
             cscience = self._all_combinations(idxstart=2) + self._color_combinations()
-            ccontrol = control._all_combinations(idxstart=2) + control._color_combinations()
+            ccontrol = (
+                control._all_combinations(idxstart=2) + control._color_combinations()
+            )
 
         else:
 
@@ -222,8 +280,12 @@ class ApparentMagnitudes(Magnitudes):
             ccontrol = control._all_combinations(idxstart=2)
 
         # Call PNICER
-        return self._pnicer_combinations(combinations_science=cscience, combinations_control=ccontrol,
-                                         max_components=max_components, **kwargs)
+        return self._pnicer_combinations(
+            combinations_science=cscience,
+            combinations_control=ccontrol,
+            max_components=max_components,
+            **kwargs
+        )
 
     # -----------------------------------------------------------------------------
     def nicer(self, control=None, color0=None, color0_err=None, min_features=None):
@@ -257,7 +319,11 @@ class ApparentMagnitudes(Magnitudes):
         # Features to be required can only be as much as input features
         if min_features is not None:
             if min_features > self.n_features:
-                raise ValueError("Can't require more features than available ({0})".format(self.n_features))
+                raise ValueError(
+                    "Can't require more features than available ({0})".format(
+                        self.n_features
+                    )
+                )
             if min_features <= 0:
                 raise ValueError("Must request at least one feature")
 
@@ -268,15 +334,26 @@ class ApparentMagnitudes(Magnitudes):
         if control is not None:
 
             # Matrix
-            cov_cf = np.ma.cov([np.ma.masked_invalid(control.features[l]) -
-                                np.ma.masked_invalid(control.features[l + 1]) for l in range(self.n_features - 1)])
+            cov_cf = np.ma.cov(
+                [
+                    np.ma.masked_invalid(control.features[l])
+                    - np.ma.masked_invalid(control.features[l + 1])
+                    for l in range(self.n_features - 1)
+                ]
+            )
 
             # Intrinsic colors
-            _color0 = [np.nanmean(control.features[l] - control.features[l + 1]) for l in range(control.n_features - 1)]
+            _color0 = [
+                np.nanmean(control.features[l] - control.features[l + 1])
+                for l in range(control.n_features - 1)
+            ]
 
         # If no control field is given, set the matrix to 0 and the intrinsic colors manually
         elif color0 is not None:
-            cov_cf, _color0 = np.ma.zeros((self.n_features - 1, self.n_features - 1)), color0
+            cov_cf, _color0 = (
+                np.ma.zeros((self.n_features - 1, self.n_features - 1)),
+                color0,
+            )
 
             # Put manual color variance into matrix if given
             if color0_err is not None:
@@ -313,7 +390,12 @@ class ApparentMagnitudes(Magnitudes):
         b = upper.T / lower
 
         # Get colors
-        scolors = np.array([self.features[l] - self.features[l + 1] for l in range(self.n_features - 1)])
+        scolors = np.array(
+            [
+                self.features[l] - self.features[l + 1]
+                for l in range(self.n_features - 1)
+            ]
+        )
 
         # Get those with no good color value at all
         bad_color = np.all(np.isnan(scolors), axis=0)
@@ -334,7 +416,10 @@ class ApparentMagnitudes(Magnitudes):
         var[~np.isfinite(ext)] = np.nan
 
         if min_features is not None:
-            mask = np.where(np.sum(np.vstack(self._features_masks), axis=0, dtype=int) < min_features)[0]
+            mask = np.where(
+                np.sum(np.vstack(self._features_masks), axis=0, dtype=int)
+                < min_features
+            )[0]
             ext[mask] = var[mask] = np.nan
 
         # Calculate intrinsic magnitudes
@@ -347,6 +432,7 @@ class ApparentMagnitudes(Magnitudes):
 
         # Return Intrinsic instance
         from pnicer.extinction import DiscreteExtinction
+
         return DiscreteExtinction(features=self, extinction=ext, variance=var)
 
     # -----------------------------------------------------------------------------
@@ -381,10 +467,18 @@ class ApparentMagnitudes(Magnitudes):
 
         # LINES
         if method.lower() == "lines":
-            upper = get_sample_covar(xdata, ydata) - kwargs["cov_control"] - kwargs["science_err_covar"][1, 0] +\
-                kwargs["control_err_covar"][1, 0]
-            lower = np.var(xdata) - kwargs["science_err_covar"][0, 0] - kwargs["var_control"] + \
-                kwargs["control_err_covar"][0, 0]
+            upper = (
+                get_sample_covar(xdata, ydata)
+                - kwargs["cov_control"]
+                - kwargs["science_err_covar"][1, 0]
+                + kwargs["control_err_covar"][1, 0]
+            )
+            lower = (
+                np.var(xdata)
+                - kwargs["science_err_covar"][0, 0]
+                - kwargs["var_control"]
+                + kwargs["control_err_covar"][0, 0]
+            )
             beta = upper / lower
 
         # Ordinary least squares
@@ -409,13 +503,17 @@ class ApparentMagnitudes(Magnitudes):
             # Perform ODR
             fit_model = Model(_linear_model)
             fit_data = RealData(xdata, ydata)  # sx=std_x, sy=std_y)
-            bdummy = ODR(fit_data, fit_model, beta0=[1., 0.]).run()
+            bdummy = ODR(fit_data, fit_model, beta0=[1.0, 0.0]).run()
             beta, ic = bdummy.beta
             # beta_err, ic_err = bdummy.sd_beta
 
         # If the given method is not suppoerted raise error.
         else:
-            raise ValueError("Method {0:s} not supported (One of: 'lines', 'ols', 'bces', or 'odr')".format(method))
+            raise ValueError(
+                "Method {0:s} not supported (One of: 'lines', 'ols', 'bces', or 'odr')".format(
+                    method
+                )
+            )
 
         # Calculate intercept (ODR has its own intercept)
         if method != "odr":
@@ -426,7 +524,17 @@ class ApparentMagnitudes(Magnitudes):
         return beta, ic
 
     # -----------------------------------------------------------------------------
-    def color_excess_ratio(self, x_keys, y_keys, method="ols", control=None, kappa=0, sigma=3, err_iter=100, qc=True):
+    def color_excess_ratio(
+        self,
+        x_keys,
+        y_keys,
+        method="ols",
+        control=None,
+        kappa=0,
+        sigma=3,
+        err_iter=100,
+        qc=True,
+    ):
         """
         Calculates the selective color excess rations (e.g.: E(J-H)/E(H-K)) for a given combinations of magnitudes. This
         slope is derived via different methods (LINES, BCES, OLS, or ODR).
@@ -466,9 +574,13 @@ class ApparentMagnitudes(Magnitudes):
         # Some input checks
         if len(x_keys) != 2:
             raise ValueError("'base_keys' must be tuple or list with two entries")
-        if (y_keys[0] not in self.features_names) | (y_keys[1] not in self.features_names):
+        if (y_keys[0] not in self.features_names) | (
+            y_keys[1] not in self.features_names
+        ):
             raise ValueError("'fit_keys' not found")
-        if (x_keys[0] not in self.features_names) | (x_keys[1] not in self.features_names):
+        if (x_keys[0] not in self.features_names) | (
+            x_keys[1] not in self.features_names
+        ):
             raise ValueError("'base_keys' not found")
         if (kappa < 0) | (isinstance(kappa, int) is False):
             raise ValueError("'kappa' must be non-zero positive integer")
@@ -487,8 +599,14 @@ class ApparentMagnitudes(Magnitudes):
         # Apply mask
         xc_science = self.features[x_idx[0]][smask] - self.features[x_idx[1]][smask]
         yc_science = self.features[y_idx[0]][smask] - self.features[y_idx[1]][smask]
-        x1_sc_err, x2_sc_err = self.features_err[x_idx[0]][smask], self.features_err[x_idx[1]][smask]
-        y1_sc_err, y2_sc_err = self.features_err[y_idx[0]][smask], self.features_err[y_idx[1]][smask]
+        x1_sc_err, x2_sc_err = (
+            self.features_err[x_idx[0]][smask],
+            self.features_err[x_idx[1]][smask],
+        )
+        y1_sc_err, y2_sc_err = (
+            self.features_err[y_idx[0]][smask],
+            self.features_err[y_idx[1]][smask],
+        )
 
         # Create dictionary to pass to beta routine
         beta_dict = {}
@@ -503,15 +621,24 @@ class ApparentMagnitudes(Magnitudes):
             cmask = control._custom_strict_mask(names=x_keys + y_keys)
 
             # Shortcuts for control field terms
-            xc_control = control.features[x_idx[0]][cmask] - control.features[x_idx[1]][cmask]
-            yc_control = control.features[y_idx[0]][cmask] - control.features[y_idx[1]][cmask]
+            xc_control = (
+                control.features[x_idx[0]][cmask] - control.features[x_idx[1]][cmask]
+            )
+            yc_control = (
+                control.features[y_idx[0]][cmask] - control.features[y_idx[1]][cmask]
+            )
 
             # Determine control field error covariance matrix
-            beta_dict["control_err_covar"] = get_color_covar(control.features_err[x_idx[0]][cmask],
-                                                             control.features_err[x_idx[1]][cmask],
-                                                             control.features_err[y_idx[0]][cmask],
-                                                             control.features_err[y_idx[1]][cmask],
-                                                             x_idx[0], x_idx[1], y_idx[0], y_idx[1])
+            beta_dict["control_err_covar"] = get_color_covar(
+                control.features_err[x_idx[0]][cmask],
+                control.features_err[x_idx[1]][cmask],
+                control.features_err[y_idx[0]][cmask],
+                control.features_err[y_idx[1]][cmask],
+                x_idx[0],
+                x_idx[1],
+                y_idx[0],
+                y_idx[1],
+            )
 
             # And sample covariance
             beta_dict["var_control"] = np.var(xc_control)
@@ -527,7 +654,7 @@ class ApparentMagnitudes(Magnitudes):
         smask = np.arange(len(xc_science))
 
         # Start iterations
-        beta, ic = 0., 0.
+        beta, ic = 0.0, 0.0
         for i in range(kappa + 1):
 
             # Mask data (used for iterations)
@@ -539,18 +666,28 @@ class ApparentMagnitudes(Magnitudes):
             good_idx = good_idx[smask]
 
             # Determine covariance matrix of errors for science field
-            beta_dict["science_err_covar"] = get_color_covar(x1_sc_err, x2_sc_err, y1_sc_err, y2_sc_err,
-                                                             x_idx[0], x_idx[1], y_idx[0], y_idx[1])
+            beta_dict["science_err_covar"] = get_color_covar(
+                x1_sc_err,
+                x2_sc_err,
+                y1_sc_err,
+                y2_sc_err,
+                x_idx[0],
+                x_idx[1],
+                y_idx[0],
+                y_idx[1],
+            )
 
             # Determine slope and intercept
-            beta, ic = self._get_beta(method=method, xdata=xc_science, ydata=yc_science, **beta_dict)
+            beta, ic = self._get_beta(
+                method=method, xdata=xc_science, ydata=yc_science, **beta_dict
+            )
 
             # Break here if the last iteration is reached
             if i == kappa:
                 break
 
             # Get orthogonal distance to the fit
-            dis = np.abs(beta * xc_science - yc_science + ic) / np.sqrt(beta ** 2 + 1)
+            dis = np.abs(beta * xc_science - yc_science + ic) / np.sqrt(beta**2 + 1)
 
             # Apply sigma clipping
             smask = dis - np.median(dis) < sigma * np.std(dis)
@@ -559,7 +696,9 @@ class ApparentMagnitudes(Magnitudes):
         beta_err = []
 
         # Prepare dictionaries
-        beta_dict_1 = {k: beta_dict[k] for k in beta_dict if k not in ["science_err_covar"]}
+        beta_dict_1 = {
+            k: beta_dict[k] for k in beta_dict if k not in ["science_err_covar"]
+        }
         beta_dict_split = [beta_dict_1, beta_dict_1.copy()]
 
         # Do as many iterations as requested
@@ -572,21 +711,33 @@ class ApparentMagnitudes(Magnitudes):
             ridx = ridx_sc[0::2], ridx_sc[1::2]
 
             # Define samples
-            xc_sc_split, yc_sc_split = [xc_science[i] for i in ridx], [yc_science[i] for i in ridx]
-            x1_sc_err_split, x2_sc_err_split = [x1_sc_err[i] for i in ridx], [x2_sc_err[i] for i in ridx]
-            y1_sc_err_split, y2_sc_err_split = [y1_sc_err[i] for i in ridx], [y2_sc_err[i] for i in ridx]
+            xc_sc_split, yc_sc_split = [xc_science[i] for i in ridx], [
+                yc_science[i] for i in ridx
+            ]
+            x1_sc_err_split, x2_sc_err_split = [x1_sc_err[i] for i in ridx], [
+                x2_sc_err[i] for i in ridx
+            ]
+            y1_sc_err_split, y2_sc_err_split = [y1_sc_err[i] for i in ridx], [
+                y2_sc_err[i] for i in ridx
+            ]
 
             # Calculate covariance matrices
-            cov_sc_err_split = [get_color_covar(a, b, c, d, x_idx[0], x_idx[1], y_idx[0], y_idx[1]) for a, b, c, d in
-                                zip(x1_sc_err_split, x2_sc_err_split, y1_sc_err_split, y2_sc_err_split)]
+            cov_sc_err_split = [
+                get_color_covar(a, b, c, d, x_idx[0], x_idx[1], y_idx[0], y_idx[1])
+                for a, b, c, d in zip(
+                    x1_sc_err_split, x2_sc_err_split, y1_sc_err_split, y2_sc_err_split
+                )
+            ]
 
             # ...and put them into the dictionaries
             for idx in range(2):
                 beta_dict_split[idx]["science_err_covar"] = cov_sc_err_split[idx]
 
             # Get beta
-            beta_i = [self._get_beta(method=method, xdata=x, ydata=y, **d)
-                      for x, y, d in zip(xc_sc_split, yc_sc_split, beta_dict_split)]
+            beta_i = [
+                self._get_beta(method=method, xdata=x, ydata=y, **d)
+                for x, y, d in zip(xc_sc_split, yc_sc_split, beta_dict_split)
+            ]
 
             # Append beta values
             beta_err.append(np.std(list(zip(*beta_i))[0]))
@@ -595,8 +746,14 @@ class ApparentMagnitudes(Magnitudes):
         beta_err = 1.25 * np.sum(beta_err) / (np.sqrt(2) * err_iter)
 
         # What it should be according to extinction vector
-        up = self.extvec.extvec[self._name2index(name=y_keys[1])] - self.extvec.extvec[self._name2index(name=y_keys[0])]
-        lo = self.extvec.extvec[self._name2index(name=x_keys[1])] - self.extvec.extvec[self._name2index(name=x_keys[0])]
+        up = (
+            self.extvec.extvec[self._name2index(name=y_keys[1])]
+            - self.extvec.extvec[self._name2index(name=y_keys[0])]
+        )
+        lo = (
+            self.extvec.extvec[self._name2index(name=x_keys[1])]
+            - self.extvec.extvec[self._name2index(name=x_keys[0])]
+        )
         beta_vector = up / lo
 
         # Generate QC plot
@@ -637,8 +794,13 @@ class ApparentColors(Colors):
         """
 
         # Call parent
-        super(ApparentColors, self).__init__(colors=colors, errors=errors, extvec=extvec, coordinates=coordinates,
-                                             names=names)
+        super(ApparentColors, self).__init__(
+            colors=colors,
+            errors=errors,
+            extvec=extvec,
+            coordinates=coordinates,
+            names=names,
+        )
 
     # -----------------------------------------------------------------------------
     def pnicer(self, control, max_components=3, **kwargs):
@@ -656,6 +818,9 @@ class ApparentColors(Colors):
 
         """
 
-        return self._pnicer_combinations(combinations_science=self._all_combinations(idxstart=1),
-                                         combinations_control=control._all_combinations(idxstart=1),
-                                         max_components=max_components, **kwargs)
+        return self._pnicer_combinations(
+            combinations_science=self._all_combinations(idxstart=1),
+            combinations_control=control._all_combinations(idxstart=1),
+            max_components=max_components,
+            **kwargs
+        )
