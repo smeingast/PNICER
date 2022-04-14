@@ -5,6 +5,7 @@ import multiprocessing
 
 from itertools import repeat
 from scipy.integrate import cumtrapz
+
 # noinspection PyPackageRequirements
 from sklearn.mixture import GaussianMixture
 from pnicer.utils.algebra import gauss_function
@@ -53,10 +54,17 @@ def gmm_scale(gmm, shift=None, scale=None, reverse=False, params=None):
     if scale is not None:
         gmm_new.means_ /= scale
 
-    gmm_new.covariances_ = gmm.covariances_ / scale ** 2 if scale is not None else gmm.covariances_
-    gmm_new.precisions_ = np.linalg.inv(gmm_new.covariances_) if scale is not None else gmm.precisions_
-    gmm_new.precisions_cholesky_ = np.linalg.cholesky(gmm_new.precisions_) if scale is not None \
+    gmm_new.covariances_ = (
+        gmm.covariances_ / scale**2 if scale is not None else gmm.covariances_
+    )
+    gmm_new.precisions_ = (
+        np.linalg.inv(gmm_new.covariances_) if scale is not None else gmm.precisions_
+    )
+    gmm_new.precisions_cholesky_ = (
+        np.linalg.cholesky(gmm_new.precisions_)
+        if scale is not None
         else gmm.precisions_cholesky_
+    )
 
     # Reverse if set
     if reverse:
@@ -98,7 +106,9 @@ def gmm_query_range(gmm, kappa=3, means=None, variances=None):
     s = np.sqrt(gmm.covariances_.ravel()) if variances is None else variances.ravel()
 
     # Get min-max range options
-    roptions = list(zip(*[(float(mm - kappa * ss), float(mm + kappa * ss)) for ss, mm in zip(s, m)]))
+    roptions = list(
+        zip(*[(float(mm - kappa * ss), float(mm + kappa * ss)) for ss, mm in zip(s, m)])
+    )
 
     # Determine min and max of range
     return np.min(roptions[0]), np.max(roptions[1])
@@ -173,14 +183,21 @@ def gmm_score_samples_absolute(gmm, xmin, xmax, xstep):
         Array of scored samples
 
     """
-    return np.exp(gmm.score_samples(np.expand_dims(np.arange(start=xmin, stop=xmax + xstep / 2, step=xstep), 1)))
+    return np.exp(
+        gmm.score_samples(
+            np.expand_dims(np.arange(start=xmin, stop=xmax + xstep / 2, step=xstep), 1)
+        )
+    )
 
 
 # -----------------------------------------------------------------------------
 def mp_gmm_score_samples_absolute(gmms, xmin, xmax, xstep):
-    """ Parallel sampling for multiple GMMs """
+    """Parallel sampling for multiple GMMs"""
     with multiprocessing.Pool() as pool:
-        return pool.starmap(gmm_score_samples_absolute, zip(gmms, repeat(xmin), repeat(xmax), repeat(xstep)))
+        return pool.starmap(
+            gmm_score_samples_absolute,
+            zip(gmms, repeat(xmin), repeat(xmax), repeat(xstep)),
+        )
 
 
 # -----------------------------------------------------------------------------
@@ -207,7 +224,9 @@ def gmm_sample_xy_components(gmm, **kwargs):
 
     # Sample each component separately
     y_components = []
-    for m, c, w in zip(gmm.means_.ravel(), gmm.covariances_.ravel(), gmm.weights_.ravel()):
+    for m, c, w in zip(
+        gmm.means_.ravel(), gmm.covariances_.ravel(), gmm.weights_.ravel()
+    ):
         y_components.append(gauss_function(x=x, amp=1, x0=m, sigma=np.sqrt(c), area=w))
 
     # Return
@@ -276,7 +295,9 @@ def gmm_expected_value(gmm, method="weighted", sampling=50):
 
     # Raise error if invalid method specified
     else:
-        raise ValueError("Method {0} not known. Use either 'weighted' or integral".format(method))
+        raise ValueError(
+            "Method {0} not known. Use either 'weighted' or integral".format(method)
+        )
 
 
 # -----------------------------------------------------------------------------
@@ -317,11 +338,13 @@ def gmm_population_variance(gmm, method="weighted", sampling=50):
         xrange, yrange = gmm_sample_xy(gmm=gmm, kappa=10, sampling=sampling)
 
         # Return population variance
-        return np.trapz(np.power(xrange, 2) * yrange, xrange) - ev ** 2
+        return np.trapz(np.power(xrange, 2) * yrange, xrange) - ev**2
 
     # Raise error if invalid method specified
     else:
-        raise ValueError("Method {0} not known. Use either 'weighted' or integral".format(method))
+        raise ValueError(
+            "Method {0} not known. Use either 'weighted' or integral".format(method)
+        )
 
 
 # -----------------------------------------------------------------------------
@@ -389,7 +412,11 @@ def gmm_confidence_interval_value(gmm, value, level=0.95):
 
     # Choose final index for confidence interval
     # noinspection PyUnboundLocalVariable
-    ci_half_size = value - gmm_x[lidx] if value_idx - lidx > ridx - value_idx else gmm_x[ridx] - value
+    ci_half_size = (
+        value - gmm_x[lidx]
+        if value_idx - lidx > ridx - value_idx
+        else gmm_x[ridx] - value
+    )
 
     # Return interval
     return value - ci_half_size, value + ci_half_size
@@ -474,7 +501,9 @@ def mp_gmm(data, max_components, parallel=True, ndata_max=10000, **kwargs):
         for idx in range(len(data)):
             if data[idx] is not None:
                 if len(data[idx]) > ndata_max:
-                    ridx = np.random.choice(len(data[idx]), size=ndata_max, replace=False)
+                    ridx = np.random.choice(
+                        len(data[idx]), size=ndata_max, replace=False
+                    )
                     data[idx] = data[idx][ridx]
 
     # TODO: For short data vectors the list comprehension is faster. This is just an easy fix for now
@@ -486,8 +515,12 @@ def mp_gmm(data, max_components, parallel=True, ndata_max=10000, **kwargs):
 
     # or without in list comprehension
     else:
-        return [GaussianMixture(n_components=n, **kwargs).fit(X=d) if d is not None else None
-                for n, d in zip(n_components, data)]
+        return [
+            GaussianMixture(n_components=n, **kwargs).fit(X=d)
+            if d is not None
+            else None
+            for n, d in zip(n_components, data)
+        ]
 
 
 # -----------------------------------------------------------------------------
@@ -525,8 +558,16 @@ def _mp_gmm(data, n_components, kwargs):
 
 
 # -----------------------------------------------------------------------------
-def gmm_combine(gmms, weights=None, params=None, good_idx=None,
-                gmms_means=None, gmms_variances=None, gmms_weights=None, gmms_zps=None):
+def gmm_combine(
+    gmms,
+    weights=None,
+    params=None,
+    good_idx=None,
+    gmms_means=None,
+    gmms_variances=None,
+    gmms_weights=None,
+    gmms_zps=None,
+):
     """
     Method to combine Gaussian Mixture Models. This function create a new GaussianMixture instance and adds all
     mixture components from the input models.
@@ -580,7 +621,7 @@ def gmm_combine(gmms, weights=None, params=None, good_idx=None,
 
     # Set zeropoints if not specified
     if gmms_zps is None:
-        gmms_zps = [0. for _ in range(len(gmms))]
+        gmms_zps = [0.0 for _ in range(len(gmms))]
     else:
         gmms_zps = gmms_zps[good_idx]
 
@@ -603,7 +644,9 @@ def gmm_combine(gmms, weights=None, params=None, good_idx=None,
         gmm_combined_weights = gmms[0].weights_ * weights[0]
         for gmm, w, zp in zip(gmms[1:], weights[1:], gmms_zps[1:]):
             gmm_combined_means = np.vstack([gmm_combined_means, gmm.means_ + zp])
-            gmm_combined_variances = np.vstack([gmm_combined_variances, gmm.covariances_])
+            gmm_combined_variances = np.vstack(
+                [gmm_combined_variances, gmm.covariances_]
+            )
             gmm_combined_weights = np.hstack([gmm_combined_weights, gmm.weights_ * w])
 
     # If the attributes are provided, extract the parameters directly (much faster)
@@ -628,8 +671,16 @@ def gmm_combine(gmms, weights=None, params=None, good_idx=None,
 
 
 # -----------------------------------------------------------------------------
-def mp_gmm_combine(gmms, weights=None, params=None, good_idx=None,
-                   gmms_means=None, gmms_variances=None, gmms_weights=None, gmms_zps=None):
+def mp_gmm_combine(
+    gmms,
+    weights=None,
+    params=None,
+    good_idx=None,
+    gmms_means=None,
+    gmms_variances=None,
+    gmms_weights=None,
+    gmms_zps=None,
+):
     """
     Parallel routine for GMM combination.
 
@@ -665,5 +716,16 @@ def mp_gmm_combine(gmms, weights=None, params=None, good_idx=None,
 
     # Run
     with multiprocessing.Pool() as pool:
-        return pool.starmap(gmm_combine, zip(gmms, weights, repeat(params), good_idx,
-                                             gmms_means, gmms_variances, gmms_weights, gmms_zps))
+        return pool.starmap(
+            gmm_combine,
+            zip(
+                gmms,
+                weights,
+                repeat(params),
+                good_idx,
+                gmms_means,
+                gmms_variances,
+                gmms_weights,
+                gmms_zps,
+            ),
+        )
