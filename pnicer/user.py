@@ -3,6 +3,7 @@
 import numpy as np
 
 from pnicer.common import Features
+# from pnicer.utils.plots import finalize_plot
 from pnicer.utils.algebra import get_sample_covar, get_color_covar
 
 
@@ -425,7 +426,7 @@ class ApparentMagnitudes(Magnitudes):
         return beta, ic
 
     # -----------------------------------------------------------------------------
-    def color_excess_ratio(self, x_keys, y_keys, method="ols", control=None, kappa=1, sigma=3, err_iter=100, qc=True):
+    def color_excess_ratio(self, x_keys, y_keys, method="ols", control=None, kappa=0, sigma=3, err_iter=100, qc=True):
         """
         Calculates the selective color excess rations (e.g.: E(J-H)/E(H-K)) for a given combinations of magnitudes. This
         slope is derived via different methods (LINES, BCES, OLS, or ODR).
@@ -493,7 +494,7 @@ class ApparentMagnitudes(Magnitudes):
         beta_dict = {}
 
         # If a control field is given:
-        if control is not None:
+        if method.lower() == "lines":
 
             # Sanity check
             self._check_class(ccls=control)
@@ -519,11 +520,11 @@ class ApparentMagnitudes(Magnitudes):
         else:
             xc_control = yc_control = None
 
+        # Get boolean array for all features
+        good_idx = np.where(smask.copy())[0]
+
         # Dummy mask for first iteration
         smask = np.arange(len(xc_science))
-
-        # Get boolean array for all features
-        good_idx = smask.copy()
 
         # Start iterations
         beta, ic = 0., 0.
@@ -593,61 +594,18 @@ class ApparentMagnitudes(Magnitudes):
         # Get final error estimate
         beta_err = 1.25 * np.sum(beta_err) / (np.sqrt(2) * err_iter)
 
+        # What it should be according to extinction vector
+        up = self.extvec.extvec[self._name2index(name=y_keys[1])] - self.extvec.extvec[self._name2index(name=y_keys[0])]
+        lo = self.extvec.extvec[self._name2index(name=x_keys[1])] - self.extvec.extvec[self._name2index(name=x_keys[0])]
+        beta_vector = up / lo
+
         # Generate QC plot
-        if qc:
-            self._plot_extinction_ratio(beta=beta, ic=ic, x_science=xc_science, y_science=yc_science,
-                                        x_control=xc_control, y_control=yc_control)
+        # if qc:
+        #     self._plot_extinction_ratio(beta=beta, ic=ic, x_science=xc_science, y_science=yc_science,
+        #                                 x_control=xc_control, y_control=yc_control, beta_vector=beta_vector)
 
         # Return fit and data values
-        return beta, beta_err, ic, good_idx
-
-    # -----------------------------------------------------------------------------
-    # noinspection PyUnboundLocalVariable
-    @staticmethod
-    def _plot_extinction_ratio(beta, ic, x_science, y_science, x_control=None, y_control=None):
-        """
-        Generates the qc plot for the extinction ratio fit.
-
-        Parameters
-        ----------
-        beta : float
-            Slope of fit.
-        ic : float
-            Intercept of fit.
-        x_science : np.ndarray
-            X data for science field.
-        y_science : np.ndarray
-            Y data for science field.
-        x_control : np.ndarray, optional
-            X data for control field.
-        y_control : np.ndarray, optional
-            Y data for control field.
-
-        """
-
-        # Import
-        import matplotlib.pyplot as plt
-
-        # Create figure
-        if x_control is not None:
-            fig, ax = plt.subplots(nrows=1, ncols=2, figsize=[20, 10])
-        else:
-            fig, ax0 = plt.subplots(nrows=1, ncols=1, figsize=[10, 10])
-            ax = [ax0]
-
-        # Plot science field data
-        ax[0].scatter(x_science, y_science, s=5, c="black", lw=0)
-
-        # Plot control field data
-        if x_control is not None:
-            ax[1].scatter(x_control, y_control, s=5, c="black", lw=0)
-
-        # Plot fit
-        xd = np.arange(np.min(x_science) - 0.5, np.max(x_science) + 0.5, 1)
-        ax[0].plot(xd, beta * xd + ic)
-
-        # Show plot
-        plt.show()
+        return beta, beta_vector, beta_err, ic, good_idx
 
 
 # ----------------------------------------------------------------------------- #
