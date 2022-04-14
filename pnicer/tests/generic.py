@@ -56,3 +56,7 @@ def orion():
 
     """ If no errors pop up, then the basic PNICER package works """
     print("{0:<80s}".format("PNICER routines terminated successfully! Happy hunting for extinction :) "))
+
+
+if __name__ == "__main__":
+    orion()
