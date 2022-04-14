@@ -4,7 +4,6 @@ import numpy as np
 import multiprocessing
 
 from itertools import repeat
-from collections import Iterable
 from scipy.integrate import cumtrapz
 # noinspection PyPackageRequirements
 from sklearn.mixture import GaussianMixture
@@ -559,7 +558,7 @@ def gmm_combine(gmms, weights=None, params=None, good_idx=None,
     """
 
     # Dummy checks
-    if not isinstance(gmms, Iterable):
+    if not isinstance(gmms):
         raise ValueError("Models must be provided as an iterable")
 
     # Set good_idx
