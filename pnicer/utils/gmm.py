@@ -2,6 +2,7 @@
 # Import packages
 import numpy as np
 import multiprocessing
+from joblib import Parallel, delayed
 
 from itertools import repeat
 from scipy.integrate import cumtrapz
@@ -510,8 +511,11 @@ def mp_gmm(data, max_components, parallel=True, ndata_max=10000, **kwargs):
     # TODO: Make parallelisation a user choice
     # Fit models with parallelisation
     if len(data) > 100 and parallel:
-        with multiprocessing.Pool() as pool:
-            return pool.starmap(_mp_gmm, zip(data, n_components, repeat(kwargs)))
+        with Parallel(n_jobs=4) as parallel:
+            return parallel(
+                delayed(_mp_gmm)(i, j, k)
+                for i, j, k in zip(data, n_components, repeat(kwargs))
+            )
 
     # or without in list comprehension
     else:
