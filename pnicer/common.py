@@ -971,7 +971,7 @@ class Features:
         # Create and index, variance and zp arrays for all sources
         idx_all = np.full(self.n_data, fill_value=-1, dtype=np.int64)
         var_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
-        zp_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
+        zp_all = np.full(self.n_data, fill_value=np.nan, dtype=np.float32)
 
         # Rotate the data spaces
         science_rot, control_rot = self._rotate(), control._rotate()
@@ -1091,6 +1091,9 @@ class Features:
             # Generate unique index for stacked GMM array
             uidx_combinations.append(i + len(flatten_lol(gmm_combinations)))
 
+            # Set bad indices to negative again
+            uidx_combinations[-1][i < 0] = -1
+
             # Save results
             gmm_combinations.append(g)
             var_combinations.append(v)
@@ -1103,8 +1106,14 @@ class Features:
         # Stack unique GMMs and norms
         gmm_unique = np.hstack(gmm_combinations)
 
+        # Determine all bad slices
+        all_bad = np.sum(~np.isfinite(np.array(var_combinations)), axis=0) == len(uidx_combinations)
+
         # Choose minimum variance GMM across all combinations
         minidx = np.argmin(np.array(var_combinations), axis=0)
+
+        # Put an existing model into bad slices
+        minidx[all_bad] = np.median(minidx)
 
         # Select model index
         sources_index = np.array(uidx_combinations)[minidx, np.arange(self.n_data)]
@@ -1127,6 +1136,9 @@ class Features:
         for c, d in zip(clean_index, diff_index):
             sources_index[sources_index == c] = sources_index[sources_index == c] - d
 
+        # Mask all bad slices
+        sources_index[all_bad] = -1
+
         # Set all negative indices to bad value
         sources_index[sources_index < 0] = sources_index.size + 1
 
@@ -1142,7 +1154,7 @@ class Features:
         # if not a == b:
         #     raise ValueError("Bad data is being propagated")
 
-        # Return intrinsic class
+        # Return
         from pnicer.extinction import ContinuousExtinction
         return ContinuousExtinction(features=self, models=gmm_unique, index=sources_index, zp=sources_zp)
 
