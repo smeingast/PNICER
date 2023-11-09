@@ -1448,7 +1448,7 @@ class DiscreteExtinction(Extinction):
             self.features._lat_deg,
             unit="degree",
         )
-        nnbrs = np.ceil(np.median(np.sum(d < trunc_radius / 2, axis=1))).astype(np.int)
+        nnbrs = np.ceil(np.median(np.sum(d < trunc_radius / 2, axis=1))).astype(int)
 
         # Maximum of 500 nearest neighbors
         nnbrs = 500 if nnbrs > 500 else nnbrs
@@ -1716,7 +1716,7 @@ class DiscreteExtinction(Extinction):
         n = np.ceil(np.min(grid_shape) * pixsize)
 
         # Determine patch size in pixels
-        patch_size = np.ceil(np.min(grid_shape) / n).astype(np.int)
+        patch_size = np.ceil(np.min(grid_shape) / n).astype(int)
 
         # Set minimum to 100 pix for effective parallelisation
         if patch_size < 100:
