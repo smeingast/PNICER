@@ -93,8 +93,12 @@ class Features:
             len(
                 set(
                     [
-                        len(l)
-                        for l in [self.features, self.features_err, self.features_names]
+                        len(ll)
+                        for ll in [
+                            self.features,
+                            self.features_err,
+                            self.features_names,
+                        ]
                     ]
                 )
             )
@@ -114,10 +118,6 @@ class Features:
     # -----------------------------------------------------------------------------
     def __len__(self):
         return self.features_err.__len__()
-
-    # -----------------------------------------------------------------------------
-    # def __str__(self):
-    #     return Table([np.around(x, 3) for x in self.features], names=self.features_names).__str__()
 
     # -----------------------------------------------------------------------------
     def __iter__(self):
@@ -178,7 +178,8 @@ class Features:
     @property
     def _features_masks(self):
         """
-        Provides a list with masks for each given feature. True (1) entries are good, False (0) are bad.
+        Provides a list with masks for each given feature. True (1) entries are good,
+        False (0) are bad.
 
 
         Returns
@@ -196,8 +197,10 @@ class Features:
     # -----------------------------------------------------------------------------
     def _loose_mask(self, max_bad_features):
         """
-        Returns a mask where entries are masked when given 'max_bad_features' bad entries. When e.g. set to 0, no bad
-        features are allowed at all (same as strict mask). When set to 2, then all entries are masked which have 2 or
+        Returns a mask where entries are masked when given 'max_bad_features'
+        bad entries. When e.g. set to 0, no bad
+        features are allowed at all (same as strict mask). When set to 2,
+        then all entries are masked which have 2 or
         more bad measurements.
 
         Parameters
@@ -220,7 +223,8 @@ class Features:
     @property
     def _strict_mask(self):
         """
-        Combines all feature masks into a single mask. Any entry that has a NaN in any band will be masked.
+        Combines all feature masks into a single mask. Any entry that has a NaN in any
+        band will be masked.
 
         Returns
         -------
@@ -237,7 +241,8 @@ class Features:
     # -----------------------------------------------------------------------------
     def _custom_strict_mask(self, idx=None, names=None):
         """
-        Creates a custom mask for a given set of combined features. Any entry that has a single NaN in any of the
+        Creates a custom mask for a given set of combined features. Any entry that has
+        a single NaN in any of the
         specified bands will be masked.
 
         Parameters
@@ -360,7 +365,8 @@ class Features:
     @staticmethod
     def _build_feature_grid(data, precision):
         """
-        Static method to build a grid of unique positons from given input data rounded to arbitrary precision.
+        Static method to build a grid of unique positons from given input data rounded
+        to arbitrary precision.
 
         Parameters
         ----------
@@ -415,7 +421,8 @@ class Features:
     # -----------------------------------------------------------------------------
     def _rotate(self):
         """
-        Method to rotate data space with the given extinction vector. Only finite data are transmitted intp the new
+        Method to rotate data space with the given extinction vector. Only finite data
+        are transmitted intp the new
         data space.
 
         Returns
@@ -458,7 +465,8 @@ class Features:
         Parameters
         ----------
         idxstart : int
-            Minimun number of features required. Used to exclude single magnitudes for univariate PNICER.
+            Minimun number of features required. Used to exclude single magnitudes for
+            univariate PNICER.
 
         Returns
         -------
@@ -530,7 +538,8 @@ class Features:
         pixsize : int, float, optional
             Pixel size of grid.
         return_skycoord : bool, optional
-            Whether to return the grid coordinates as a SkyCoord object. Default is False
+            Whether to return the grid coordinates as a SkyCoord object.
+            Default is False
         kwargs
             Any additional header arguments for the projection (e.g. PV2_1, ect.)
 
@@ -542,9 +551,7 @@ class Features:
         """
 
         return data2grid(
-            lon=self.coordinates.spherical.lon.degree,
-            lat=self.coordinates.spherical.lat.degree,
-            frame=self._frame_name,
+            skycoord=self.coordinates,
             proj_code=proj_code,
             pixsize=pixsize,
             return_skycoord=return_skycoord,
@@ -679,7 +686,8 @@ class Features:
 
         else:
             raise ValueError(
-                "Axis size must be given either with a single number or a list with two entries"
+                "Axis size must be given either with a single number "
+                "or a list with two entries"
             )
 
     # -----------------------------------------------------------------------------
@@ -697,7 +705,8 @@ class Features:
         Returns
         -------
         tuple
-            Tuple with the figure, the axes, the world coordinate grid, and the fits header.
+            Tuple with the figure, the axes, the world coordinate grid, and the
+            fits header.
 
         """
 
@@ -756,7 +765,8 @@ class Features:
 
         # Add axis labels
         if o == "v":
-            # For a vertical arrangement we set the x label for only the bottom-most plot
+            # For a vertical arrangement we set the x label for only the
+            # bottom-most plot
             axes[-1].set_xlabel(llon)
 
             # and y labels for everything
@@ -845,7 +855,8 @@ class Features:
         grid_bw : int, float, optional
             Grid size. Default is 0.1.
         kernel : str, optional
-            Name of kernel for KDE. e.g. 'epanechnikov' or 'gaussian'. Default is 'epanechnikov'.
+            Name of kernel for KDE. e.g. 'epanechnikov' or 'gaussian'.
+            Default is 'epanechnikov'.
         cmap : str, optional
             Colormap to be used in plot. Default is 'gist_heat_r'.
 
@@ -980,7 +991,8 @@ class Features:
         ax_size : int, float, optional
             Single axis width in plot. Default is 10.
         kernel : str, optional
-            Name of kernel for KDE. e.g. 'epanechnikov' or 'gaussian'. Default is 'epanechnikov'.
+            Name of kernel for KDE. e.g. 'epanechnikov' or 'gaussian'.
+             Default is 'epanechnikov'.
         skip : int, optional
             Skip every n-th source for faster plotting. Default is 1.
         kwargs
@@ -1010,7 +1022,8 @@ class Features:
                 grid=xgrid, data=data, bandwidth=bandwidth, kernel=kernel, norm=None
             ).reshape(grid_world[0].shape)
 
-            # Norm and save scale (we want everything scaled to the same reference! In this case the first feature)
+            # Norm and save scale (we want everything scaled to the same reference!
+            # In this case the first feature)
             if idx == 0:
                 scale = np.max(dens)
             dens /= scale
@@ -1271,8 +1284,9 @@ class Features:
         self, combinations_science, combinations_control, max_components, **kwargs
     ):
         """
-        PNICER base implementation for combinations. Calls the PNICER implementation for all combinations. The output
-        extinction is then the one with the smallest variance from all combinations.
+        PNICER base implementation for combinations. Calls the PNICER implementation
+        for all combinations. The output extinction is then the one with the smallest
+        variance from all combinations.
 
         Parameters
         ----------
@@ -1371,7 +1385,7 @@ class Features:
         # Chech if all bad slices are also bad in the index
         # TODO: Do I need this check?
         # a = np.where(np.nansum(np.array(var_combinations), axis=0) >
-        #              1E6 * (len(combinations_science) - 1) + 1)[0].shape  # All-bad variances
+        #              1E6 * (len(combinations_science) - 1) + 1)[0].shape
         # b = np.where(sources_index > self.n_data)[0].shape  # All bad indices
         # if not a == b:
         #     raise ValueError("Bad data is being propagated")
@@ -1391,7 +1405,8 @@ class Features:
         Parameters
         ----------
         extinction : np.array
-            Extinction for each source in the same unit as the extinction vector for this instance.
+            Extinction for each source in the same unit as the extinction vector
+            for this instance.
 
         Returns
         -------
@@ -1467,15 +1482,16 @@ class ExtinctionVector:
         """
 
         return [
-            np.array([1.0 if i == l else 0.0 for i in range(n_dimensions)])
-            for l in range(n_dimensions)
+            np.array([1.0 if i == ll else 0.0 for i in range(n_dimensions)])
+            for ll in range(n_dimensions)
         ]
 
     # -----------------------------------------------------------------------------
     @staticmethod
     def _get_rotmatrix(vector):
         """
-        Method to determine the rotation matrix so that the rotated first vector component is the only non-zero
+        Method to determine the rotation matrix so that the rotated first vector
+        component is the only non-zero
         component.
 
         Parameters
