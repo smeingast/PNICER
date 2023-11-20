@@ -986,7 +986,7 @@ class Features:
         # Determine bin widths for grid according to bandwidth and sampling
         # TODO: Optimize sampling or make it user choice
         sampling = 2
-        bin_grid = np.float(bandwidth / sampling)
+        bin_grid = np.float64(bandwidth / sampling)
 
         # Now we build a grid from the rotated data for all components but the first
         grid_data = Features._build_feature_grid(data=np.vstack(science_rot.features)[1:, :], precision=bin_grid)
