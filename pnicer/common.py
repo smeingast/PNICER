@@ -7,12 +7,18 @@ from itertools import combinations
 from pnicer.utils.kde import mp_kde
 from pnicer.utils.wcs import data2grid
 from pnicer.utils.auxiliary import flatten_lol
-from pnicer.utils.gmm import mp_gmm, gmm_scale, gmm_expected_value, gmm_population_variance
+from pnicer.utils.gmm import (
+    mp_gmm,
+    gmm_scale,
+    gmm_expected_value,
+    gmm_population_variance,
+)
 from pnicer.utils.plots import caxes, caxes_delete_ticklabels, finalize_plot
 from pnicer.utils.algebra import round_partial, centroid_sphere, distance_sky
 
 # noinspection PyPackageRequirements
 from sklearn.neighbors import NearestNeighbors
+
 # noinspection PyPackageRequirements
 from sklearn.mixture import GaussianMixture
 
@@ -21,9 +27,15 @@ from sklearn.mixture import GaussianMixture
 # ----------------------------------------------------------------------------- #
 # noinspection PyProtectedMember
 class Features:
-
     # -----------------------------------------------------------------------------
-    def __init__(self, features, feature_err, feature_extvec, feature_names=None, feature_coordinates=None):
+    def __init__(
+        self,
+        features,
+        feature_err,
+        feature_extvec,
+        feature_names=None,
+        feature_coordinates=None,
+    ):
         """
         Basic Data class which provides the foundation for extinction measurements.
 
@@ -53,7 +65,9 @@ class Features:
 
         # Generate simple names for the magnitudes if not set
         if self.features_names is None:
-            self.features_names = ["Mag" + str(idx + 1) for idx in range(self.n_features)]
+            self.features_names = [
+                "Mag" + str(idx + 1) for idx in range(self.n_features)
+            ]
 
         # Add data dictionary
         self.dict = {}
@@ -66,14 +80,26 @@ class Features:
 
         # Dimensions of extinction vector must be equal to dimensions of data
         if self.extvec.n_dimensions != self.n_features:
-            raise ValueError("Dimensions of extinction vector must be equal to number of features")
+            raise ValueError(
+                "Dimensions of extinction vector must be equal to number of features"
+            )
 
         # There must be at least one feature
         if self.n_features < 1:
             raise ValueError("There must be at least two features")
 
         # All input lists must have equal length
-        if len(set([len(l) for l in [self.features, self.features_err, self.features_names]])) != 1:
+        if (
+            len(
+                set(
+                    [
+                        len(l)
+                        for l in [self.features, self.features_err, self.features_names]
+                    ]
+                )
+            )
+            != 1
+        ):
             raise ValueError("Input lists must have equal length")
 
         # Input data must also have the same size
@@ -162,7 +188,10 @@ class Features:
 
         """
 
-        return [np.isfinite(m) & np.isfinite(e) for m, e in zip(self.features, self.features_err)]
+        return [
+            np.isfinite(m) & np.isfinite(e)
+            for m, e in zip(self.features, self.features_err)
+        ]
 
     # -----------------------------------------------------------------------------
     def _loose_mask(self, max_bad_features):
@@ -182,7 +211,10 @@ class Features:
             Loose mask.
 
         """
-        return self.n_features - np.sum(np.vstack(self._features_masks), axis=0) <= max_bad_features
+        return (
+            self.n_features - np.sum(np.vstack(self._features_masks), axis=0)
+            <= max_bad_features
+        )
 
     # -----------------------------------------------------------------------------
     @property
@@ -236,7 +268,9 @@ class Features:
             idx = [self.features_names.index(key) for key in names]
 
         # Return combined mask
-        return np.prod(np.vstack([self._features_masks[i] for i in idx]), axis=0, dtype=bool)
+        return np.prod(
+            np.vstack([self._features_masks[i] for i in idx]), axis=0, dtype=bool
+        )
 
     # -----------------------------------------------------------------------------
     @staticmethod
@@ -346,7 +380,9 @@ class Features:
         grid_data = round_partial(data=data, precision=precision).T
 
         # Get unique positions for coordinates
-        dummy = np.ascontiguousarray(grid_data).view(np.dtype((np.void, grid_data.dtype.itemsize * grid_data.shape[1])))
+        dummy = np.ascontiguousarray(grid_data).view(
+            np.dtype((np.void, grid_data.dtype.itemsize * grid_data.shape[1]))
+        )
         _, idx = np.unique(dummy, return_index=True)
 
         return grid_data[np.sort(idx)].T
@@ -406,9 +442,13 @@ class Features:
 
         # Return
         # noinspection PyTypeChecker
-        return self.__class__([rotdata[idx, :] for idx in range(self.n_features)],
-                              [err[idx, :]for idx in range(self.n_features)],
-                              extvec, coordinates, [x + "_rot" for x in self.features_names])
+        return self.__class__(
+            [rotdata[idx, :] for idx in range(self.n_features)],
+            [err[idx, :] for idx in range(self.n_features)],
+            extvec,
+            coordinates,
+            [x + "_rot" for x in self.features_names],
+        )
 
     # -----------------------------------------------------------------------------
     def _all_combinations(self, idxstart):
@@ -427,25 +467,46 @@ class Features:
 
         """
 
-        all_c = [item for sublist in [combinations(range(self.n_features), p)
-                                      for p in range(idxstart, self.n_features + 1)]
-                 for item in sublist]
+        all_c = [
+            item
+            for sublist in [
+                combinations(range(self.n_features), p)
+                for p in range(idxstart, self.n_features + 1)
+            ]
+            for item in sublist
+        ]
 
         # Import
         from pnicer.user import ApparentColors, ApparentMagnitudes
 
         combination_instances = []
         for c in all_c:
-            cdata, cerror = [self.features[idx] for idx in c], [self.features_err[idx] for idx in c]
+            cdata, cerror = [self.features[idx] for idx in c], [
+                self.features_err[idx] for idx in c
+            ]
             cnames = [self.features_names[idx] for idx in c]
             extvec = [self.extvec.extvec[idx] for idx in c]
 
             if isinstance(self, ApparentMagnitudes):
-                combination_instances.append(self.__class__(magnitudes=cdata, errors=cerror, extvec=extvec,
-                                                            coordinates=self.coordinates, names=cnames))
+                combination_instances.append(
+                    self.__class__(
+                        magnitudes=cdata,
+                        errors=cerror,
+                        extvec=extvec,
+                        coordinates=self.coordinates,
+                        names=cnames,
+                    )
+                )
             elif isinstance(self, ApparentColors):
-                combination_instances.append(self.__class__(colors=cdata, errors=cerror, extvec=extvec,
-                                                            coordinates=self.coordinates, names=cnames))
+                combination_instances.append(
+                    self.__class__(
+                        colors=cdata,
+                        errors=cerror,
+                        extvec=extvec,
+                        coordinates=self.coordinates,
+                        names=cnames,
+                    )
+                )
 
         # Return list of combinations.
         return combination_instances
@@ -456,7 +517,9 @@ class Features:
 
     # -----------------------------------------------------------------------------
     # noinspection PyUnresolvedReferences
-    def _build_wcs_grid(self, proj_code="TAN", pixsize=10 / 60, return_skycoord=False, **kwargs):
+    def _build_wcs_grid(
+        self, proj_code="TAN", pixsize=10 / 60, return_skycoord=False, **kwargs
+    ):
         """
         Generates a WCS grid.
 
@@ -478,42 +541,48 @@ class Features:
 
         """
 
-        return data2grid(lon=self.coordinates.spherical.lon.degree, lat=self.coordinates.spherical.lat.degree,
-                         frame=self._frame_name, proj_code=proj_code, pixsize=pixsize,
-                         return_skycoord=return_skycoord, **kwargs)
+        return data2grid(
+            lon=self.coordinates.spherical.lon.degree,
+            lat=self.coordinates.spherical.lat.degree,
+            frame=self._frame_name,
+            proj_code=proj_code,
+            pixsize=pixsize,
+            return_skycoord=return_skycoord,
+            **kwargs
+        )
 
     # -----------------------------------------------------------------------------
     # noinspection PyUnresolvedReferences
     @property
     def _lon_deg(self):
-        """ Longitudes in degrees """
+        """Longitudes in degrees"""
         return self.coordinates.spherical.lon.degree
 
     # -----------------------------------------------------------------------------
     # noinspection PyUnresolvedReferences
     @property
     def _lat_deg(self):
-        """ Latitudes in degrees """
+        """Latitudes in degrees"""
         return self.coordinates.spherical.lat.degree
 
     # -----------------------------------------------------------------------------
     # noinspection PyUnresolvedReferences
     @property
     def _lon_rad(self):
-        """ Longitudes in radian """
+        """Longitudes in radian"""
         return self.coordinates.spherical.lon.radian
 
     # -----------------------------------------------------------------------------
     # noinspection PyUnresolvedReferences
     @property
     def _lat_rad(self):
-        """ Latitudes in radian """
+        """Latitudes in radian"""
         return self.coordinates.spherical.lat.radian
 
     # -----------------------------------------------------------------------------
     @property
     def _frame_name(self):
-        """ Latitudes in radian """
+        """Latitudes in radian"""
         return self.coordinates.frame.name
 
     # ----------------------------------------------------------------------------- #
@@ -534,8 +603,10 @@ class Features:
 
         """
 
-        return [(np.floor(np.percentile(x[m], 0.01)), np.ceil(np.percentile(x[m], 99.99)))
-                for x, m in zip(self.features, self._features_masks)]
+        return [
+            (np.floor(np.percentile(x[m], 0.01)), np.ceil(np.percentile(x[m], 99.99)))
+            for x, m in zip(self.features, self._features_masks)
+        ]
 
     # -----------------------------------------------------------------------------
     @property
@@ -560,8 +631,16 @@ class Features:
         clon, clat = centroid_sphere(lon=flon, lat=flat, units="degree")
 
         # Maximize distances to the field edges in longitude
-        left = flon[:2][np.argmax(distance_sky(lon1=flon[:2], lat1=0, lon2=clon, lat2=0, unit="degree"))]
-        right = flon[2:][np.argmax(distance_sky(lon1=flon[2:], lat1=0, lon2=clon, lat2=0, unit="degree"))]
+        left = flon[:2][
+            np.argmax(
+                distance_sky(lon1=flon[:2], lat1=0, lon2=clon, lat2=0, unit="degree")
+            )
+        ]
+        right = flon[2:][
+            np.argmax(
+                distance_sky(lon1=flon[2:], lat1=0, lon2=clon, lat2=0, unit="degree")
+            )
+        ]
 
         # Maximize distances in latitude
         top, bottom = np.max(flat), np.min(flat)
@@ -599,7 +678,9 @@ class Features:
             return size
 
         else:
-            raise ValueError("Axis size must be given either with a single number or a list with two entries")
+            raise ValueError(
+                "Axis size must be given either with a single number or a list with two entries"
+            )
 
     # -----------------------------------------------------------------------------
     def _gridspec_world(self, pixsize, ax_size, proj_code):
@@ -638,23 +719,43 @@ class Features:
 
         # Create plot grid and figure
         fig = plt.figure(figsize=[ax_size * ncols, ax_size * nrows * ar])
-        grid_plot = GridSpec(ncols=ncols, nrows=nrows, bottom=0.05, top=0.95, left=0.05, right=0.95,
-                             hspace=0.25, wspace=0.25)
+        grid_plot = GridSpec(
+            ncols=ncols,
+            nrows=nrows,
+            bottom=0.05,
+            top=0.95,
+            left=0.05,
+            right=0.95,
+            hspace=0.25,
+            wspace=0.25,
+        )
 
         # Add axes
-        axes = [plt.subplot(grid_plot[idx], projection=wcs.WCS(header=header)) for idx in range(self.n_features)]
+        axes = [
+            plt.subplot(grid_plot[idx], projection=wcs.WCS(header=header))
+            for idx in range(self.n_features)
+        ]
 
         # Generate labels
-        llon, llat = "GLON" if "gal" in self._frame_name else "RA", "GLAT" \
-            if "gal" in self._frame_name else "DEC"
+        llon, llat = (
+            "GLON" if "gal" in self._frame_name else "RA",
+            "GLAT" if "gal" in self._frame_name else "DEC",
+        )
 
         # Add feature labels
-        [axes[idx].annotate(self.features_names[idx], xy=[0.5, 1.01], xycoords="axes fraction",
-                            ha="center", va="bottom") for idx in range(self.n_features)]
+        [
+            axes[idx].annotate(
+                self.features_names[idx],
+                xy=[0.5, 1.01],
+                xycoords="axes fraction",
+                ha="center",
+                va="bottom",
+            )
+            for idx in range(self.n_features)
+        ]
 
         # Add axis labels
         if o == "v":
-
             # For a vertical arrangement we set the x label for only the bottom-most plot
             axes[-1].set_xlabel(llon)
 
@@ -662,7 +763,6 @@ class Features:
             [ax.set_ylabel(llat) for ax in axes]
 
         elif o == "h":
-
             # For a horizontal arrangement we set the y label for the left most-plot
             axes[0].set_ylabel(llat)
 
@@ -690,28 +790,49 @@ class Features:
         """
 
         # Get figure and axes
-        fig, axes = caxes(ndim=self.n_features, ax_size=self._get_plot_axsize(size=ax_size), labels=self.features_names)
+        fig, axes = caxes(
+            ndim=self.n_features,
+            ax_size=self._get_plot_axsize(size=ax_size),
+            labels=self.features_names,
+        )
 
         # Get 2D combination indices
         for idx, ax in zip(combinations(range(self.n_features), 2), axes):
-
-            ax.scatter(self.features[idx[1]][::skip], self.features[idx[0]][::skip], lw=0, s=5, alpha=0.1, **kwargs)
+            ax.scatter(
+                self.features[idx[1]][::skip],
+                self.features[idx[0]][::skip],
+                lw=0,
+                s=5,
+                alpha=0.1,
+                **kwargs
+            )
 
             # We need a square grid!
-            l, h = np.min([x[0] for x in self._plotrange_features]), np.max([x[1] for x in self._plotrange_features])
+            l, h = np.min([x[0] for x in self._plotrange_features]), np.max(
+                [x[1] for x in self._plotrange_features]
+            )
 
             # Ranges
             ax.set_xlim(l, h)
             ax.set_ylim(l, h)
 
         # Modify tick labels
-        caxes_delete_ticklabels(axes=axes, xfirst=False, xlast=True, yfirst=False, ylast=True)
+        caxes_delete_ticklabels(
+            axes=axes, xfirst=False, xlast=True, yfirst=False, ylast=True
+        )
 
         # Save or show figure
         finalize_plot(path=path)
 
     # -----------------------------------------------------------------------------
-    def plot_combinations_kde(self, path=None, ax_size=None, grid_bw=0.1, kernel="epanechnikov", cmap="gist_heat_r"):
+    def plot_combinations_kde(
+        self,
+        path=None,
+        ax_size=None,
+        grid_bw=0.1,
+        kernel="epanechnikov",
+        cmap="gist_heat_r",
+    ):
         """
         KDE for all 2D combinations of features
 
@@ -734,31 +855,58 @@ class Features:
         ax_size = self._get_plot_axsize(size=ax_size)
 
         # Get figure and axes
-        fig, axes = caxes(ndim=self.n_features, ax_size=self._get_plot_axsize(size=ax_size),
-                          labels=self.features_names)
+        fig, axes = caxes(
+            ndim=self.n_features,
+            ax_size=self._get_plot_axsize(size=ax_size),
+            labels=self.features_names,
+        )
 
         # Get 2D combination indices
         for idx, ax in zip(combinations(range(self.n_features), 2), axes):
-
             # Get clean data from the current combination
-            mask = np.prod(np.vstack([self._features_masks[idx[0]], self._features_masks[idx[1]]]), axis=0, dtype=bool)
+            mask = np.prod(
+                np.vstack([self._features_masks[idx[0]], self._features_masks[idx[1]]]),
+                axis=0,
+                dtype=bool,
+            )
 
             # We need a square grid!
-            l, h = np.min([x[0] for x in self._plotrange_features]), np.max([x[1] for x in self._plotrange_features])
+            l, h = np.min([x[0] for x in self._plotrange_features]), np.max(
+                [x[1] for x in self._plotrange_features]
+            )
 
-            x, y = np.meshgrid(np.arange(start=l, stop=h, step=grid_bw), np.arange(start=l, stop=h, step=grid_bw))
+            x, y = np.meshgrid(
+                np.arange(start=l, stop=h, step=grid_bw),
+                np.arange(start=l, stop=h, step=grid_bw),
+            )
 
             # Get kernel density
-            data = np.vstack([self.features[idx[0]][mask], self.features[idx[1]][mask]]).T
+            data = np.vstack(
+                [self.features[idx[0]][mask], self.features[idx[1]][mask]]
+            ).T
             xgrid = np.vstack([x.ravel(), y.ravel()]).T
-            dens = mp_kde(grid=xgrid, data=data, bandwidth=grid_bw * 2, kernel=kernel, absolute=True,
-                          sampling=2).reshape(x.shape)
+            dens = mp_kde(
+                grid=xgrid,
+                data=data,
+                bandwidth=grid_bw * 2,
+                kernel=kernel,
+                absolute=True,
+                sampling=2,
+            ).reshape(x.shape)
 
             # Plot result
-            ax.imshow(dens.T, origin="lower", interpolation="nearest", extent=[l, h, l, h], cmap=cmap)
+            ax.imshow(
+                dens.T,
+                origin="lower",
+                interpolation="nearest",
+                extent=[l, h, l, h],
+                cmap=cmap,
+            )
 
         # Modify tick labels
-        caxes_delete_ticklabels(axes=axes, xfirst=False, xlast=True, yfirst=False, ylast=True)
+        caxes_delete_ticklabels(
+            axes=axes, xfirst=False, xlast=True, yfirst=False, ylast=True
+        )
 
         # Save or show figure
         finalize_plot(path=path)
@@ -782,20 +930,26 @@ class Features:
         """
 
         # Get figure and axes
-        fig, axes, _, header = self._gridspec_world(pixsize=10 / 60, ax_size=ax_size, proj_code="TAN")
+        fig, axes, _, header = self._gridspec_world(
+            pixsize=10 / 60, ax_size=ax_size, proj_code="TAN"
+        )
 
         # Get plot limits
-        lim = wcs.WCS(header=header).wcs_world2pix(self._plotrange_world[0], self._plotrange_world[1], 0)
+        lim = wcs.WCS(header=header).wcs_world2pix(
+            self._plotrange_world[0], self._plotrange_world[1], 0
+        )
 
         # Loop over features and plot
         for idx in range(self.n_features):
-
             # Grab axes
             ax = axes[idx]
 
-            ax.scatter(self._lon_deg[self._features_masks[idx]][::skip],
-                       self._lat_deg[self._features_masks[idx]][::skip],
-                       transform=ax.get_transform(self._frame_name), **kwargs)
+            ax.scatter(
+                self._lon_deg[self._features_masks[idx]][::skip],
+                self._lat_deg[self._features_masks[idx]][::skip],
+                transform=ax.get_transform(self._frame_name),
+                **kwargs
+            )
 
             # Set axes limits
             ax.set_xlim(lim[0])
@@ -805,7 +959,15 @@ class Features:
         finalize_plot(path=path)
 
     # -----------------------------------------------------------------------------
-    def plot_sources_kde(self, path=None, bandwidth=10 / 60, ax_size=10, kernel="epanechnikov", skip=1, **kwargs):
+    def plot_sources_kde(
+        self,
+        path=None,
+        bandwidth=10 / 60,
+        ax_size=10,
+        kernel="epanechnikov",
+        skip=1,
+        **kwargs
+    ):
         """
         Plot source densities for features
 
@@ -827,20 +989,26 @@ class Features:
         """
 
         # Get figure, axes, and wcs grid
-        fig, axes, grid_world, header = self._gridspec_world(pixsize=bandwidth / 2, ax_size=ax_size, proj_code="TAN")
+        fig, axes, grid_world, header = self._gridspec_world(
+            pixsize=bandwidth / 2, ax_size=ax_size, proj_code="TAN"
+        )
 
         # To avoid editor warning
         scale = 1
 
         # Loop over features and plot
         for idx in range(self.n_features):
-
             # Get density
             xgrid = np.vstack([grid_world[0].ravel(), grid_world[1].ravel()]).T
-            data = np.vstack([self._lon_deg[self._features_masks[idx]][::skip],
-                              self._lat_deg[self._features_masks[idx]][::skip]]).T
-            dens = mp_kde(grid=xgrid, data=data, bandwidth=bandwidth, kernel=kernel,
-                          norm=None).reshape(grid_world[0].shape)
+            data = np.vstack(
+                [
+                    self._lon_deg[self._features_masks[idx]][::skip],
+                    self._lat_deg[self._features_masks[idx]][::skip],
+                ]
+            ).T
+            dens = mp_kde(
+                grid=xgrid, data=data, bandwidth=bandwidth, kernel=kernel, norm=None
+            ).reshape(grid_world[0].shape)
 
             # Norm and save scale (we want everything scaled to the same reference! In this case the first feature)
             if idx == 0:
@@ -851,7 +1019,15 @@ class Features:
             dens[dens <= 1e-4] = np.nan
 
             # Show density
-            axes[idx].imshow(dens, origin="lower", interpolation="nearest", cmap="viridis", vmin=0, vmax=1, **kwargs)
+            axes[idx].imshow(
+                dens,
+                origin="lower",
+                interpolation="nearest",
+                cmap="viridis",
+                vmin=0,
+                vmax=1,
+                **kwargs
+            )
 
         # Save or show figure
         finalize_plot(path=path)
@@ -886,7 +1062,7 @@ class Features:
         if "covariance_type" not in kwargs:
             kwargs["covariance_type"] = "full"
         if "tol" not in kwargs:
-            kwargs["tol"] = 1E-3
+            kwargs["tol"] = 1e-3
         if "max_iter" not in kwargs:
             kwargs["max_iter"] = 100
         if "warm_start" not in kwargs:
@@ -917,7 +1093,7 @@ class Features:
 
         # Generate outout arrays
         idx_all = np.full(self.n_data, fill_value=-1, dtype=np.int64)
-        var_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
+        var_all = np.full(self.n_data, fill_value=1e6, dtype=np.float32)
         zp_all = np.full(self.n_data, fill_value=0, dtype=np.float32)
 
         # Reuqire a minimum of 20 sources in control fields
@@ -925,8 +1101,12 @@ class Features:
             return [None], var_all, idx_all, zp_all
 
         # Define and fit Gaussian Mixture Model
-        gmm = mp_gmm(data=[control.features[0][control._strict_mask].reshape(-1, 1)], max_components=max_components,
-                     parallel=False, **self._set_defaults_gmm(**kwargs))[0]
+        gmm = mp_gmm(
+            data=[control.features[0][control._strict_mask].reshape(-1, 1)],
+            max_components=max_components,
+            parallel=False,
+            **self._set_defaults_gmm(**kwargs)
+        )[0]
 
         # Scaling factor to extinction
         scale = self.extvec._extinction_norm
@@ -943,7 +1123,9 @@ class Features:
         # Fill output arrays
         idx_all[self._strict_mask] = 0
         var_all[self._strict_mask] = var
-        zp_all[self._strict_mask] = (self.features[0][self._strict_mask] + shift) / scale
+        zp_all[self._strict_mask] = (
+            self.features[0][self._strict_mask] + shift
+        ) / scale
 
         # Return
         return [gmm], var_all, idx_all, zp_all
@@ -970,7 +1152,7 @@ class Features:
 
         # Create and index, variance and zp arrays for all sources
         idx_all = np.full(self.n_data, fill_value=-1, dtype=np.int64)
-        var_all = np.full(self.n_data, fill_value=1E6, dtype=np.float32)
+        var_all = np.full(self.n_data, fill_value=1e6, dtype=np.float32)
         zp_all = np.full(self.n_data, fill_value=np.nan, dtype=np.float32)
 
         # Rotate the data spaces
@@ -989,7 +1171,9 @@ class Features:
         bin_grid = np.float64(bandwidth / sampling)
 
         # Now we build a grid from the rotated data for all components but the first
-        grid_data = Features._build_feature_grid(data=np.vstack(science_rot.features)[1:, :], precision=bin_grid)
+        grid_data = Features._build_feature_grid(
+            data=np.vstack(science_rot.features)[1:, :], precision=bin_grid
+        )
 
         # Define NN algorithm
         try:
@@ -1008,7 +1192,10 @@ class Features:
         idx[dis > bandwidth / 2] = grid_data.shape[-1] + 1
 
         # Build data vectors for GMM-fits
-        vectors_data = [control_rot.features[0][idx == i].reshape(-1, 1) for i in range(grid_data.shape[-1])]
+        vectors_data = [
+            control_rot.features[0][idx == i].reshape(-1, 1)
+            for i in range(grid_data.shape[-1])
+        ]
 
         # Each control field vector needs to contain at least 20 sources
         vectors_data = [None if len(v) < 20 else v for v in vectors_data]
@@ -1018,23 +1205,41 @@ class Features:
             return [None], var_all, idx_all, zp_all
 
         # Fit GMM for each vector
-        vectors_gmm = mp_gmm(data=vectors_data, max_components=max_components, **self._set_defaults_gmm(**kwargs))
+        vectors_gmm = mp_gmm(
+            data=vectors_data,
+            max_components=max_components,
+            **self._set_defaults_gmm(**kwargs)
+        )
 
         # Determine scaling and shifting factor for models
         scale = self.extvec._extinction_norm
-        vectors_shift = [-gmm_expected_value(gmm=gmm, method="weighted")
-                         if isinstance(gmm, GaussianMixture) else None for gmm in vectors_gmm]
+        vectors_shift = [
+            -gmm_expected_value(gmm=gmm, method="weighted")
+            if isinstance(gmm, GaussianMixture)
+            else None
+            for gmm in vectors_gmm
+        ]
 
         # Scale GMMs to extinction
-        vectors_gmm = [gmm_scale(gmm=gmm, scale=scale, shift=shift, reverse=True)
-                       if isinstance(gmm, GaussianMixture) else None for gmm, shift in zip(vectors_gmm, vectors_shift)]
+        vectors_gmm = [
+            gmm_scale(gmm=gmm, scale=scale, shift=shift, reverse=True)
+            if isinstance(gmm, GaussianMixture)
+            else None
+            for gmm, shift in zip(vectors_gmm, vectors_shift)
+        ]
 
         # Determine variance for each vector
-        vectors_var = [gmm_population_variance(gmm=gmm, method="weighted")
-                       if gmm is not None else np.nan for gmm in vectors_gmm]
+        vectors_var = [
+            gmm_population_variance(gmm=gmm, method="weighted")
+            if gmm is not None
+            else np.nan
+            for gmm in vectors_gmm
+        ]
 
         # Get good models
-        grid_good_idx = [i for i, j in enumerate(vectors_gmm) if isinstance(j, GaussianMixture)]
+        grid_good_idx = [
+            i for i, j in enumerate(vectors_gmm) if isinstance(j, GaussianMixture)
+        ]
         vectors_gmm = [vectors_gmm[i] for i in grid_good_idx]
         vectors_shift = [vectors_shift[i] for i in grid_good_idx]
 
@@ -1043,7 +1248,9 @@ class Features:
             return [None], var_all, idx_all, zp_all
 
         # Find the nearest neighbor for each science target in the cleaned grid
-        nbrs = NearestNeighbors(n_neighbors=1, algorithm="ball_tree").fit(grid_data[:, grid_good_idx].T)
+        nbrs = NearestNeighbors(n_neighbors=1, algorithm="ball_tree").fit(
+            grid_data[:, grid_good_idx].T
+        )
         science_idx = nbrs.kneighbors(np.vstack(science_rot.features)[1:, :].T)[1][:, 0]
 
         # Determine variance for each source
@@ -1052,13 +1259,17 @@ class Features:
         # Fill and index, variance and zp arrays for all sources
         idx_all[self._strict_mask] = science_idx
         var_all[self._strict_mask] = var
-        zp_all[self._strict_mask] = (science_rot.features[0] + np.array(vectors_shift)[science_idx]) / scale
+        zp_all[self._strict_mask] = (
+            science_rot.features[0] + np.array(vectors_shift)[science_idx]
+        ) / scale
 
         # Return
         return vectors_gmm, var_all, idx_all, zp_all
 
     # -----------------------------------------------------------------------------
-    def _pnicer_combinations(self, combinations_science, combinations_control, max_components, **kwargs):
+    def _pnicer_combinations(
+        self, combinations_science, combinations_control, max_components, **kwargs
+    ):
         """
         PNICER base implementation for combinations. Calls the PNICER implementation for all combinations. The output
         extinction is then the one with the smallest variance from all combinations.
@@ -1079,14 +1290,23 @@ class Features:
         """
 
         # Loop over all combinations and run PNICER
-        gmm_combinations, var_combinations, uidx_combinations, zp_combinations, models_norm = [], [], [], [], []
+        (
+            gmm_combinations,
+            var_combinations,
+            uidx_combinations,
+            zp_combinations,
+            models_norm,
+        ) = ([], [], [], [], [])
         for sc, cc in zip(combinations_science, combinations_control):
-
             # Choose uni/multivariate PNICER
             if sc.n_features == 1:
-                g, v, i, zp = sc._pnicer_univariate(control=cc, max_components=max_components, **kwargs)
+                g, v, i, zp = sc._pnicer_univariate(
+                    control=cc, max_components=max_components, **kwargs
+                )
             else:
-                g, v, i, zp = sc._pnicer_multivariate(control=cc, max_components=max_components, **kwargs)
+                g, v, i, zp = sc._pnicer_multivariate(
+                    control=cc, max_components=max_components, **kwargs
+                )
 
             # Generate unique index for stacked GMM array
             uidx_combinations.append(i + len(flatten_lol(gmm_combinations)))
@@ -1107,7 +1327,9 @@ class Features:
         gmm_unique = np.hstack(gmm_combinations)
 
         # Determine all bad slices
-        all_bad = np.sum(~np.isfinite(np.array(var_combinations)), axis=0) == len(uidx_combinations)
+        all_bad = np.sum(~np.isfinite(np.array(var_combinations)), axis=0) == len(
+            uidx_combinations
+        )
 
         # Choose minimum variance GMM across all combinations
         minidx = np.argmin(np.array(var_combinations), axis=0)
@@ -1156,7 +1378,10 @@ class Features:
 
         # Return
         from pnicer.extinction import ContinuousExtinction
-        return ContinuousExtinction(features=self, models=gmm_unique, index=sources_index, zp=sources_zp)
+
+        return ContinuousExtinction(
+            features=self, models=gmm_unique, index=sources_index, zp=sources_zp
+        )
 
     # -----------------------------------------------------------------------------
     def features_intrinsic(self, extinction):
@@ -1181,7 +1406,6 @@ class Features:
 # ----------------------------------------------------------------------------- #
 # ----------------------------------------------------------------------------- #
 class ExtinctionVector:
-
     # -----------------------------------------------------------------------------
     def __init__(self, extvec):
         """
@@ -1242,7 +1466,10 @@ class ExtinctionVector:
 
         """
 
-        return [np.array([1.0 if i == l else 0.0 for i in range(n_dimensions)]) for l in range(n_dimensions)]
+        return [
+            np.array([1.0 if i == l else 0.0 for i in range(n_dimensions)])
+            for l in range(n_dimensions)
+        ]
 
     # -----------------------------------------------------------------------------
     @staticmethod
@@ -1277,7 +1504,6 @@ class ExtinctionVector:
         # Now we loop over all but the first component
         rotmatrices = []
         for n in range(n_dimensions - 1):
-
             # Calculate rotation angle of current component
             if n == 0:
                 rot_angle = np.arctan(vector[n + 1] / vector[0])
@@ -1287,7 +1513,11 @@ class ExtinctionVector:
             # Following the german Wikipedia... :)
             v = np.outer(uv[0], uv[0]) + np.outer(uv[n + 1], uv[n + 1])
             w = np.outer(uv[0], uv[n + 1]) - np.outer(uv[n + 1], uv[0])
-            rotmatrices.append((np.cos(rot_angle) - 1) * v + np.sin(rot_angle) * w + np.identity(n_dimensions))
+            rotmatrices.append(
+                (np.cos(rot_angle) - 1) * v
+                + np.sin(rot_angle) * w
+                + np.identity(n_dimensions)
+            )
 
             # Rotate reddening vector
             if n == 0:
@@ -1306,7 +1536,8 @@ class ExtinctionVector:
     @property
     def _rotmatrix(self):
         """
-        Property to hold the rotation matrix for all extinction components of the current instance.
+        Property to hold the rotation matrix for all extinction components of the
+        current instance.
 
         Returns
         -------
