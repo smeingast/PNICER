@@ -6,17 +6,14 @@ import warnings
 import numpy as np
 
 from astropy import wcs
+from typing import Tuple
 from astropy.io import fits
 from itertools import repeat
 from astropy.table import Table
 from multiprocessing.pool import Pool
-
-# noinspection PyPackageRequirements
+from astropy.coordinates import SkyCoord
 from sklearn.mixture import GaussianMixture
-
-# noinspection PyPackageRequirements
 from sklearn.neighbors import NearestNeighbors
-
 from pnicer.utils.plots import finalize_plot
 from pnicer.extinction_map import DiscreteExtinctionMap
 from pnicer.utils.algebra import centroid_sphere, distance_sky, std2fwhm, round_partial
@@ -81,16 +78,59 @@ class Extinction:
 
     # -----------------------------------------------------------------------------
     def query_position(
-        self,
-        skycoord,
-        bandwidth,
-        mode="average",
-        metric="gaussian",
-        use_fwhm=False,
-        nicest=False,
-        alpha=1 / 3,
-    ):
-        # TODO: Add docstring
+            self,
+            skycoord: SkyCoord,
+            bandwidth: float,
+            mode: str = "average",
+            metric: str = "gaussian",
+            use_fwhm: bool = False,
+            nicest: bool = False,
+            alpha: float = 1/3,
+    ) -> Tuple[float, float, int, float]:
+        """
+        Query the position for the extinction model.
+
+        Parameters
+        ----------
+        skycoord : SkyCoord
+            A single point in the sky represented as an Astropy SkyCoord object.
+            This function does not process arrays of coordinates.
+        bandwidth : float
+            The bandwidth for the kernel in the query.
+        mode : str, optional
+            The mode of the query. Can be "average" or "model". Default is "average".
+        metric : str, optional
+            The metric of the query. Can be "gaussian". Default is "gaussian".
+        use_fwhm : bool, optional
+            Defines if full width at half maximum (FWHM) should be used.
+            Only valid for gaussian kernel. Defaults to False.
+        nicest : bool, optional
+            Define whether to use NICEST extinction. Defaults to False.
+        alpha : float, optional
+            The alpha parameter for NICEST extinction computation. Defaults to 1/3.
+
+        Raises
+        ------
+        ValueError
+            If more than one sky coordinate is passed.
+            If FWHM is set for metrics other than "gaussian".
+            If provided mode or metric is not implemented.
+            If method is not supported for the class.
+
+        Returns
+        -------
+        Tuple[float, float, int, float]
+            A tuple containing the following elements:
+            1. Extinction (float)
+            2. Exctinction Error (float)
+            3. Number of sources used (int)
+            4. Source density (float)
+        """
+
+        if skycoord.size != 1:
+            raise ValueError(
+                "Only single coordinate should be given. "
+                "The function cannot process arrays.")
 
         # FWHM can only be used with a gaussian metric
         if use_fwhm & (metric != "gaussian"):
@@ -1343,12 +1383,17 @@ class DiscreteExtinction(Extinction):
                     - map_cor
                 )
 
-                # Mask all bad
-                ext[num == 0] = np.nan
-
                 # Get source density
                 rho = np.nansum(w_spatial, axis=0)
-                rho[num == 0] = np.nan
+
+                # Mask all bad
+                if isinstance(ext, np.ndarray):
+                    ext[num == 0] = np.nan
+                    rho[num == 0] = np.nan
+                elif isinstance(ext, float):
+                    if num == 0:
+                        ext = np.nan
+                        rho = np.nan
 
         # Return extinction map
         return ext, var, num, rho

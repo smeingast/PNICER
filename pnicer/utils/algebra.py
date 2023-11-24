@@ -1,6 +1,8 @@
 # -----------------------------------------------------------------------------
 # Import packages
 import numpy as np
+from astropy.units import Unit
+from astropy.coordinates import SkyCoord
 
 
 # -----------------------------------------------------------------------------
@@ -34,7 +36,7 @@ def gauss_function(x, amp, x0, sigma, area=None):
     """
 
     # Get samples
-    gauss = amp * np.exp(-(x - x0) ** 2. / (2. * sigma ** 2.))
+    gauss = amp * np.exp(-((x - x0) ** 2.0) / (2.0 * sigma**2.0))
 
     # Normalize
     if area is not None:
@@ -48,7 +50,8 @@ def gauss_function(x, amp, x0, sigma, area=None):
 # -----------------------------------------------------------------------------
 def distance_sky(lon1, lat1, lon2, lat2, unit="radians"):
     """
-    Returns the distance between two objects on a sphere along the connecting great circle. Also works with arrays.
+    Returns the distance between two objects on a sphere along the connecting great
+    circle. Also works with arrays.
 
     Parameters
     ----------
@@ -61,7 +64,8 @@ def distance_sky(lon1, lat1, lon2, lat2, unit="radians"):
     lat2 : int, float, np.ndarray
         Longitude of object to calculate the distance to.
     unit : str, optional
-        The unit in which the coordinates are given. Either 'radians' or 'degrees'. Default is 'radians'. Output will
+        The unit in which the coordinates are given. Either 'radians' or 'degrees'.
+        Default is 'radians'. Output will
         be in the same units.
 
     Returns
@@ -71,11 +75,22 @@ def distance_sky(lon1, lat1, lon2, lat2, unit="radians"):
 
     """
 
-    l1, l2 = np.radians(lon1) if "deg" in unit else lon1, np.radians(lon2) if "deg" in unit else lon2
-    b1, b2 = np.radians(lat1) if "deg" in unit else lat1, np.radians(lat2) if "deg" in unit else lat2
+    l1, l2 = (
+        np.radians(lon1) if "deg" in unit else lon1,
+        np.radians(lon2) if "deg" in unit else lon2,
+    )
+    b1, b2 = (
+        np.radians(lat1) if "deg" in unit else lat1,
+        np.radians(lat2) if "deg" in unit else lat2,
+    )
 
     # Return haversine distance
-    dis = 2 * np.arcsin(np.sqrt(np.sin((b1 - b2) / 2.) ** 2 + np.cos(b1) * np.cos(b2) * np.sin((l1 - l2) / 2.) ** 2))
+    dis = 2 * np.arcsin(
+        np.sqrt(
+            np.sin((b1 - b2) / 2.0) ** 2
+            + np.cos(b1) * np.cos(b2) * np.sin((l1 - l2) / 2.0) ** 2
+        )
+    )
     if "deg" in unit:
         return np.rad2deg(dis)
     else:
@@ -112,56 +127,45 @@ def weighted_avg(values, weights):
 
 
 # -----------------------------------------------------------------------------
-def centroid_sphere(lon, lat, units="radian"):
+def centroid_sphere(skycoord: SkyCoord) -> SkyCoord:
     """
-    Calculate the centroid on a sphere. Strictly valid only for a unit sphere and for a coordinate system with latitudes
-    from -90 to 90 degrees and longitudes from 0 to 360 degrees.
+    Calculate the centroid on a sphere. Strictly valid only for a unit sphere and for a
+    coordinate system with latitudes from -90 to 90 degrees and longitudes from 0 to
+    360 degrees.
 
     Parameters
     ----------
-    lon : list, np.array
-        Input longitudes
-    lat : list, np.array
-        Input latitudes
-    units : str, optional
-        Input units. Either 'radian' or 'degree'. Default is 'radian'.
+    skycoord : SkyCoord
+        SkyCoord instance
 
     Returns
     -------
-    tuple
-        Tuple with (lon, lat) of centroid
+    SkyCoord
+        Centroid as SkyCoord instance.
 
     """
 
-    # Convert to radians if degrees
-    if "deg" in units.lower():
-        mlon, mlat = np.radians(lon), np.radians(lat)
-    else:
-        mlon, mlat = lon, lat
+    # Filter finite entries in arrays
+    good = np.isfinite(skycoord.spherical.lon) & np.isfinite(skycoord.spherical.lat)
 
-    # Convert to cartesian coordinates
-    x, y, z = np.cos(mlat) * np.cos(mlon), np.cos(mlat) * np.sin(mlon), np.sin(mlat)
+    # 3D mean
+    mean_x = np.mean(skycoord[good].cartesian.x)
+    mean_y = np.mean(skycoord[good].cartesian.y)
+    mean_z = np.mean(skycoord[good].cartesian.z)
 
-    # 3D centroid
-    xcen, ycen, zcen = np.sum(x) / len(x), np.sum(y) / len(y), np.sum(z) / len(z)
-
-    # Push centroid to triangle surface
-    cenlen = np.sqrt(xcen**2 + ycen**2 + zcen**2)
-    xsur, ysur, zsur = xcen / cenlen, ycen / cenlen, zcen / cenlen
+    # Push mean to triangle surface
+    cenlen = np.sqrt(mean_x**2 + mean_y**2 + mean_z**2)
+    xsur, ysur, zsur = mean_x / cenlen, mean_y / cenlen, mean_z / cenlen
 
     # Convert back to spherical coordinates and return
     outlon = np.arctan2(ysur, xsur)
 
     # Convert back to 0-2pi range if necessary
     if outlon < 0:
-        outlon += 2 * np.pi
+        outlon += 2 * np.pi * Unit("rad")
     outlat = np.arcsin(zsur)
 
-    # Return
-    if "deg" in units.lower():
-        return np.degrees(outlon), np.degrees(outlat)
-    else:
-        return outlon, outlat
+    return SkyCoord(outlon, outlat, frame=skycoord.frame)
 
 
 # -----------------------------------------------------------------------------
@@ -229,7 +233,7 @@ def get_color_covar(magerr1, magerr2, magerr3, magerr4, name1, name2, name3, nam
     cmatrix[1, 1] = np.mean(magerr3) ** 2 * np.mean(magerr4) ** 2
 
     # Initially set cross entries to 0
-    cov = 0.
+    cov = 0.0
 
     # Add first term
     if name1 == name3:
