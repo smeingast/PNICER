@@ -543,7 +543,8 @@ def _mp_gmm(data, n_components, kwargs):
 
     Returns
     -------
-        GaussianMixture class or NaN in case the fitting procedure did not converge or was not possible.
+        GaussianMixture class or NaN in case the fitting procedure did not converge or
+        was not possible.
 
     """
 
