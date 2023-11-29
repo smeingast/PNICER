@@ -9,8 +9,13 @@ from scipy.interpolate import interp1d
 from astropy import wcs
 from astropy.io import fits
 
-from pnicer.utils.gmm import gmm_expected_value, gmm_population_variance, gmm_query_range, gmm_sample_xy,\
-    mp_gmm_score_samples_absolute
+from pnicer.utils.gmm import (
+    gmm_expected_value,
+    gmm_population_variance,
+    gmm_query_range,
+    gmm_sample_xy,
+    mp_gmm_score_samples_absolute,
+)
 from pnicer.utils.plots import finalize_plot
 from pnicer.utils.algebra import round_partial
 from pnicer.extinction_cube import ExtinctionCube
@@ -19,10 +24,8 @@ from pnicer.extinction_cube import ExtinctionCube
 # ----------------------------------------------------------------------------- #
 # ----------------------------------------------------------------------------- #
 class ExtinctionMap:
-
     # -----------------------------------------------------------------------------
     def __init__(self, map_ext, map_header=None, prime_header=None):
-
         # Map
         self.map_ext = map_ext
 
@@ -32,15 +35,15 @@ class ExtinctionMap:
 
     # -----------------------------------------------------------------------------
     @property
-    def map_shape(self):
-        """ Shape of map array. """
+    def map_shape(self) -> tuple:
+        """Shape of map array."""
         return self.map_ext.shape
 
     # -----------------------------------------------------------------------------
     # noinspection PyTypeChecker
     @property
     def map_mask(self):
-        """ Mask for bad entries in map. """
+        """Mask for bad entries in map."""
         try:
             # TODO: Check this
             return np.isnan(self.map_ext)
@@ -51,18 +54,17 @@ class ExtinctionMap:
 # ----------------------------------------------------------------------------- #
 # ----------------------------------------------------------------------------- #
 class ContinuousExtinctionMap(ExtinctionMap):
-
     # -----------------------------------------------------------------------------
     def __init__(self, map_models, map_header, prime_header=None):
-
         # Set instance attributes
-        super(ContinuousExtinctionMap, self).__init__(map_ext=map_models, map_header=map_header,
-                                                      prime_header=prime_header)
+        super(ContinuousExtinctionMap, self).__init__(
+            map_ext=map_models, map_header=map_header, prime_header=prime_header
+        )
 
     # -----------------------------------------------------------------------------
     @property
     def _models(self):
-        """ All models in the map. """
+        """All models in the map."""
         return self.map_ext[~self.map_mask]
 
     # -----------------------------------------------------------------------------
@@ -73,19 +75,19 @@ class ContinuousExtinctionMap(ExtinctionMap):
     # -----------------------------------------------------------------------------
     @property
     def _models_components_means(self):
-        """ Means of all components of all models. """
+        """Means of all components of all models."""
         return [m.means_ for m in self._models]
 
     # -----------------------------------------------------------------------------
     @property
     def _models_components_variances(self):
-        """ Means of all components of all models. """
+        """Means of all components of all models."""
         return [m.covariances_ for m in self._models]
 
     # -----------------------------------------------------------------------------
     @property
     def _models_components_weights(self):
-        """ Means of all components of all models. """
+        """Means of all components of all models."""
         return [m.weights_ for m in self._models]
 
     # -----------------------------------------------------------------------------
@@ -106,8 +108,14 @@ class ContinuousExtinctionMap(ExtinctionMap):
         """
 
         # Query all models for ranges
-        test = [gmm_query_range(gmm=g, kappa=kappa, means=m, variances=v) for g, m, v in
-                zip(self._models, self._models_components_means, self._models_components_variances)]
+        test = [
+            gmm_query_range(gmm=g, kappa=kappa, means=m, variances=v)
+            for g, m, v in zip(
+                self._models,
+                self._models_components_means,
+                self._models_components_variances,
+            )
+        ]
 
         # Repack results
         qmin, qmax = zip(*test)
@@ -117,17 +125,25 @@ class ContinuousExtinctionMap(ExtinctionMap):
 
     # -----------------------------------------------------------------------------
     def _models_set_expected_value(self):
-        """ Set expected value for all models as attribute. """
+        """Set expected value for all models as attribute."""
         for gmm in self.map_ext.ravel():
             if gmm is not None:
-                setattr(gmm, "expected_value", gmm_expected_value(gmm=gmm, method="weighted"))
+                setattr(
+                    gmm,
+                    "expected_value",
+                    gmm_expected_value(gmm=gmm, method="weighted"),
+                )
 
     # -----------------------------------------------------------------------------
     def _models_set_population_variance(self):
-        """ Set variance for all models as attribute. """
+        """Set variance for all models as attribute."""
         for gmm in self.map_ext.ravel():
             if gmm is not None:
-                setattr(gmm, "population_variance", gmm_population_variance(gmm=gmm, method="weighted"))
+                setattr(
+                    gmm,
+                    "population_variance",
+                    gmm_population_variance(gmm=gmm, method="weighted"),
+                )
 
     # ----------------------------------------------------------------------------- #
     #                               Map contructors                                 #
@@ -157,7 +173,6 @@ class ContinuousExtinctionMap(ExtinctionMap):
 
         # Fill map
         for idx in range(self.map_ext.size):
-
             if self.map_ext.ravel()[idx] is not None:
                 map_attr.ravel()[idx] = getattr(self.map_ext.ravel()[idx], attr)
             else:
@@ -168,19 +183,19 @@ class ContinuousExtinctionMap(ExtinctionMap):
     # -----------------------------------------------------------------------------
     @property
     def map_num(self):
-        """ Map with number of sources used for each pixel. """
+        """Map with number of sources used for each pixel."""
         return self.__map_attr(attr="n_models", dtype=np.uint32)
 
     # -----------------------------------------------------------------------------
     @property
     def map_ncomponents(self):
-        """ Map with number of GMM components in each pixel. """
+        """Map with number of GMM components in each pixel."""
         return self.__map_attr(attr="n_components", dtype=np.uint32)
 
     # -----------------------------------------------------------------------------
     @property
     def map_expected_value(self):
-        """ Map with expected value of models. """
+        """Map with expected value of models."""
         try:
             return self.__map_attr(attr="expected_value", dtype=np.uint32)
         except AttributeError:
@@ -190,7 +205,7 @@ class ContinuousExtinctionMap(ExtinctionMap):
     # -----------------------------------------------------------------------------
     @property
     def map_variance(self):
-        """ Map with population variances of models. """
+        """Map with population variances of models."""
         try:
             return self.__map_attr(attr="population_variance", dtype=np.float32)
         except AttributeError:
@@ -231,12 +246,22 @@ class ContinuousExtinctionMap(ExtinctionMap):
         cube_header["NAXIS"] = 3
 
         # Add cards
-        cube_header.insert("NAXIS2", fits.Card(keyword="NAXIS3", value=naxis3), after=True)
-        cube_header.insert("CRVAL2", fits.Card(keyword="CRVAL3", value=crval3), after=True)
-        cube_header.insert("CRPIX2", fits.Card(keyword="CRPIX3", value=crpix3), after=True)
-        cube_header.insert("CDELT2", fits.Card(keyword="CDELT3", value=cdelt3), after=True)
+        cube_header.insert(
+            "NAXIS2", fits.Card(keyword="NAXIS3", value=naxis3), after=True
+        )
+        cube_header.insert(
+            "CRVAL2", fits.Card(keyword="CRVAL3", value=crval3), after=True
+        )
+        cube_header.insert(
+            "CRPIX2", fits.Card(keyword="CRPIX3", value=crpix3), after=True
+        )
+        cube_header.insert(
+            "CDELT2", fits.Card(keyword="CDELT3", value=cdelt3), after=True
+        )
         if ctype3 is not None:
-            cube_header.insert("CTYPE2", fits.Card(keyword="CTYPE3", value=ctype3), after=True)
+            cube_header.insert(
+                "CTYPE2", fits.Card(keyword="CTYPE3", value=ctype3), after=True
+            )
 
         return cube_header
 
@@ -263,18 +288,25 @@ class ContinuousExtinctionMap(ExtinctionMap):
             return self._cube_prob_dens_full
 
         # Get full query range of GMM map
-        qmin, qmax = round_partial(np.array(self._extinction_range(kappa=3)), precision=qstep)
+        qmin, qmax = round_partial(
+            np.array(self._extinction_range(kappa=3)), precision=qstep
+        )
 
         # Score samples for given range
-        samples = mp_gmm_score_samples_absolute(gmms=self._models, xmin=qmin, xmax=qmax, xstep=qstep)
+        samples = mp_gmm_score_samples_absolute(
+            gmms=self._models, xmin=qmin, xmax=qmax, xstep=qstep
+        )
         nsamples = len(samples[0])
 
         # Construct cube FITS header (CRPIX3 since FITS convention starts with pixel 1 not 0)
-        header = self._map2cube_header(naxis3=nsamples, crval3=qmin, crpix3=1, cdelt3=qstep,
-                                       ctype3="extinction")
+        header = self._map2cube_header(
+            naxis3=nsamples, crval3=qmin, crpix3=1, cdelt3=qstep, ctype3="extinction"
+        )
 
         # Create cube with probability densities
-        cube = np.full((self.map_ext.size, nsamples), fill_value=np.nan, dtype=np.float32)
+        cube = np.full(
+            (self.map_ext.size, nsamples), fill_value=np.nan, dtype=np.float32
+        )
         cube[np.nonzero(~self.map_mask.ravel()), :] = np.vstack(samples)
         cube = cube.reshape(*self.map_shape, -1)
         cube = np.rollaxis(cube, 2, 0)
@@ -307,7 +339,9 @@ class ContinuousExtinctionMap(ExtinctionMap):
         cube_pd = self.__cube_prob_dens_full()
 
         # Construct interpolator for probability density
-        f = interp1d(cube_pd.crange3, cube_pd.cube, axis=0, bounds_error=False, fill_value=0)
+        f = interp1d(
+            cube_pd.crange3, cube_pd.cube, axis=0, bounds_error=False, fill_value=0
+        )
 
         # Get actual query range
         cube = f(np.arange(ext_min, ext_max + ext_step / 2, step=ext_step))
@@ -385,7 +419,9 @@ class ContinuousExtinctionMap(ExtinctionMap):
 
         """
 
-        cube = self.__cube_probability_max(ext_min=ext_min, ext_max=ext_max, ext_step=ext_step)
+        cube = self.__cube_probability_max(
+            ext_min=ext_min, ext_max=ext_max, ext_step=ext_step
+        )
         return ExtinctionCube(cube=1 - cube.cube, header=cube.header)
 
     # -----------------------------------------------------------------------------
@@ -407,17 +443,26 @@ class ContinuousExtinctionMap(ExtinctionMap):
         cube = cumtrapz(cube_pd.cube, dx=cube_pd.header["CDELT3"], axis=0, initial=0)
 
         # Construct new matrix
-        cube_extinction = np.full((99, *self.map_shape), fill_value=np.nan, dtype=np.float32)
+        cube_extinction = np.full(
+            (99, *self.map_shape), fill_value=np.nan, dtype=np.float32
+        )
 
         # Construct loop mesh
-        cube_xx, cube_yy = np.meshgrid(np.arange(self.map_shape[0]), np.arange(self.map_shape[1]))
+        cube_xx, cube_yy = np.meshgrid(
+            np.arange(self.map_shape[0]), np.arange(self.map_shape[1])
+        )
 
         # Loop over all pixels in interpolate probabilities
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=RuntimeWarning)
 
             for ix, iy in zip(cube_xx.ravel(), cube_yy.ravel()):
-                f = interp1d(cube[:, ix, iy], cube_pd.crange3, bounds_error=False, fill_value=np.nan)
+                f = interp1d(
+                    cube[:, ix, iy],
+                    cube_pd.crange3,
+                    bounds_error=False,
+                    fill_value=np.nan,
+                )
                 cube_extinction[:, ix, iy] = f((np.arange(99) + 1) / 100)
 
         # Modify reference value in header
@@ -509,12 +554,19 @@ class ContinuousExtinctionMap(ExtinctionMap):
 
         # Generate plot grid
         plt.figure(figsize=[ax_size[0] * ncols, ax_size[1] * nrows])
-        grid = GridSpec(ncols=ncols, nrows=nrows, bottom=0.05, top=0.95, left=0.05, right=0.95,
-                        hspace=0.15, wspace=0.15)
+        grid = GridSpec(
+            ncols=ncols,
+            nrows=nrows,
+            bottom=0.05,
+            top=0.95,
+            left=0.05,
+            right=0.95,
+            hspace=0.15,
+            wspace=0.15,
+        )
 
         plot_idx, plot_range, gmm_ev = [], [], []
         for idx in range(np.prod(self.map_shape)):
-
             if not silent:
                 print(idx + 1, "/", np.prod(self.map_shape))
 
@@ -579,9 +631,16 @@ class ContinuousExtinctionMap(ExtinctionMap):
 # ----------------------------------------------------------------------------- #
 # ----------------------------------------------------------------------------- #
 class DiscreteExtinctionMap(ExtinctionMap):
-
     # -----------------------------------------------------------------------------
-    def __init__(self, map_ext, map_var, map_header, prime_header=None, map_num=None, map_rho=None):
+    def __init__(
+        self,
+        map_ext,
+        map_var,
+        map_header,
+        prime_header=None,
+        map_num=None,
+        map_rho=None,
+    ):
         """
         Extinction map class.
 
@@ -601,14 +660,64 @@ class DiscreteExtinctionMap(ExtinctionMap):
         """
 
         # Set instance attributes
-        super(DiscreteExtinctionMap, self).__init__(map_ext=map_ext, map_header=map_header, prime_header=prime_header)
+        super(DiscreteExtinctionMap, self).__init__(
+            map_ext=map_ext, map_header=map_header, prime_header=prime_header
+        )
         self.map_var = map_var
-        self.map_num = np.full_like(self.map_ext, fill_value=np.nan, dtype=np.uint32) if map_num is None else map_num
-        self.map_rho = np.full_like(self.map_ext, fill_value=np.nan, dtype=np.float32) if map_num is None else map_rho
+        self.map_num = (
+            np.full_like(self.map_ext, fill_value=np.nan, dtype=np.uint32)
+            if map_num is None
+            else map_num
+        )
+        self.map_rho = (
+            np.full_like(self.map_ext, fill_value=np.nan, dtype=np.float32)
+            if map_num is None
+            else map_rho
+        )
 
         # Sanity check for dimensions
         if (self.map_ext.ndim != 2) | (self.map_var.ndim != 2):
             raise TypeError("Input must be 2D arrays")
+
+    @classmethod
+    def from_fits(cls, path):
+        """
+        Load extinction map from FITS file.
+
+        Parameters
+        ----------
+        path : str
+            File path. e.g. "/path/to/table.fits".
+
+        Returns
+        -------
+        DiscreteExtinctionMap
+
+        """
+
+        # Open FITS file
+        with fits.open(path) as hdulist:
+            # Get header
+            prime_header = hdulist[0].header
+
+            # Get maps
+            map_ext = hdulist[1].data
+            map_var = hdulist[2].data
+            map_num = hdulist[3].data
+            map_rho = hdulist[4].data
+
+            # Get header
+            map_header = hdulist[1].header
+
+        # Return
+        return cls(
+            map_ext=map_ext,
+            map_var=map_var,
+            map_header=map_header,
+            prime_header=prime_header,
+            map_num=map_num,
+            map_rho=map_rho,
+        )
 
     # -----------------------------------------------------------------------------
     @staticmethod
@@ -639,30 +748,61 @@ class DiscreteExtinctionMap(ExtinctionMap):
         # If the density should be plotted, set to 4
         nfig = 3
 
-        fig = plt.figure(figsize=[figsize, nfig * 0.9 * figsize * (self.map_shape[0] / self.map_shape[1])])
-        grid = matplotlib.gridspec.GridSpec(ncols=2, nrows=nfig, bottom=0.1, top=0.9, left=0.1, right=0.9, hspace=0.08,
-                                            wspace=0, height_ratios=[1] * nfig, width_ratios=[1, 0.05])
+        fig = plt.figure(
+            figsize=[
+                figsize,
+                nfig * 0.9 * figsize * (self.map_shape[0] / self.map_shape[1]),
+            ]
+        )
+        grid = matplotlib.gridspec.GridSpec(
+            ncols=2,
+            nrows=nfig,
+            bottom=0.1,
+            top=0.9,
+            left=0.1,
+            right=0.9,
+            hspace=0.08,
+            wspace=0,
+            height_ratios=[1] * nfig,
+            width_ratios=[1, 0.05],
+        )
 
         # Set cmap
         cmap = copy(matplotlib.cm.binary)
-        cmap.set_bad("#DC143C", 1.)
+        cmap.set_bad("#DC143C", 1.0)
 
         for idx in range(0, nfig * 2, 2):
-
             ax = plt.subplot(grid[idx], projection=wcs.WCS(self.map_header))
             cax = plt.subplot(grid[idx + 1])
 
             # Plot Extinction map
             if idx == 0:
-                vmin, vmax = self._get_vlim(data=self.map_ext, percentiles=[0.1, 90], r=100)
-                im = ax.imshow(self.map_ext, origin="lower", interpolation="nearest", vmin=vmin, vmax=vmax, cmap=cmap)
+                vmin, vmax = self._get_vlim(
+                    data=self.map_ext, percentiles=[0.1, 90], r=100
+                )
+                im = ax.imshow(
+                    self.map_ext,
+                    origin="lower",
+                    interpolation="nearest",
+                    vmin=vmin,
+                    vmax=vmax,
+                    cmap=cmap,
+                )
                 fig.colorbar(im, cax=cax, label="Extinction (mag)")
 
             # Plot error map
             elif idx == 2:
-                vmin, vmax = self._get_vlim(data=np.sqrt(self.map_var), percentiles=[1, 90], r=100)
-                im = ax.imshow(np.sqrt(self.map_var), origin="lower", interpolation="nearest", vmin=vmin, vmax=vmax,
-                               cmap=cmap)
+                vmin, vmax = self._get_vlim(
+                    data=np.sqrt(self.map_var), percentiles=[1, 90], r=100
+                )
+                im = ax.imshow(
+                    np.sqrt(self.map_var),
+                    origin="lower",
+                    interpolation="nearest",
+                    vmin=vmin,
+                    vmax=vmax,
+                    cmap=cmap,
+                )
                 if self.prime_header["METRIC"] == "median":
                     fig.colorbar(im, cax=cax, label="MAD (mag)")
                 else:
@@ -671,12 +811,26 @@ class DiscreteExtinctionMap(ExtinctionMap):
             # Plot source count map
             elif idx == 4:
                 vmin, vmax = self._get_vlim(data=self.map_num, percentiles=[1, 99], r=1)
-                im = ax.imshow(self.map_num, origin="lower", interpolation="nearest", vmin=vmin, vmax=vmax, cmap=cmap)
+                im = ax.imshow(
+                    self.map_num,
+                    origin="lower",
+                    interpolation="nearest",
+                    vmin=vmin,
+                    vmax=vmax,
+                    cmap=cmap,
+                )
                 fig.colorbar(im, cax=cax, label="N")
 
             elif idx == 6:
                 vmin, vmax = self._get_vlim(data=self.map_rho, percentiles=[1, 99], r=1)
-                im = ax.imshow(self.map_rho, origin="lower", interpolation="nearest", vmin=vmin, vmax=vmax, cmap=cmap)
+                im = ax.imshow(
+                    self.map_rho,
+                    origin="lower",
+                    interpolation="nearest",
+                    vmin=vmin,
+                    vmax=vmax,
+                    cmap=cmap,
+                )
                 fig.colorbar(im, cax=cax, label=r"$\rho$")
 
             # Grab axes
@@ -714,11 +868,15 @@ class DiscreteExtinctionMap(ExtinctionMap):
 
         # Create HDU list
         # noinspection PyTypeChecker
-        hdulist = fits.HDUList([fits.PrimaryHDU(header=self.prime_header),
-                                fits.ImageHDU(data=self.map_ext, header=self.map_header),
-                                fits.ImageHDU(data=self.map_var, header=self.map_header),
-                                fits.ImageHDU(data=self.map_num, header=self.map_header),
-                                fits.ImageHDU(data=self.map_rho, header=self.map_header)])
+        hdulist = fits.HDUList(
+            [
+                fits.PrimaryHDU(header=self.prime_header),
+                fits.ImageHDU(data=self.map_ext, header=self.map_header),
+                fits.ImageHDU(data=self.map_var, header=self.map_header),
+                fits.ImageHDU(data=self.map_num, header=self.map_header),
+                fits.ImageHDU(data=self.map_rho, header=self.map_header),
+            ]
+        )
 
         # Write
         hdulist.writeto(path, overwrite=overwrite)
