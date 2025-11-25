@@ -4,7 +4,7 @@ import warnings
 import numpy as np
 
 from copy import copy
-from scipy.integrate import cumtrapz
+from scipy.integrate import cumulative_trapezoid
 from scipy.interpolate import interp1d
 from astropy import wcs
 from astropy.io import fits
@@ -381,7 +381,7 @@ class ContinuousExtinctionMap(ExtinctionMap):
 
         # Construct cumulative integral
         # noinspection PyTypeChecker
-        cube = cumtrapz(cube_pd.cube, dx=cube_pd.header["CDELT3"], axis=0, initial=0)
+        cube = cumulative_trapezoid(cube_pd.cube, dx=cube_pd.header["CDELT3"], axis=0, initial=0)
 
         # Construct interpolator for probability density
         f = interp1d(cube_pd.crange3, cube, axis=0, fill_value=0)
@@ -440,7 +440,7 @@ class ContinuousExtinctionMap(ExtinctionMap):
         cube_pd = self.__cube_prob_dens_full()
 
         # Construct cumulative integral
-        cube = cumtrapz(cube_pd.cube, dx=cube_pd.header["CDELT3"], axis=0, initial=0)
+        cube = cumulative_trapezoid(cube_pd.cube, dx=cube_pd.header["CDELT3"], axis=0, initial=0)
 
         # Construct new matrix
         cube_extinction = np.full(

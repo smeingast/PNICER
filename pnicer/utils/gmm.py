@@ -5,7 +5,7 @@ import multiprocessing
 from joblib import Parallel, delayed
 
 from itertools import repeat
-from scipy.integrate import cumtrapz
+from scipy.integrate import cumulative_trapezoid
 
 # noinspection PyPackageRequirements
 from sklearn.mixture import GaussianMixture
@@ -373,7 +373,7 @@ def gmm_confidence_interval(gmm, level=0.9, sampling=50):
     xrange, yrange = gmm_sample_xy(gmm=gmm, kappa=10, sampling=sampling)
 
     # Cumulative integral
-    cumint = cumtrapz(y=yrange, x=xrange, initial=0)
+    cumint = cumulative_trapezoid(y=yrange, x=xrange, initial=0)
 
     # Return interval
     return tuple(np.interp([(1 - level) / 2, level + (1 - level) / 2], cumint, xrange))
