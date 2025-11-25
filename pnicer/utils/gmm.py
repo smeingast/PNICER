@@ -131,7 +131,8 @@ def gmm_sample_xy(gmm, kappa=3, sampling=10, nmin=100, nmax=100000):
     nmin : int
         Minimum number of samples to draw.
     nmax : int
-        Maximum number of samples to draw. Not recommended to set this to > 1E5 as it becomes very slow.
+        Maximum number of samples to draw. Not recommended to set this to > 1E5 as it
+        becomes very slow.
 
     Returns
     -------
@@ -146,7 +147,8 @@ def gmm_sample_xy(gmm, kappa=3, sampling=10, nmin=100, nmax=100000):
     # Determine min and max of range
     qmin, qmax = gmm_query_range(gmm=gmm, kappa=kappa)
 
-    # Determine number of samples (number of samples from smallest standard deviation with 'sampling' samples)
+    # Determine number of samples (number of samples from smallest standard deviation
+    # with 'sampling' samples)
     nsamples = (qmax - qmin) / (np.min(s) / sampling)
 
     # Set min/max numer of samples
@@ -216,7 +218,8 @@ def gmm_sample_xy_components(gmm, **kwargs):
     Returns
     -------
     ndarray, iterable
-        Tuple holding the x data range and a list of y data for each component of the GMM.
+        Tuple holding the x data range and a list of y data for each
+        component of the GMM.
 
     """
 
@@ -237,14 +240,16 @@ def gmm_sample_xy_components(gmm, **kwargs):
 # -----------------------------------------------------------------------------
 def gmm_max(gmm, sampling=50):
     """
-    Returns the coordinates of the maximum of the probability density distribution defined by the GMM.
+    Returns the coordinates of the maximum of the probability density distribution
+    defined by the GMM.
 
     Parameters
     ----------
     gmm : GaussianMixture
         Input GMM for which the maximum should be determined.
     sampling : int, optional
-        Sampling factor for GMM. The larger, the better the maximum will be determined. Default is 50.
+        Sampling factor for GMM. The larger, the better the maximum will be determined.
+        Default is 50.
 
     Returns
     -------
@@ -263,16 +268,19 @@ def gmm_max(gmm, sampling=50):
 # -----------------------------------------------------------------------------
 def gmm_expected_value(gmm, method="weighted", sampling=50):
     """
-    Returns the coordinates of the expected value of the probability density distribution defined by the GMM.
+    Returns the coordinates of the expected value of the probability density
+    distribution defined by the GMM.
 
     Parameters
     ----------
     gmm : GaussianMixture
         Input GMM for which the expected value should be determined.
     method : str, optional
-        Method to use to calculate the expected value. Either 'weighted' (default) or 'integral'.
+        Method to use to calculate the expected value. Either 'weighted' (default)
+        or 'integral'.
     sampling : int, optional
-        Sampling factor for GMM. The larger, the better the expected value will be determined. Default is 50.
+        Sampling factor for GMM. The larger, the better the expected value will be
+        determined. Default is 50.
 
     Returns
     -------
@@ -287,7 +295,6 @@ def gmm_expected_value(gmm, method="weighted", sampling=50):
 
     # Or draw samples and integrate
     elif method == "integral":
-
         # Draw samples
         xrange, yrange = gmm_sample_xy(gmm=gmm, kappa=10, sampling=sampling)
 
@@ -304,16 +311,19 @@ def gmm_expected_value(gmm, method="weighted", sampling=50):
 # -----------------------------------------------------------------------------
 def gmm_population_variance(gmm, method="weighted", sampling=50):
     """
-    Determine the population variance of the probability density distribution given by a GMM.
+    Determine the population variance of the probability density distribution given
+    by a GMM.
 
     Parameters
     ----------
     gmm : GaussianMixture
         Input Gaussian Mixture Model.
     method : str, optional
-        Method to use to calculate the variance. Either 'weighted' (default) or 'integral'.
+        Method to use to calculate the variance. Either 'weighted' (default)
+        or 'integral'.
     sampling : int, optional
-        Sampling factor for GMM. The larger, the better the expected value will be determined. Default is 50.
+        Sampling factor for GMM. The larger, the better the expected value will be
+        determined. Default is 50.
 
     Returns
     -------
@@ -325,13 +335,11 @@ def gmm_population_variance(gmm, method="weighted", sampling=50):
     # Use the GMM attributes to calculate the population variance
     # http://stats.stackexchange.com/questions/16608/what-is-the-variance-of-the-weighted-mixture-of-two-gaussians
     if method == "weighted":
-
         m, c, w = gmm.means_.ravel(), gmm.covariances_.ravel(), gmm.weights_.ravel()
         return np.sum(w * c) + np.sum(w * np.power(m, 2)) - np.power(np.sum(w * m), 2)
 
     # Or draw samples and integrate
     elif method == "integral":
-
         # Get expected value
         ev = gmm_expected_value(gmm=gmm, method="weighted")
 
@@ -351,7 +359,8 @@ def gmm_population_variance(gmm, method="weighted", sampling=50):
 # -----------------------------------------------------------------------------
 def gmm_confidence_interval(gmm, level=0.9, sampling=50):
     """
-    Returns the confidence interval for a given gaussian mixture model and for a given confidence level.
+    Returns the confidence interval for a given gaussian mixture model and for a given
+    confidence level.
 
     Parameters
     ----------
@@ -360,7 +369,8 @@ def gmm_confidence_interval(gmm, level=0.9, sampling=50):
     level : float, optional
         Confidence level (between 0 and 1). Default is 90%
     sampling : int
-        Sampling factor for GMM. The larger, the better the interval will be determined. Default is 50.
+        Sampling factor for GMM. The larger, the better the interval will be determined.
+        Default is 50.
 
     Returns
     -------
@@ -394,7 +404,6 @@ def gmm_confidence_interval_value(gmm, value, level=0.95):
 
     # Integrate as long as necessary
     for i in range(len(gmm_x)):
-
         # Current index on both sides
         lidx = value_idx - i if value_idx - i >= 0 else 0
         ridx = value_idx + i if value_idx + i < len(gmm_x) else len(gmm_x) - 1
@@ -459,7 +468,8 @@ def gmm_components(data, max_components, n_per_component=20):
 # -----------------------------------------------------------------------------
 def mp_gmm(data, max_components, parallel=True, ndata_max=10000, **kwargs):
     """
-    Gaussian mixture model fitting with parallelisation. The parallelisation only works when mutliple sets need to be
+    Gaussian mixture model fitting with parallelisation. The parallelisation only works
+    when mutliple sets need to be
     fit.
 
     Parameters
@@ -471,9 +481,11 @@ def mp_gmm(data, max_components, parallel=True, ndata_max=10000, **kwargs):
     parallel : bool, optional
         Whether to use parallelisation.
     ndata_max : int, optional
-        Maximum sample size used for fitting. If the given sample size exceeds this value, 'ndata_max' samples will be
-        randomly selected for the fit. Default is 10000. For samples larger than 1E6 fitting otherwise takes a very long
-        time and usually for a color or magnitude distribution such large samples are not necessary.
+        Maximum sample size used for fitting. If the given sample size exceeds this
+        value, 'ndata_max' samples will be randomly selected for the fit.
+        Default is 10000. For samples larger than 1E6 fitting otherwise takes a
+        very long time and usually for a color or magnitude distribution such large samples
+        are not necessary.
     kwargs
         Additional keyword arguments for GaussianMixture class.
 
@@ -507,7 +519,8 @@ def mp_gmm(data, max_components, parallel=True, ndata_max=10000, **kwargs):
                     )
                     data[idx] = data[idx][ridx]
 
-    # TODO: For short data vectors the list comprehension is faster. This is just an easy fix for now
+    # TODO: For short data vectors the list comprehension is faster.
+    #  This is just an easy fix for now
     # TODO: Make parallelisation a user choice
     # Fit models with parallelisation
     if len(data) > 100 and parallel:
@@ -574,8 +587,8 @@ def gmm_combine(
     gmms_zps=None,
 ):
     """
-    Method to combine Gaussian Mixture Models. This function create a new GaussianMixture instance and adds all
-    mixture components from the input models.
+    Method to combine Gaussian Mixture Models. This function create a new
+    GaussianMixture instance and adds all mixture components from the input models.
 
     Parameters
     ----------
@@ -586,9 +599,11 @@ def gmm_combine(
     params : dict, optional
         GaussianMixture parameter dictionary for faster instantiation.
     good_idx : iterable, optional
-        Boolean array or list for masking. True indicates a good entry in the input list, False a bad entry.
+        Boolean array or list for masking. True indicates a good entry in the input
+        list, False a bad entry.
     gmms_means : np.ndarray, optional
-        The means of all components for all input GMMs in an array. Can be used to speed up the combination process-
+        The means of all components for all input GMMs in an array.
+        Can be used to speed up the combination process.
     gmms_variances : np.ndarray, optional
         Same as gmms_means, but for all variances of all components.
     gmms_weights : np.ndarray, optional
@@ -643,7 +658,6 @@ def gmm_combine(
 
     # Build combined components from supplied models if not given as attributes
     if gmms_means is None or gmms_variances is None or gmms_weights is None:
-
         gmm_combined_means = gmms[0].means_ + gmms_zps[0]
         gmm_combined_variances = gmms[0].covariances_
         gmm_combined_weights = gmms[0].weights_ * weights[0]
@@ -698,9 +712,11 @@ def mp_gmm_combine(
     params : dict, optional
         GaussianMixture parameter dictionary for faster instantiation.
     good_idx : iterable, optional
-        Boolean array or list for masking. True indicates a good entry in the input list, False a bad entry.
+        Boolean array or list for masking. True indicates a good entry in the input
+        list, False a bad entry.
     gmms_means : np.ndarray, optional
-        The means of all components for all input GMMs in an array. Can be used to speed up the combination process-
+        The means of all components for all input GMMs in an array. Can be used to
+        speed up the combination process.
     gmms_variances : np.ndarray, optional
         Same as gmms_means, but for all variances of all components.
     gmms_weights : np.ndarray, optional
