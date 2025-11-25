@@ -78,14 +78,14 @@ class Extinction:
 
     # -----------------------------------------------------------------------------
     def query_position(
-            self,
-            skycoord: SkyCoord,
-            bandwidth: float,
-            mode: str = "average",
-            metric: str = "gaussian",
-            use_fwhm: bool = False,
-            nicest: bool = False,
-            alpha: float = 1/3,
+        self,
+        skycoord: SkyCoord,
+        bandwidth: float,
+        mode: str = "average",
+        metric: str = "gaussian",
+        use_fwhm: bool = False,
+        nicest: bool = False,
+        alpha: float = 1 / 3,
     ) -> Tuple[float, float, int, float]:
         """
         Query the position for the extinction model.
@@ -130,7 +130,8 @@ class Extinction:
         if skycoord.size != 1:
             raise ValueError(
                 "Only single coordinate should be given. "
-                "The function cannot process arrays.")
+                "The function cannot process arrays."
+            )
 
         # FWHM can only be used with a gaussian metric
         if use_fwhm & (metric != "gaussian"):
@@ -154,7 +155,6 @@ class Extinction:
 
         # Return based on object instance
         if isinstance(self, DiscreteExtinction):
-
             if mode.lower() == "model":
                 return self._get_extinction_model(
                     nbrs_idx=np.arange(self.features.n_data),
@@ -174,7 +174,6 @@ class Extinction:
                 raise ValueError("Mode {0} not implemented".format(mode))
 
         if isinstance(self, ContinuousExtinction):
-
             if mode.lower() == "model":
                 return self._get_extinction_model(
                     nbrs_idx=np.arange(self.features.n_data),
@@ -183,7 +182,6 @@ class Extinction:
                     alpha=alpha,
                 )
             elif mode.lower() == "average":
-
                 return self._get_extinction_average(
                     sources_idx=np.arange(self.features.n_data),
                     sources_weights=w_spatial,
@@ -207,7 +205,7 @@ class Extinction:
         nicest=False,
         alpha=1 / 3,
         sampling=2,
-        **kwargs
+        **kwargs,
     ):
         # TODO: Add docstring
 
@@ -296,10 +294,8 @@ class Extinction:
 
         # Build map for discretized extinction
         if isinstance(self, DiscreteExtinction):
-
             # In case an average extinction map should be built
             if mode == "average":
-
                 # Calculate values for all map pixels
                 ext, var, num, rho = self._get_extinction_average(
                     nbrs_idx=nbrs_idx.T,
@@ -320,7 +316,6 @@ class Extinction:
                 )
 
             if mode == "model":
-
                 raise NotImplementedError
 
                 # # Build new GMMs for each pixel
@@ -342,9 +337,7 @@ class Extinction:
             else:
                 raise ValueError(
                     "Mode '{0}' not implemented. Use either 'model' or 'average'."
-                    "".format(
-                        mode
-                    )
+                    "".format(mode)
                 )
 
         # ...or continous extinction
@@ -456,7 +449,7 @@ class Extinction:
 
             return np.divide(
                 weights,
-                np.trapz(
+                np.trapezoid(
                     y=wfunc(np.arange(-100, 100, 0.01)), x=np.arange(-100, 100, 0.01)
                 ),
             )
@@ -467,7 +460,6 @@ class Extinction:
 # -----------------------------------------------------------------------------
 class ContinuousExtinction(Extinction):
     def __init__(self, features, models, index, zp):
-
         # Input checks
         if (len(index) != features.n_data) | (len(zp) != features.n_data):
             raise ValueError("Incompatible input for InstrinsicProbability")
@@ -1011,7 +1003,6 @@ class ContinuousExtinction(Extinction):
 
         plot_range = []
         for idx in range(self._n_models):
-
             # Grab GMM and scale
             gmm = self.models[idx]
 
@@ -1037,7 +1028,6 @@ class ContinuousExtinction(Extinction):
 
             # Add confidence interval if requested
             if confidence_level is not None:
-
                 # Check input
                 if not isinstance(confidence_level, float):
                     raise ValueError("Specified confidence level must be >0 and <1!")
@@ -1075,7 +1065,7 @@ class ContinuousExtinction(Extinction):
             # Add number of sources for each model
             ax.annotate(
                 "N = " + str(self._n_sources_models[idx]),
-                xy=[0.5, 1.02],
+                xy=(0.5, 1.02),
                 xycoords="axes fraction",
                 va="bottom",
                 ha="center",
@@ -1084,7 +1074,7 @@ class ContinuousExtinction(Extinction):
             # Add number of components for each model
             ax.annotate(
                 "NC = " + str(gmm.get_params()["n_components"]),
-                xy=[0.03, 0.97],
+                xy=(0.03, 0.97),
                 xycoords="axes fraction",
                 va="top",
                 ha="left",
@@ -1148,7 +1138,6 @@ class ContinuousExtinction(Extinction):
 
         # Add confidence interval if requested
         if confidence_level is not None:
-
             # Check input
             if not isinstance(confidence_level, float):
                 raise ValueError("Specified confidence level must be >0 and <1!")
@@ -1181,7 +1170,6 @@ class ContinuousExtinction(Extinction):
 # -----------------------------------------------------------------------------
 # noinspection PyProtectedMember
 class DiscreteExtinction(Extinction):
-
     # -----------------------------------------------------------------------------
     def __init__(self, features, extinction, variance=None):
         """
@@ -1283,7 +1271,6 @@ class DiscreteExtinction(Extinction):
 
             # Conditional choice for different metrics
             if metric == "average":
-
                 # 3 sig filter
                 ext = np.nanmean(nbrs_ext, axis=0)
                 sigfil = np.abs(nbrs_ext - ext) > 3 * np.nanstd(nbrs_ext, axis=0)
@@ -1298,7 +1285,6 @@ class DiscreteExtinction(Extinction):
                 rho = np.full_like(ext, fill_value=np.nan)
 
             elif metric == "median":
-
                 # Make final maps
                 ext = np.nanmedian(nbrs_ext, axis=0)
                 var = np.nanmedian(np.abs(nbrs_ext - ext), axis=0)  # MAD
@@ -1307,7 +1293,6 @@ class DiscreteExtinction(Extinction):
 
             # If not median or average, fetch weight function
             else:
-
                 # Total weight with variance
                 w_total = w_spatial / nbrs_var  # type: np.ndarray
 
@@ -1325,12 +1310,11 @@ class DiscreteExtinction(Extinction):
 
                 # TODO: Check and possibly fix this
                 # Get approximate integral and normalize weights
-                # w_spatial = np.divide(w_spatial, np.trapz(y=wfunc(np.arange(-100, 100, 0.01)),
+                # w_spatial = np.divide(w_spatial, np.trapezoid(y=wfunc(np.arange(-100, 100, 0.01)),
                 #                                           x=np.arange(-100, 100, 0.01)))
 
                 # Modify weights for NICEST and calculate variance
                 if nicest:
-
                     # Set parameters for density correction
                     k_lambda = (
                         np.max(self.features.extvec.extvec)
@@ -1367,7 +1351,6 @@ class DiscreteExtinction(Extinction):
 
                 # Variance without NICEST
                 else:
-
                     var = np.divide(
                         np.nansum(w_total**2.0 * nbrs_var, axis=0),
                         np.nansum(w_total, axis=0) ** 2,
@@ -1445,7 +1428,7 @@ class DiscreteExtinction(Extinction):
         nicest=False,
         alpha=1 / 3,
         use_fwhm=False,
-        **kwargs
+        **kwargs,
     ):
         """Obsolete code"""
 
@@ -1524,7 +1507,6 @@ class DiscreteExtinction(Extinction):
 
         # Conditional choice for different metrics
         if metric == "average":
-
             # 3 sig filter
             map_ext = np.nanmean(nbrs_ext, axis=1)
             sigfil = (np.abs(nbrs_ext.T - map_ext) > 3 * np.nanstd(nbrs_ext, axis=1)).T
@@ -1546,7 +1528,6 @@ class DiscreteExtinction(Extinction):
             map_rho = np.full_like(map_ext, fill_value=np.nan)
 
         elif metric == "median":
-
             # Make final maps
             map_ext = np.nanmedian(nbrs_ext, axis=1)
             map_var = np.nanmedian(np.abs(nbrs_ext.T - map_ext).T, axis=1).reshape(
@@ -1594,7 +1575,7 @@ class DiscreteExtinction(Extinction):
                 # Get approximate integral and normalize weights
                 w_theta = np.divide(
                     w_theta,
-                    np.trapz(
+                    np.trapezoid(
                         y=wfunc(np.arange(-100, 100, 0.01)),
                         x=np.arange(-100, 100, 0.01),
                     ),
@@ -1602,7 +1583,6 @@ class DiscreteExtinction(Extinction):
 
                 # Modify weights for NICEST and calculate variance
                 if nicest:
-
                     # Set parameters for density correction
                     k_lambda = (
                         np.max(self.features.extvec.extvec)
@@ -1640,7 +1620,6 @@ class DiscreteExtinction(Extinction):
 
                 # Variance without NICEST
                 else:
-
                     map_var = np.divide(
                         np.nansum(w_total**2.0 * nbrs_var, axis=1),
                         np.nansum(w_total, axis=1) ** 2,
@@ -1685,7 +1664,7 @@ class DiscreteExtinction(Extinction):
         alpha=1 / 3,
         use_fwhm=False,
         silent=False,
-        **kwargs
+        **kwargs,
     ):
         """
         Method to build an extinction map.
@@ -1772,8 +1751,9 @@ class DiscreteExtinction(Extinction):
             patch_size = 5 / pixsize
 
         # Number of patches in each dimension of the grid
-        np0, np1 = np.int(np.ceil(grid_shape[0] / patch_size)), np.int(
-            np.ceil(grid_shape[1] / patch_size)
+        np0, np1 = (
+            np.int(np.ceil(grid_shape[0] / patch_size)),
+            np.int(np.ceil(grid_shape[1] / patch_size)),
         )
 
         # Create patches
@@ -1803,11 +1783,9 @@ class DiscreteExtinction(Extinction):
         for row_x, row_y, row_lon, row_lat in zip(
             grid_x_patches, grid_y_patches, grid_lon_patches, grid_lat_patches
         ):
-
             # Loop over patch columns in row
             row = []
             for px, py, plon, plat in zip(row_x, row_y, row_lon, row_lat):
-
                 # Patch shape
                 pshape = px.shape
 
@@ -1902,7 +1880,6 @@ class DiscreteExtinction(Extinction):
                     # Test for notebook
                     # noinspection PyUnresolvedReferences
                     if get_ipython().__class__.__name__ == "ZMQInteractiveShell":
-
                         # noinspection PyPackageRequirements
                         from IPython.display import display, clear_output
 
@@ -2107,7 +2084,6 @@ def _get_extinction_pixel(
 
     # Conditional choice for different metrics
     if metric == "average":
-
         # 3 sig filter
         sigfil = np.abs(ext - np.mean(ext)) < 3 * np.std(ext)
         nsources = np.sum(sigfil)
@@ -2139,7 +2115,7 @@ def _get_extinction_pixel(
     # Get approximate integral and normalize weights
     w_theta = np.divide(
         w_theta,
-        np.trapz(y=wfunc(np.arange(-100, 100, 0.01)), x=np.arange(-100, 100, 0.01)),
+        np.trapezoid(y=wfunc(np.arange(-100, 100, 0.01)), x=np.arange(-100, 100, 0.01)),
     )
 
     # Modify weights for NICEST
@@ -2168,15 +2144,12 @@ def _get_extinction_pixel(
 
     # Get variance
     if nicest:
-
         # Correction factor (Equ. 34 in NICEST paper)
         cor = beta * np.sum(w_total * var) / np.sum(w_total)
 
         # Calculate error for NICEST (private communication with M. Lombardi)
         pixel_var = (
-            np.sum(
-                (w_total**2 * np.exp(2 * beta * ext) * (1 + beta * ext) ** 2) / var
-            )
+            np.sum((w_total**2 * np.exp(2 * beta * ext) * (1 + beta * ext) ** 2) / var)
             / np.sum(w_total * np.exp(beta * ext) / var) ** 2
         )
 

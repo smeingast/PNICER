@@ -41,7 +41,7 @@ def gauss_function(x, amp, x0, sigma, area=None):
     # Normalize
     if area is not None:
         # noinspection PyTypeChecker
-        gauss /= np.trapz(gauss, x) / area
+        gauss /= np.trapezoid(gauss, x) / area
 
     # Return
     return gauss
