@@ -34,6 +34,3 @@ which will go through all major PNICER methods. At the end you should see a plot
 For an introduction to the basic tools available in **PNICER**, please refer to the jupyter notebook provided with this package:
 
 [PNICER introduction notebook](https://github.com/smeingast/PNICER/blob/master/notebooks/pnicer.ipynb)
-
-
-In the near future (April - May 2017) we plan to implement advanced extinction mapping tools and we will also soon provide the complete API of PNICER. If you have any questions, I am always happy to receive feedback (both positive and negative).
