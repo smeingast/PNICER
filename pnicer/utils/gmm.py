@@ -299,7 +299,7 @@ def gmm_expected_value(gmm, method="weighted", sampling=50):
         xrange, yrange = gmm_sample_xy(gmm=gmm, kappa=10, sampling=sampling)
 
         # Return expected value
-        return np.trapz(xrange * yrange, xrange)
+        return np.trapezoid(xrange * yrange, xrange)
 
     # Raise error if invalid method specified
     else:
@@ -347,7 +347,7 @@ def gmm_population_variance(gmm, method="weighted", sampling=50):
         xrange, yrange = gmm_sample_xy(gmm=gmm, kappa=10, sampling=sampling)
 
         # Return population variance
-        return np.trapz(np.power(xrange, 2) * yrange, xrange) - ev**2
+        return np.trapezoid(np.power(xrange, 2) * yrange, xrange) - ev**2
 
     # Raise error if invalid method specified
     else:
@@ -409,11 +409,11 @@ def gmm_confidence_interval_value(gmm, value, level=0.95):
         ridx = value_idx + i if value_idx + i < len(gmm_x) else len(gmm_x) - 1
 
         # Need to separate left and right integral due to asymmetry
-        lint = np.trapz(gmm_y[lidx:value_idx], dx=dx)
-        rint = np.trapz(gmm_y[value_idx:ridx], dx=dx)
+        lint = np.trapezoid(gmm_y[lidx:value_idx], dx=dx)
+        rint = np.trapezoid(gmm_y[value_idx:ridx], dx=dx)
 
         # Sum of both sides
-        # integral = np.trapz(gmm_y[lidx:ridx], dx=dx)
+        # integral = np.trapezoid(gmm_y[lidx:ridx], dx=dx)
         integral = lint + rint
 
         # Break if confidence level reached
