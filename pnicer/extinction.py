@@ -1752,8 +1752,8 @@ class DiscreteExtinction(Extinction):
 
         # Number of patches in each dimension of the grid
         np0, np1 = (
-            np.int(np.ceil(grid_shape[0] / patch_size)),
-            np.int(np.ceil(grid_shape[1] / patch_size)),
+            int(np.ceil(grid_shape[0] / patch_size)),
+            int(np.ceil(grid_shape[1] / patch_size)),
         )
 
         # Create patches
