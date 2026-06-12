@@ -9,6 +9,11 @@ notebooks/.ipynb_checkpoints
 verifications
 verifications/*.ipynb
 
+# Claude-related files (local only)
+CLAUDE.md
+.claude/
+docs/
+
 # Other
 my_stuff.py
 stub.py
