@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "PNICER"
-version = "0.3"
+version = "1.0"
 description = "Python package to calculate color-excesses and extinction from arbitrary photometric measurements."
 readme = "README.md"
 license = "GPL-3.0-only"
