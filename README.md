@@ -13,6 +13,9 @@
 
 Interstellar dust dims and reddens the light of every star behind it. PNICER measures this extinction from photometric catalogs: each source receives a probability density for its line-of-sight extinction, and the individual measurements are subsequently combined into smooth extinction maps. The only calibration input is an extinction-free control field; the method neither requires a prior on the column-density distribution nor makes assumptions on the composition of the background population.
 
+> [!IMPORTANT]
+> This repository is linked from the published paper [Meingast, Lombardi & Alves (2017), A&A 601, A137](https://ui.adsabs.harvard.edu/abs/2017A%26A...601A.137M/abstract), for which PNICER was originally developed. If you are looking for the software exactly as described and used in that paper, install the [v1.0 release](https://github.com/smeingast/PNICER/releases/tag/v1.0), which preserves the original implementation unchanged. The version on this branch (2.0) is an updated package that follows the same philosophy, namely probabilistic, purely data-driven extinction measurements calibrated on a control field, but replaces the internals and the API and improves on the original in accuracy, speed, and reliability (see [Method](#method) and [Verification](#verification)).
+
 ## Key features
 
 - Each source receives a full posterior probability density for its extinction in the form of an analytic Gaussian mixture, which can be collapsed to a point estimate with an associated uncertainty where required.
@@ -142,7 +145,7 @@ To run the suite from a clone: `pip install -e ".[dev]" && pytest`.
 
 ## Legacy
 
-The original implementation, in use since the 2017 publication, remains available as the [v1.0 release](https://github.com/smeingast/PNICER/releases/tag/v1.0):
+The original implementation, as described in and linked from the 2017 publication, remains available as the [v1.0 release](https://github.com/smeingast/PNICER/releases/tag/v1.0). Results obtained with it remain reproducible with the tagged version:
 
 ```bash
 pip install git+https://github.com/smeingast/PNICER.git@v1.0
