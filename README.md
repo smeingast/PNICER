@@ -1,51 +1,69 @@
 # PNICER
 
-PNICER is an astronomical software package for estimating extinction toward individual sources and for creating extinction maps from photometric catalogs. It implements the PNICER method, which uses unsupervised machine learning (Gaussian Mixture Models) to derive extinction probability densities without priors on the column density or the intrinsic color distribution, and also provides the well-established NICER technique (Lombardi & Alves 2001) in a unified interface, including the NICEST correction for cloud substructure (Lombardi 2009).
+PNICER is an astronomical software package for estimating interstellar extinction toward individual sources and for creating extinction maps from photometric catalogs.
 
-The method is described in [Meingast, Lombardi & Alves (2017), A&A 601, A137](https://ui.adsabs.harvard.edu/abs/2017A%26A...601A.137M/abstract).
+Version 2.0 is a from-scratch rewrite. It keeps the PNICER idea — per-source extinction *probability densities* derived from an extinction-free control field, without priors on the column density — but replaces the original numerical machinery with the closed-form Bayesian formalism of [Lombardi (2018), A&A 615, A174](https://ui.adsabs.harvard.edu/abs/2018A%26A...615A.174L/abstract) (XNICER):
 
-> **Note:** Version 1.0 is a legacy release that preserves PNICER as it has been used since the publication of the paper (with minimal compatibility fixes for current numpy and packaging standards). Ongoing modernization of the package takes place on the master branch.
+- The intrinsic color distribution of the control field is modeled by a Gaussian mixture fitted with **extreme deconvolution** (Bovy et al. 2011), properly removing the photometric errors of the control field itself.
+- Each science source gets an **analytic extinction posterior** (a 1-D Gaussian mixture), with measurement errors and missing bands treated exactly via projection matrices.
+- The **adaptive population correction** (Lombardi 2018, Sect. 2.6) accounts for the change of the observed background population with increasing extinction (faint galaxies vanish first), removing the population bias at high column densities.
+- The **NICER** estimator (Lombardi & Alves 2001) is included in the same interface, and extinction maps support the **NICEST** correction (Lombardi 2009).
 
-## Requirements
+The package is pure Python on top of numpy/scipy/astropy/scikit-learn, has no multiprocessing (and therefore also runs on Windows), and de-reddens about a million sources per second on a laptop.
 
-PNICER requires Python ≥ 3.11 with *numpy*, *scipy*, *astropy*, *matplotlib*, *scikit-learn*, and *joblib*. All dependencies are installed automatically with pip. Because of the parallel processing framework used, PNICER does not run on Windows.
+> **Legacy:** the original implementation, as used since the 2017 paper, is preserved as the [v1.0 release](https://github.com/smeingast/PNICER/releases/tag/v1.0). Install it with `pip install git+https://github.com/smeingast/PNICER.git@v1.0`.
 
 ## Installation
-
-Install directly from GitHub with pip
 
 ```bash
 pip install git+https://github.com/smeingast/PNICER.git
 ```
 
-or, for a specific release (e.g. the legacy v1.0),
+Requires Python ≥ 3.11. For plotting, install the optional extra: `pip install "pnicer[plot] @ git+https://github.com/smeingast/PNICER.git"`.
 
-```bash
-pip install git+https://github.com/smeingast/PNICER.git@v1.0
-```
-
-### Test
-
-To test the installation, start up python (or ipython) and type
+## Quick start
 
 ```python
-from pnicer.tests import orion
+from pnicer import Photometry
+
+bands = {"J": ("Jmag", "e_Jmag"), "H": ("Hmag", "e_Hmag"), "Ks": ("Kmag", "e_Kmag")}
+extinction = {"J": 2.5, "H": 1.55, "Ks": 1.0}   # A_band / A_Ks
+
+science = Photometry.from_fits("orion.fits", bands=bands, extinction=extinction,
+                               lon="GLON", lat="GLAT", frame="galactic")
+control = Photometry.from_fits("control.fits", bands=bands, extinction=extinction,
+                               lon="GLON", lat="GLAT", frame="galactic")
+
+# NICER: point estimates
+nicer = science.nicer(control)
+
+# PNICER: full posteriors (fit the control field once, reuse the model)
+model = control.fit_intrinsic_colors(random_state=0)
+posterior = science.pnicer(model, adaptive=True)   # adaptive population correction
+
+# Point estimates and a map
+catalog = posterior.discretize()
+emap = catalog.build_map(bandwidth=5 / 60, metric="gaussian", use_fwhm=True, nicest=False)
+emap.save("orion_ak.fits")
+emap.plot()
+```
+
+To try this on bundled 2MASS data of Orion A:
+
+```python
+from pnicer.demo import orion
 orion()
 ```
 
-which will go through all major PNICER methods. At the end you should see a plot window with an extinction map of Orion A created from 2MASS data:
+Missing measurements are encoded as NaN throughout; sources need at least two observed bands (one color) for an estimate. Direct color-space input (without magnitudes) is supported through `pnicer.Colors`; the adaptive correction requires band magnitudes.
 
-![Orion](https://raw.githubusercontent.com/smeingast/PNICER/master/pnicer/tests_resources/orion.png)
+## Verification
 
-## Getting started
-
-For an introduction to the basic tools available in PNICER, please refer to the jupyter notebook provided with this package:
-
-[PNICER introduction notebook](https://github.com/smeingast/PNICER/blob/master/notebooks/pnicer.ipynb)
+The 2.0 estimators are validated by an extensive test suite (`pytest`): closed-form posteriors against brute-force numerical integration, the extreme-deconvolution fit against Bovy's reference C implementation, NICER against the legacy v1.0 outputs (machine precision on complete sources), map pixels against independent brute-force computation, and constant-extinction injection tests with ground truth, where the adaptive correction removes the population bias at A_K = 1–2 mag.
 
 ## Citation
 
-If you use PNICER in your research, please cite [Meingast, Lombardi & Alves (2017)](https://ui.adsabs.harvard.edu/abs/2017A%26A...601A.137M/abstract):
+If you use PNICER in your research, please cite [Meingast, Lombardi & Alves (2017)](https://ui.adsabs.harvard.edu/abs/2017A%26A...601A.137M/abstract), and for the version 2.0 methodology also [Lombardi (2018)](https://ui.adsabs.harvard.edu/abs/2018A%26A...615A.174L/abstract):
 
 ```bibtex
 @ARTICLE{2017A&A...601A.137M,
@@ -58,5 +76,17 @@ If you use PNICER in your research, please cite [Meingast, Lombardi & Alves (201
           eid = {A137},
         pages = {A137},
           doi = {10.1051/0004-6361/201630032}
+}
+
+@ARTICLE{2018A&A...615A.174L,
+       author = {{Lombardi}, Marco},
+        title = "{Optimal extinction measurements. I. Single-object extinction inference}",
+      journal = {\aap},
+         year = 2018,
+        month = aug,
+       volume = {615},
+          eid = {A174},
+        pages = {A174},
+          doi = {10.1051/0004-6361/201832769}
 }
 ```

@@ -20,6 +20,7 @@ from pnicer.posterior import (
     adaptive_log_weights,
     build_posterior,
     component_terms,
+    exact_adaptive_posterior,
 )
 from pnicer.xd import XDResult, fit_xd
 
@@ -92,7 +93,7 @@ class IntrinsicColorModel:
         random_state: int | None = None,
         reg_covar: float = 1e-6,
         tol: float = 1e-5,
-        max_iter: int = 200,
+        max_iter: int = 500,
         min_sources: int = 50,
         completeness: CompletenessModel | str | None = "fit",
     ) -> IntrinsicColorModel:
@@ -288,6 +289,7 @@ class IntrinsicColorModel:
         science: _ColorSpaceBase,
         *,
         adaptive: bool = False,
+        adaptive_method: str = "exact",
         n_iter: int = 3,
         a_grid: np.ndarray | None = None,
         floor: float = 0.01,
@@ -300,13 +302,22 @@ class IntrinsicColorModel:
         science : Photometry or Colors
             Science-field data in the same color basis as the model.
         adaptive : bool
-            Apply the adaptive control-field iterations (Lombardi 2018,
+            Apply the adaptive population correction for the change of the
+            observable background population with extinction (Lombardi 2018,
             Sect. 2.6); requires `supports_adaptive`.
+        adaptive_method : str
+            "exact" (default): extinction-dependent component weights enter
+            the likelihood itself; per-component moments are integrated by
+            Gauss-Hermite quadrature. "iterative": the published scheme of
+            Lombardi (2018), which re-weights the mixture with the previous
+            posterior; can bias broad posteriors (see
+            `pnicer.posterior.exact_adaptive_posterior`).
         n_iter : int
-            Number of adaptive iterations.
+            Number of iterations ("iterative" method only).
         a_grid : ndarray, optional
-            Extinction grid for the adaptive iterations; default
-            ``arange(-1, 5.25, 0.25)`` (units of A_ref).
+            Extinction grid on which the population weights are tabulated.
+            Defaults to a fine grid over [-2, 8] ("exact") or a coarse grid
+            over [-1, 5] ("iterative"), in units of A_ref.
         floor : float
             Completeness floor of the survival weights.
         min_dim : int
@@ -321,22 +332,47 @@ class IntrinsicColorModel:
             science, self.means, self.covariances, min_dim=min_dim
         )
         base_log_w = np.log(self.weights)
+        coordinates = science.coordinates
+        extinction_vector = getattr(science, "extinction_vector", None)
 
         if adaptive:
-            if a_grid is None:
-                a_grid = np.arange(-1.0, 5.25, 0.25)
-            w_at_a = self.weights_at_extinction(a_grid, floor=floor)
-            log_w = adaptive_log_weights(
-                terms, base_log_w, w_at_a, np.asarray(a_grid), n_iter=n_iter
-            )
+            if adaptive_method == "exact":
+                a_table = (
+                    np.arange(-2.0, 8.0 + 1e-9, 0.02)
+                    if a_grid is None
+                    else np.asarray(a_grid, dtype=np.float64)
+                )
+                w_table = self.weights_at_extinction(a_table, floor=floor)
+                return exact_adaptive_posterior(
+                    terms,
+                    weight_table=w_table,
+                    a_table=a_table,
+                    coordinates=coordinates,
+                    extinction_vector=extinction_vector,
+                )
+            if adaptive_method == "iterative":
+                if a_grid is None:
+                    a_grid = np.arange(-1.0, 5.25, 0.25)
+                w_at_a = self.weights_at_extinction(a_grid, floor=floor)
+                log_w = adaptive_log_weights(
+                    terms,
+                    base_log_w,
+                    w_at_a,
+                    np.asarray(a_grid),
+                    n_iter=n_iter,
+                )
+            else:
+                raise ValueError(
+                    "adaptive_method must be 'exact' or 'iterative'"
+                )
         else:
             log_w = base_log_w
 
         return build_posterior(
             terms,
             log_w,
-            coordinates=science.coordinates,
-            extinction_vector=getattr(science, "extinction_vector", None),
+            coordinates=coordinates,
+            extinction_vector=extinction_vector,
         )
 
     def posterior_grid(

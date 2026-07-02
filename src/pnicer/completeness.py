@@ -124,9 +124,12 @@ class CompletenessModel:
         """Relative detection probability of each source under extinction.
 
         For source i at extinction A: s_i(A) = prod over its observed bands b
-        of c_b(m_ib + A k_b) / max(c_b(m_ib), floor). The denominator undoes
-        the decimation already present in the (extinction-free) catalog; the
-        floor keeps sources at the detection limit from dominating.
+        of c_b(m_ib + A k_b) / max(c_b(m_ib), floor), capped at 1. The
+        denominator undoes the decimation already present in the
+        (extinction-free) catalog; the floor keeps sources at the detection
+        limit from dominating. The cap restricts the model to object *loss*:
+        brightening (negative extinction) does not add objects, so the
+        population weights stay at their zero-extinction values for A <= 0.
 
         Parameters
         ----------
@@ -152,4 +155,4 @@ class CompletenessModel:
             shifted = mags[:, None] + a_grid[None, :] * band_extinction[b]
             numer = comp(shifted)
             log_s[has] += np.log(numer + 1e-300) - np.log(denom)[:, None]
-        return np.exp(log_s)
+        return np.minimum(np.exp(log_s), 1.0)

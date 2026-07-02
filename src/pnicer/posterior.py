@@ -141,9 +141,18 @@ def component_terms(
                     var = 1.0 / vv
                     mean = var * np.sum(w * v, axis=-1)
                     quad = np.sum(w * w, axis=-1) - mean**2 * vv
+                # Degenerate direction: projected reddening vector ~ 0
+                # leaves the extinction unconstrained for this source
+                degenerate = vv <= 1e-30
+                if np.any(degenerate):
+                    mean[degenerate] = np.nan
+                    var[degenerate] = np.nan
+                    quad[degenerate] = np.nan
                 a_mean[idx, j] = mean
                 a_var[idx, j] = var
-                log_z[idx, j] = -0.5 * (d * _LOG_2PI + logdet)
+                log_z[idx, j] = np.where(
+                    degenerate, np.nan, -0.5 * (d * _LOG_2PI + logdet)
+                )
                 c_quad[idx, j] = quad
 
     return PosteriorTerms(
@@ -265,6 +274,77 @@ def build_posterior(
     return ExtinctionPosterior(
         means=terms.a_mean,
         variances=terms.a_var,
+        log_weights=log_w,
+        log_evidence=log_evidence,
+        pattern_dim=terms.pattern_dim,
+        coordinates=coordinates,
+        extinction_vector=extinction_vector,
+    )
+
+
+def exact_adaptive_posterior(
+    terms: PosteriorTerms,
+    weight_table: np.ndarray,
+    a_table: np.ndarray,
+    coordinates: SkyCoord | None,
+    extinction_vector: np.ndarray | None,
+    n_quad: int = 15,
+) -> ExtinctionPosterior:
+    """Adaptive posterior with extinction-dependent weights, evaluated exactly.
+
+    The population correction makes the mixture weights functions of the
+    extinction itself: p(A | c) ~ sum_k g_k w_k(A) N(A; A_k, sigma_k^2),
+    with g_k the per-source geometry amplitudes. Each component's integral,
+    mean, and variance against w_k(A) are computed by Gauss-Hermite
+    quadrature (w_k tabulated on `a_table`), yielding a moment-matched
+    Gaussian-mixture representation of the exact posterior.
+
+    This avoids the runaway re-weighting the iterative scheme of Lombardi
+    (2018, Sect. 2.6) can show for broad posteriors, where averaging the
+    weights over p(A) feeds back into p(A) itself.
+    """
+    nodes_std, quad_w = np.polynomial.hermite.hermgauss(n_quad)
+    quad_w = quad_w / np.sqrt(np.pi)
+
+    sigma = np.sqrt(terms.a_var)  # (N, K)
+    # Quadrature nodes per source and component: (N, K, Q)
+    nodes = (
+        terms.a_mean[..., None]
+        + np.sqrt(2.0) * sigma[..., None] * nodes_std[None, None, :]
+    )
+    n_components = terms.a_mean.shape[1]
+    m0 = np.empty_like(terms.a_mean)
+    m1 = np.empty_like(terms.a_mean)
+    m2 = np.empty_like(terms.a_mean)
+    for j in range(n_components):
+        w_nodes = np.interp(
+            nodes[:, j, :], a_table, weight_table[:, j]
+        )  # clips to table edges
+        m0[:, j] = w_nodes @ quad_w
+        m1[:, j] = (w_nodes * nodes[:, j, :]) @ quad_w
+        m2[:, j] = (w_nodes * nodes[:, j, :] ** 2) @ quad_w
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        new_mean = m1 / m0
+        new_var = np.maximum(m2 / m0 - new_mean**2, 1e-12)
+        # Amplitude: geometry term times the component's weight integral
+        log_geometry = (
+            terms.log_z
+            + 0.5 * (_LOG_2PI + np.log(terms.a_var))
+            - 0.5 * terms.c_quad
+        )
+        log_f = log_geometry + np.log(m0)
+
+    valid = np.isfinite(log_f).any(axis=1)
+    log_evidence = np.full(terms.a_mean.shape[0], np.nan)
+    log_evidence[valid] = logsumexp(
+        np.nan_to_num(log_f[valid], nan=-np.inf), axis=1
+    )
+    log_w = log_f - log_evidence[:, None]
+    log_w[~valid] = np.nan
+    return ExtinctionPosterior(
+        means=new_mean,
+        variances=new_var,
         log_weights=log_w,
         log_evidence=log_evidence,
         pattern_dim=terms.pattern_dim,

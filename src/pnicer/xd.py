@@ -190,7 +190,7 @@ def fit_xd(
     random_state: int | None = None,
     reg_covar: float = 1e-6,
     tol: float = 1e-5,
-    max_iter: int = 200,
+    max_iter: int = 500,
     weight_floor: float = 1e-8,
 ) -> XDResult:
     """Fit a Gaussian mixture by extreme deconvolution.
