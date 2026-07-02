@@ -11,16 +11,16 @@
 
 ![Orion A extinction map](assets/orion.png)
 
-Interstellar dust dims and reddens the light of every star behind it. PNICER measures this extinction from ordinary photometric catalogs: each star gets a probability density for its line-of-sight extinction, and the per-star estimates combine into smooth extinction maps. The only calibration input is a control field, a nearby patch of sky with little to no dust. The method puts no prior on the cloud structure and makes no assumption about which types of sources are in the catalog.
+Interstellar dust dims and reddens the light of every star behind it. PNICER measures this extinction from photometric catalogs: each source receives a probability density for its line-of-sight extinction, and the individual measurements are subsequently combined into smooth extinction maps. The only calibration input is an extinction-free control field; the method neither requires a prior on the column-density distribution nor makes assumptions on the composition of the background population.
 
-## Highlights
+## Key features
 
-- Each source gets a full posterior for its extinction, an analytic Gaussian mixture rather than a single value with an error bar. Collapse it to a point estimate when you need one.
-- The intrinsic color distribution of the control field is fitted with extreme deconvolution (Bovy et al. 2011), which removes the control field's own photometric errors instead of folding them into your results. In our tests the reported uncertainties are accurate to about 0.1%.
-- When a cloud sits in front of the background population, faint galaxies drop out of the catalog long before stars do. This shift biases classic estimators. The adaptive correction from Lombardi (2018) models it, and in simulations with known ground truth the bias stays below 0.02 mag at A_K = 2, where NICER is off by about 0.1 mag.
-- Missing photometry is handled exactly through projection matrices. Two observed bands are enough for an estimate.
-- NICER (Lombardi & Alves 2001) and the NICEST map correction (Lombardi 2009) are included in the same interface.
-- The implementation is plain numpy and scipy: about a million sources per second on a laptop, reproducible with a seed, and free of multiprocessing, so it also runs on Windows.
+- Each source receives a full posterior probability density for its extinction in the form of an analytic Gaussian mixture, which can be collapsed to a point estimate with an associated uncertainty where required.
+- The intrinsic color distribution of the control field is fitted with extreme deconvolution (Bovy et al. 2011), which removes the photometric errors of the control field itself from the calibration. In our validation tests, the reported uncertainties are accurate to on the order of 0.1%.
+- Extinction alters the observable background population, as intrinsically faint galaxies drop out of a magnitude-limited catalog long before stars do. The adaptive correction following Lombardi (2018) models this selection effect; in simulations with known ground truth, the remaining bias amounts to less than 0.02 mag at A_K = 2 mag, where the classic estimators deviate by on the order of 0.1 mag.
+- Missing photometry is treated exactly by means of projection matrices, and two observed passbands are sufficient for an estimate.
+- The NICER technique (Lombardi & Alves 2001) and the NICEST correction for extinction maps (Lombardi 2009) are provided within the same interface.
+- The implementation relies exclusively on numpy and scipy, processes on the order of one million sources per second on a laptop, and is fully reproducible when supplied with a random seed. In the absence of any multiprocessing, PNICER also runs on Windows.
 
 ## Quick start
 
@@ -38,7 +38,7 @@ control = Photometry.from_fits("control.fits", bands=bands, extinction=extinctio
 # Fit the intrinsic color model once, then reuse it
 model = control.fit_intrinsic_colors(random_state=0)
 
-# Extinction posteriors for every star, with the adaptive population correction
+# Extinction posteriors for every source, with the adaptive population correction
 posterior = science.pnicer(model, adaptive=True)
 
 # Point estimates, then a smoothed map written to FITS
@@ -51,11 +51,65 @@ emap.plot()
 nicer = science.nicer(control)
 ```
 
-The map at the top of this page comes from the bundled 2MASS demo data:
+The extinction map displayed at the top of this page is built from the bundled 2MASS demonstration data:
 
 ```python
 from pnicer.demo import orion
 orion()
+```
+
+## Advanced usage
+
+Beyond the basic pipeline, the example below demonstrates model selection and persistence, direct access to the posterior densities, outlier identification through the model evidence, manually supplied completeness functions for the adaptive correction, and the available map variants.
+
+```python
+import numpy as np
+from pnicer import IntrinsicColorModel
+from pnicer.completeness import CompletenessModel
+from pnicer.demo import load_control, load_orion
+
+science, control = load_orion(), load_control()
+
+# Select the number of mixture components via the Bayesian information
+# criterion instead of the fixed default, then store the model for reuse
+model = control.fit_intrinsic_colors(n_components="bic", max_components=6,
+                                     random_state=0)
+model.save("intrinsic_colors.npz")
+model = IntrinsicColorModel.load("intrinsic_colors.npz")
+
+# The posteriors are analytic Gaussian mixtures; evaluate the densities on
+# an arbitrary extinction grid, for instance for plotting or resampling
+posterior = science.pnicer(model)
+a_grid = np.linspace(-1, 3, 401)
+pdfs = posterior.pdf(a_grid)                 # shape (n_sources, 401)
+
+# The log-evidence identifies sources that are poorly described by the
+# control field, such as young stellar objects. Evidence values are only
+# comparable among sources sharing one missingness pattern.
+complete = posterior.pattern_dim == 2
+threshold = np.nanpercentile(posterior.log_evidence[complete], 1)
+outliers = complete & (posterior.log_evidence < threshold)
+
+# When the survey completeness is known, supply it directly instead of
+# fitting it to the control-field number counts
+completeness = CompletenessModel.from_parameters(
+    band_names=("J", "H", "Ks"),
+    m50=np.array([16.9, 16.2, 15.7]),        # 50% completeness limits (mag)
+    width=np.array([0.3, 0.4, 0.55]),
+)
+model = control.fit_intrinsic_colors(random_state=0, completeness=completeness)
+posterior = science.pnicer(model, adaptive=True)
+
+# Maps support several smoothing metrics as well as the NICEST correction
+# for unresolved substructure and foreground contamination
+catalog = posterior.discretize()
+nicest = catalog.build_map(bandwidth=5 / 60, metric="gaussian", use_fwhm=True,
+                           nicest=True, alpha=1 / 3)
+median = catalog.build_map(bandwidth=5 / 60, metric="median")
+
+# All products round-trip through FITS; catalogs export to astropy tables
+nicest.save("orion_ak_nicest.fits")
+table = catalog.to_table()
 ```
 
 ## Installation
@@ -64,17 +118,17 @@ orion()
 pip install git+https://github.com/smeingast/PNICER.git
 ```
 
-Python 3.11 or newer; numpy, scipy, astropy, and scikit-learn are installed automatically. Plotting needs the optional extra: `pip install "pnicer[plot] @ git+https://github.com/smeingast/PNICER.git"`.
+Python 3.11 or newer is required; numpy, scipy, astropy, and scikit-learn are installed automatically. Plotting requires the optional extra: `pip install "pnicer[plot] @ git+https://github.com/smeingast/PNICER.git"`.
 
-## Under the hood
+## Method
 
-Version 2.0 is a from-scratch rewrite. It keeps the PNICER idea from [Meingast, Lombardi & Alves (2017)](https://ui.adsabs.harvard.edu/abs/2017A%26A...601A.137M/abstract), purely data-driven extinction PDFs calibrated on a control field, and replaces the original numerical machinery with the closed-form Bayesian formalism of [Lombardi (2018)](https://ui.adsabs.harvard.edu/abs/2018A%26A...615A.174L/abstract): a Gaussian mixture model of the intrinsic colors, deconvolved from measurement errors, yields each source's extinction posterior analytically.
+Version 2.0 is a complete rewrite. It retains the central idea of PNICER as presented in [Meingast, Lombardi & Alves (2017)](https://ui.adsabs.harvard.edu/abs/2017A%26A...601A.137M/abstract), namely purely data-driven extinction probability densities calibrated on a control field, and replaces the original numerical machinery with the closed-form Bayesian formalism of [Lombardi (2018)](https://ui.adsabs.harvard.edu/abs/2018A%26A...615A.174L/abstract): a Gaussian mixture model of the intrinsic colors, deconvolved from the measurement errors, yields the extinction posterior of each source analytically.
 
-Missing measurements are NaN throughout, and a source needs at least one observed color. Direct color-space input without magnitudes works via `pnicer.Colors`. The adaptive correction needs band magnitudes, since completeness lives in magnitude space.
+Missing measurements are encoded as NaN throughout, and a source requires at least one observed color for an estimate. Direct color-space input without magnitudes is supported through `pnicer.Colors`, whereas the adaptive correction requires band magnitudes, as the completeness functions are defined in magnitude space.
 
 ## Verification
 
-The test suite (75 tests) checks the math, not just the plumbing:
+The test suite (75 tests) scrutinizes the mathematics rather than only the plumbing:
 
 | Claim | Checked against |
 | --- | --- |
@@ -84,11 +138,11 @@ The test suite (75 tests) checks the math, not just the plumbing:
 | Maps add up | Independent per-pixel brute force, incl. the NICEST correction, plus frozen legacy maps |
 | Adaptive correction works | Ground-truth injection tests: bias ≤ 0.02 mag at A_K = 1-2 |
 
-To run it from a clone: `pip install -e ".[dev]" && pytest`.
+To run the suite from a clone: `pip install -e ".[dev]" && pytest`.
 
 ## Legacy
 
-The original implementation, as used since the 2017 paper, remains available as the [v1.0 release](https://github.com/smeingast/PNICER/releases/tag/v1.0):
+The original implementation, in use since the 2017 publication, remains available as the [v1.0 release](https://github.com/smeingast/PNICER/releases/tag/v1.0):
 
 ```bash
 pip install git+https://github.com/smeingast/PNICER.git@v1.0
@@ -96,7 +150,7 @@ pip install git+https://github.com/smeingast/PNICER.git@v1.0
 
 ## Citation
 
-If PNICER helps your research, please cite [Meingast, Lombardi & Alves (2017)](https://ui.adsabs.harvard.edu/abs/2017A%26A...601A.137M/abstract), and for the 2.0 methodology also [Lombardi (2018)](https://ui.adsabs.harvard.edu/abs/2018A%26A...615A.174L/abstract).
+If you make use of PNICER in your research, please cite [Meingast, Lombardi & Alves (2017)](https://ui.adsabs.harvard.edu/abs/2017A%26A...601A.137M/abstract), and for the version 2.0 methodology also [Lombardi (2018)](https://ui.adsabs.harvard.edu/abs/2018A%26A...615A.174L/abstract).
 
 <details>
 <summary>BibTeX entries</summary>
