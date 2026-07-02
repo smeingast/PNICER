@@ -85,6 +85,33 @@ class TestNicerBehavior:
             [(0.2**2 + 0.1**2) / 0.95**2, (0.2**2 + 0.2**2) / 0.95**2],
         )
 
+    def test_nicer_equals_k1_posterior_multidim(self, orion, control):
+        """Mathematical correctness anchor: NICER must be identical to the
+        K=1 case of the Bayesian posterior machinery (which is itself
+        verified against brute-force numerical integration), for all
+        missingness patterns of the real Orion data."""
+        from pnicer import IntrinsicColorModel
+        from pnicer.nicer import control_field_statistics
+
+        nicer = orion.nicer(control)
+        color0, cov = control_field_statistics(control)
+        model = IntrinsicColorModel(
+            weights=np.array([1.0]),
+            means=color0[None, :],
+            covariances=cov[None, :, :],
+            color_names=orion.color_names,
+            reddening_vector=orion.reddening_vector,
+        )
+        post = model.posterior(orion)
+        both = np.isfinite(nicer.extinction) & np.isfinite(post.mean())
+        assert both.sum() > 80000
+        np.testing.assert_allclose(
+            nicer.extinction[both], post.mean()[both], atol=1e-12
+        )
+        np.testing.assert_allclose(
+            nicer.variance[both], post.variance()[both], atol=1e-12
+        )
+
     def test_color0_cov_diagonal_equals_matrix(self):
         """1-d (diagonal variances) and 2-d covariance input must agree."""
         col = Colors(
