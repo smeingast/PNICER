@@ -26,3 +26,7 @@ my_stuff.py
 stub.py
 other/
 Support/
+
+# Local archive of pre-2.0 files
+_attic/
+.pytest_cache/
