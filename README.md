@@ -1,6 +1,6 @@
 <h1 align="center">PNICER</h1>
 
-<p align="center"><i>Interstellar extinction from photometry: probabilistic, fast, and without priors.</i></p>
+<p align="center"><i>Extinction estimates and maps from photometric catalogs.</i></p>
 
 <p align="center">
   <a href="https://github.com/smeingast/PNICER/actions/workflows/ci.yml"><img src="https://github.com/smeingast/PNICER/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -11,18 +11,18 @@
 
 ![Orion A extinction map](assets/orion.png)
 
-Somewhere between you and every star sits interstellar dust, quietly reddening and dimming starlight. PNICER measures how much: it turns photometric catalogs into per-star extinction **probability densities** and smooth extinction **maps**, using nothing but an extinction-free control field. No column-density priors, no assumed source types, no fuss.
+Interstellar dust dims and reddens the light of every star behind it. PNICER measures this extinction from ordinary photometric catalogs: each star gets a probability density for its line-of-sight extinction, and the per-star estimates combine into smooth extinction maps. The only calibration input is a control field, a nearby patch of sky with little to no dust. The method puts no prior on the cloud structure and makes no assumption about which types of sources are in the catalog.
 
-## ✨ Highlights
+## Highlights
 
-- 🎲 **Full posteriors, not just numbers.** Every source gets an analytic extinction PDF (a 1-D Gaussian mixture); collapse it to a point estimate whenever you're ready.
-- 🧹 **Deconvolved, not smeared.** The intrinsic color distribution is fitted with extreme deconvolution (Bovy et al. 2011), so the control field's own photometric errors don't inflate yours. Uncertainties come out calibrated to ~0.1%.
-- 🌫️ **Sees through the population shift.** Behind dense clouds, faint galaxies vanish from your sample before stars do. The adaptive population correction (Lombardi 2018) removes the resulting bias: ≲ 0.02 mag at A_K = 2 where classic estimators drift by ~0.1 mag.
-- 🕳️ **Missing bands? Handled exactly.** NaN photometry is projected out of the problem, not patched over. Two observed bands suffice.
-- 🏛️ **The classics, included.** NICER (Lombardi & Alves 2001) in the same interface, NICEST (Lombardi 2009) map correction built in.
-- ⚡ **Fast and boring in the best way.** Pure numpy/scipy vectorization, ~10⁶ sources/second on a laptop, fully deterministic with a seed, no multiprocessing, runs on Linux/macOS/Windows.
+- Each source gets a full posterior for its extinction, an analytic Gaussian mixture rather than a single value with an error bar. Collapse it to a point estimate when you need one.
+- The intrinsic color distribution of the control field is fitted with extreme deconvolution (Bovy et al. 2011), which removes the control field's own photometric errors instead of folding them into your results. In our tests the reported uncertainties are accurate to about 0.1%.
+- When a cloud sits in front of the background population, faint galaxies drop out of the catalog long before stars do. This shift biases classic estimators. The adaptive correction from Lombardi (2018) models it, and in simulations with known ground truth the bias stays below 0.02 mag at A_K = 2, where NICER is off by about 0.1 mag.
+- Missing photometry is handled exactly through projection matrices. Two observed bands are enough for an estimate.
+- NICER (Lombardi & Alves 2001) and the NICEST map correction (Lombardi 2009) are included in the same interface.
+- The implementation is plain numpy and scipy: about a million sources per second on a laptop, reproducible with a seed, and free of multiprocessing, so it also runs on Windows.
 
-## 🚀 Quick start
+## Quick start
 
 ```python
 from pnicer import Photometry
@@ -35,46 +35,46 @@ science = Photometry.from_fits("orion.fits", bands=bands, extinction=extinction,
 control = Photometry.from_fits("control.fits", bands=bands, extinction=extinction,
                                lon="GLON", lat="GLAT", frame="galactic")
 
-# Fit the intrinsic color model once, reuse it forever
+# Fit the intrinsic color model once, then reuse it
 model = control.fit_intrinsic_colors(random_state=0)
 
-# Extinction posteriors for every star (with the adaptive population correction)
+# Extinction posteriors for every star, with the adaptive population correction
 posterior = science.pnicer(model, adaptive=True)
 
-# Point estimates → smooth map → FITS
+# Point estimates, then a smoothed map written to FITS
 catalog = posterior.discretize()
 emap = catalog.build_map(bandwidth=5 / 60, metric="gaussian", use_fwhm=True)
 emap.save("orion_ak.fits")
 emap.plot()
 
-# Prefer the classic? Same interface:
+# The classic NICER estimator, same interface
 nicer = science.nicer(control)
 ```
 
-Want to see it run right now? The map at the top of this page comes bundled:
+The map at the top of this page comes from the bundled 2MASS demo data:
 
 ```python
 from pnicer.demo import orion
 orion()
 ```
 
-## 📦 Installation
+## Installation
 
 ```bash
 pip install git+https://github.com/smeingast/PNICER.git
 ```
 
-Python ≥ 3.11; numpy, scipy, astropy, and scikit-learn come along automatically. For plotting, grab the extra: `pip install "pnicer[plot] @ git+https://github.com/smeingast/PNICER.git"`.
+Python 3.11 or newer; numpy, scipy, astropy, and scikit-learn are installed automatically. Plotting needs the optional extra: `pip install "pnicer[plot] @ git+https://github.com/smeingast/PNICER.git"`.
 
-## 🔬 Under the hood
+## Under the hood
 
-Version 2.0 is a from-scratch rewrite. It keeps the PNICER idea from [Meingast, Lombardi & Alves (2017)](https://ui.adsabs.harvard.edu/abs/2017A%26A...601A.137M/abstract) (purely data-driven extinction PDFs from a control field) and replaces the original numerical machinery with the closed-form Bayesian formalism of [Lombardi (2018)](https://ui.adsabs.harvard.edu/abs/2018A%26A...615A.174L/abstract): a Gaussian mixture model of the intrinsic colors, deconvolved from measurement errors, yields each source's extinction posterior analytically. Good ideas from both papers, one clean implementation.
+Version 2.0 is a from-scratch rewrite. It keeps the PNICER idea from [Meingast, Lombardi & Alves (2017)](https://ui.adsabs.harvard.edu/abs/2017A%26A...601A.137M/abstract), purely data-driven extinction PDFs calibrated on a control field, and replaces the original numerical machinery with the closed-form Bayesian formalism of [Lombardi (2018)](https://ui.adsabs.harvard.edu/abs/2018A%26A...615A.174L/abstract): a Gaussian mixture model of the intrinsic colors, deconvolved from measurement errors, yields each source's extinction posterior analytically.
 
-Practical notes: missing measurements are NaN throughout; sources need at least one observed color. Direct color-space input (no magnitudes) works via `pnicer.Colors`; the adaptive correction needs band magnitudes, since completeness lives in magnitude space.
+Missing measurements are NaN throughout, and a source needs at least one observed color. Direct color-space input without magnitudes works via `pnicer.Colors`. The adaptive correction needs band magnitudes, since completeness lives in magnitude space.
 
-## ✅ Trust, but verify
+## Verification
 
-We take "verified" seriously. The test suite (75 tests) checks the math, not just the plumbing:
+The test suite (75 tests) checks the math, not just the plumbing:
 
 | Claim | Checked against |
 | --- | --- |
@@ -84,17 +84,17 @@ We take "verified" seriously. The test suite (75 tests) checks the math, not jus
 | Maps add up | Independent per-pixel brute force, incl. the NICEST correction, plus frozen legacy maps |
 | Adaptive correction works | Ground-truth injection tests: bias ≤ 0.02 mag at A_K = 1-2 |
 
-Run it yourself from a clone: `pip install -e ".[dev]" && pytest`.
+To run it from a clone: `pip install -e ".[dev]" && pytest`.
 
-## 🕰️ Legacy
+## Legacy
 
-The original implementation, as used since the 2017 paper, lives on as the [v1.0 release](https://github.com/smeingast/PNICER/releases/tag/v1.0):
+The original implementation, as used since the 2017 paper, remains available as the [v1.0 release](https://github.com/smeingast/PNICER/releases/tag/v1.0):
 
 ```bash
 pip install git+https://github.com/smeingast/PNICER.git@v1.0
 ```
 
-## 📖 Citation
+## Citation
 
 If PNICER helps your research, please cite [Meingast, Lombardi & Alves (2017)](https://ui.adsabs.harvard.edu/abs/2017A%26A...601A.137M/abstract), and for the 2.0 methodology also [Lombardi (2018)](https://ui.adsabs.harvard.edu/abs/2018A%26A...615A.174L/abstract).
 
