@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pnicer"
-version = "2.0.0.dev0"
+version = "2.0.0"
 description = "Extinction estimation and mapping from photometric catalogs (PNICER, NICER)"
 readme = "README.md"
 requires-python = ">=3.11"
