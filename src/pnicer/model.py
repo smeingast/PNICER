@@ -92,7 +92,7 @@ class IntrinsicColorModel:
         max_components: int = 8,
         random_state: int | None = None,
         reg_covar: float = 1e-6,
-        tol: float = 1e-5,
+        tol: float = 1e-6,
         max_iter: int = 500,
         min_sources: int = 50,
         completeness: CompletenessModel | str | None = "fit",

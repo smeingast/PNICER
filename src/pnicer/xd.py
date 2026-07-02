@@ -189,7 +189,7 @@ def fit_xd(
     *,
     random_state: int | None = None,
     reg_covar: float = 1e-6,
-    tol: float = 1e-5,
+    tol: float = 1e-6,
     max_iter: int = 500,
     weight_floor: float = 1e-8,
 ) -> XDResult:
@@ -211,7 +211,8 @@ def fit_xd(
     reg_covar : float
         Ridge added to covariance diagonals in each M-step.
     tol : float
-        Relative log-likelihood change defining convergence.
+        Convergence threshold on the average per-point log-likelihood
+        change between EM iterations.
     max_iter : int
         Maximum number of EM iterations.
     weight_floor : float
@@ -259,9 +260,11 @@ def fit_xd(
         covariances = 0.5 * (covariances + np.swapaxes(covariances, -1, -2))
         covariances[:, np.arange(n_dim), np.arange(n_dim)] += reg_covar
 
-        change = ll_total - log_likelihood
+        # Converge on the average per-point log-likelihood change (the
+        # total can cross zero, which breaks purely relative criteria)
+        change = (ll_total - log_likelihood) / n_used
         log_likelihood = ll_total
-        if iteration > 1 and abs(change) <= tol * abs(ll_total):
+        if iteration > 1 and abs(change) <= tol:
             converged = True
             break
 
