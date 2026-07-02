@@ -24,9 +24,7 @@ def _synthetic_photometry(
     if covs is None:
         covs = [np.diag([0.02, 0.01]), np.array([[0.05, 0.02], [0.02, 0.04]])]
     comp = rng.choice(len(weights), size=n, p=weights)
-    colors = np.array(
-        [rng.multivariate_normal(means[c], covs[c]) for c in comp]
-    )
+    colors = np.array([rng.multivariate_normal(means[c], covs[c]) for c in comp])
     # Build magnitudes from colors: fix Ks, derive H and J
     ks = rng.uniform(10, 15, size=n)
     h = ks + colors[:, 1]
@@ -60,8 +58,11 @@ class TestXDRecovery:
     def test_recovers_complete_data(self, rng):
         phot, _ = _synthetic_photometry(rng)
         result = fit_xd(
-            phot.pattern_groups(), n_dim=2, n_sources=phot.n_sources,
-            n_components=2, random_state=0,
+            phot.pattern_groups(),
+            n_dim=2,
+            n_sources=phot.n_sources,
+            n_components=2,
+            random_state=0,
         )
         assert result.converged
         order = _match_components(result.means, [(0.4, 0.15), (1.2, 0.8)])
@@ -69,15 +70,11 @@ class TestXDRecovery:
         np.testing.assert_allclose(
             result.means[order], [(0.4, 0.15), (1.2, 0.8)], atol=0.05
         )
-        np.testing.assert_allclose(
-            np.sort(result.weights), [0.4, 0.6], atol=0.05
-        )
+        np.testing.assert_allclose(np.sort(result.weights), [0.4, 0.6], atol=0.05)
         # Deconvolution: fitted covariances match the intrinsic ones, not
         # the error-broadened observed distribution
         true_covs = [np.diag([0.02, 0.01]), [[0.05, 0.02], [0.02, 0.04]]]
-        for fitted, true in zip(
-            result.covariances[order], true_covs, strict=True
-        ):
+        for fitted, true in zip(result.covariances[order], true_covs, strict=True):
             np.testing.assert_allclose(fitted, true, atol=0.015)
 
     def test_recovers_with_missing_bands(self, rng):
@@ -85,8 +82,11 @@ class TestXDRecovery:
         groups = phot.pattern_groups()
         assert len(groups) > 1  # multiple patterns, incl. chained gaps
         result = fit_xd(
-            groups, n_dim=2, n_sources=phot.n_sources,
-            n_components=2, random_state=0,
+            groups,
+            n_dim=2,
+            n_sources=phot.n_sources,
+            n_components=2,
+            random_state=0,
         )
         order = _match_components(result.means, [(0.4, 0.15), (1.2, 0.8)])
         assert sorted(order) == [0, 1]
@@ -97,8 +97,11 @@ class TestXDRecovery:
     def test_recovers_heteroscedastic(self, rng):
         phot, _ = _synthetic_photometry(rng, n=8000, heteroscedastic=True)
         result = fit_xd(
-            phot.pattern_groups(), n_dim=2, n_sources=phot.n_sources,
-            n_components=2, random_state=0,
+            phot.pattern_groups(),
+            n_dim=2,
+            n_sources=phot.n_sources,
+            n_components=2,
+            random_state=0,
         )
         order = _match_components(result.means, [(0.4, 0.15), (1.2, 0.8)])
         np.testing.assert_allclose(
@@ -108,8 +111,11 @@ class TestXDRecovery:
     def test_responsibilities(self, rng):
         phot, comp = _synthetic_photometry(rng, n=3000)
         result = fit_xd(
-            phot.pattern_groups(), n_dim=2, n_sources=phot.n_sources,
-            n_components=2, random_state=0,
+            phot.pattern_groups(),
+            n_dim=2,
+            n_sources=phot.n_sources,
+            n_components=2,
+            random_state=0,
         )
         order = _match_components(result.means, [(0.4, 0.15), (1.2, 0.8)])
         assigned = np.argmax(result.responsibilities, axis=1)
@@ -122,8 +128,13 @@ class TestXDRecovery:
         groups = phot.pattern_groups()
         lls = [
             fit_xd(
-                groups, n_dim=2, n_sources=phot.n_sources, n_components=2,
-                random_state=0, max_iter=mi, tol=0.0,
+                groups,
+                n_dim=2,
+                n_sources=phot.n_sources,
+                n_components=2,
+                random_state=0,
+                max_iter=mi,
+                tol=0.0,
             ).log_likelihood
             for mi in (2, 5, 10, 30)
         ]
@@ -134,7 +145,10 @@ class TestXDRecovery:
         groups = phot.pattern_groups()
         results = [
             fit_xd(
-                groups, n_dim=2, n_sources=phot.n_sources, n_components=k,
+                groups,
+                n_dim=2,
+                n_sources=phot.n_sources,
+                n_components=k,
                 random_state=0,
             )
             for k in (1, 2, 3, 4)
@@ -156,8 +170,13 @@ class TestAgainstBovy:
         phot, _ = _synthetic_photometry(rng, n=3000)
         groups = phot.pattern_groups()
         ours = fit_xd(
-            groups, n_dim=2, n_sources=phot.n_sources, n_components=2,
-            random_state=0, tol=1e-8, max_iter=2000,
+            groups,
+            n_dim=2,
+            n_sources=phot.n_sources,
+            n_components=2,
+            random_state=0,
+            tol=1e-8,
+            max_iter=2000,
         )
         w, m, c = _initial_parameters(groups, 2, 2, 0, 1e-6)
         group = groups[0]

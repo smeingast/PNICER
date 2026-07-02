@@ -132,8 +132,6 @@ def data2grid(
         skycoord=skycoord, proj_code=proj_code, pixsize=pixsize, **kwargs
     )
     grid_wcs = wcs.WCS(header=header)
-    xv, yv = np.meshgrid(
-        np.arange(header["NAXIS1"]), np.arange(header["NAXIS2"])
-    )
+    xv, yv = np.meshgrid(np.arange(header["NAXIS1"]), np.arange(header["NAXIS2"]))
     lon, lat = grid_wcs.wcs_pix2world(xv, yv, 0)
     return header, lon, lat

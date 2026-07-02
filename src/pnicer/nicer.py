@@ -113,9 +113,7 @@ def nicer(
         lower = upper @ k  # (n,)
         deviation = group.colors - proj @ intrinsic_mean
         with np.errstate(divide="ignore", invalid="ignore"):
-            extinction[group.indices] = (
-                np.sum(upper * deviation, axis=-1) / lower
-            )
+            extinction[group.indices] = np.sum(upper * deviation, axis=-1) / lower
             variance[group.indices] = 1.0 / lower
 
     return ExtinctionCatalog(

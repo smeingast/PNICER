@@ -76,12 +76,8 @@ class TestMapMath:
 
     def test_fwhm_scaling(self, rng):
         catalog = _small_catalog(rng)
-        fwhm_map = catalog.build_map(
-            bandwidth=5 / 60, metric="gaussian", use_fwhm=True
-        )
-        assert np.isclose(
-            fwhm_map.prime_header["BWIDTH"], (5 / 60) / STD2FWHM
-        )
+        fwhm_map = catalog.build_map(bandwidth=5 / 60, metric="gaussian", use_fwhm=True)
+        assert np.isclose(fwhm_map.prime_header["BWIDTH"], (5 / 60) / STD2FWHM)
 
     def test_average_and_median_metrics(self, rng):
         catalog = _small_catalog(rng)

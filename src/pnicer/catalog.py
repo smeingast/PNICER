@@ -129,6 +129,5 @@ class ExtinctionCatalog:
     def __repr__(self) -> str:
         n_good = int(np.isfinite(self.extinction).sum())
         return (
-            f"{type(self).__name__}(n_sources={self.n_sources}, "
-            f"n_estimates={n_good})"
+            f"{type(self).__name__}(n_sources={self.n_sources}, n_estimates={n_good})"
         )

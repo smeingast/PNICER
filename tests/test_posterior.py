@@ -134,12 +134,8 @@ class TestPosteriorMath:
         post = model.posterior(phot)
         cat = post.discretize()
 
-        comp = rng.choice(
-            post.n_components, size=200_000, p=post.weights[0]
-        )
-        samples = rng.normal(
-            post.means[0][comp], np.sqrt(post.variances[0][comp])
-        )
+        comp = rng.choice(post.n_components, size=200_000, p=post.weights[0])
+        samples = rng.normal(post.means[0][comp], np.sqrt(post.variances[0][comp]))
         assert np.isclose(cat.extinction[0], samples.mean(), atol=0.01)
         assert np.isclose(cat.variance[0], samples.var(), rtol=0.02)
 

@@ -33,15 +33,19 @@ _STD2FWHM = 2.0 * np.sqrt(2.0 * np.log(2.0))
 def _kernel_weights(distances: np.ndarray, metric: str, bandwidth: float):
     """Spatial kernel weights, normalized like the legacy implementation."""
     if metric in ("uniform", "average", "median"):
+
         def wfunc(d):
             return np.ones_like(d)
     elif metric == "gaussian":
+
         def wfunc(d):
             return np.exp(-0.5 * (d / bandwidth) ** 2)
     elif metric == "epanechnikov":
+
         def wfunc(d):
             return np.maximum(1.0 - (d / bandwidth) ** 2, 0.0)
     elif metric == "triangular":
+
         def wfunc(d):
             return np.maximum(1.0 - np.abs(d / bandwidth), 0.0)
     else:
@@ -54,9 +58,7 @@ def _kernel_weights(distances: np.ndarray, metric: str, bandwidth: float):
 def _pixel_sums(values: np.ndarray, pixel_idx: np.ndarray, n_pixels: int):
     """Sum `values` per pixel, treating NaN as absent."""
     good = np.isfinite(values)
-    return np.bincount(
-        pixel_idx[good], weights=values[good], minlength=n_pixels
-    )
+    return np.bincount(pixel_idx[good], weights=values[good], minlength=n_pixels)
 
 
 def _pixel_counts(mask: np.ndarray, pixel_idx: np.ndarray, n_pixels: int):
@@ -127,11 +129,12 @@ def build_map(
     chord = 2.0 * np.sin(np.radians(r_mask) / 2.0)
     neighbors = tree.query_ball_point(grid_xyz, r=chord, workers=-1)
 
-    lengths = np.fromiter((len(n) for n in neighbors), dtype=np.int64,
-                          count=n_pixels)
+    lengths = np.fromiter((len(n) for n in neighbors), dtype=np.int64, count=n_pixels)
     pixel_idx = np.repeat(np.arange(n_pixels), lengths)
-    source_idx = np.concatenate(neighbors).astype(np.int64) if lengths.sum() else (
-        np.empty(0, dtype=np.int64)
+    source_idx = (
+        np.concatenate(neighbors).astype(np.int64)
+        if lengths.sum()
+        else (np.empty(0, dtype=np.int64))
     )
 
     distances = distance_sky(
@@ -159,8 +162,14 @@ def build_map(
             else 1.0
         )
         map_ext, map_var, map_num, map_rho = _aggregate_kernel(
-            ext, var, w_spatial, pixel_idx, n_pixels,
-            nicest=nicest, alpha=alpha, k_lambda=k_lambda,
+            ext,
+            var,
+            w_spatial,
+            pixel_idx,
+            n_pixels,
+            nicest=nicest,
+            alpha=alpha,
+            k_lambda=k_lambda,
         )
 
     return ExtinctionMap(
@@ -257,24 +266,18 @@ def _aggregate_kernel(
                 pixel_idx,
                 n_pixels,
             )
-            lower = _pixel_sums(
-                w_total * np.exp(beta * ext) / var, pixel_idx, n_pixels
-            )
+            lower = _pixel_sums(w_total * np.exp(beta * ext) / var, pixel_idx, n_pixels)
             map_var = upper / lower**2
     else:
         sum_w = _pixel_sums(w_total, pixel_idx, n_pixels)
         with np.errstate(divide="ignore", invalid="ignore"):
-            map_var = (
-                _pixel_sums(w_total**2 * var, pixel_idx, n_pixels) / sum_w**2
-            )
+            map_var = _pixel_sums(w_total**2 * var, pixel_idx, n_pixels) / sum_w**2
         map_cor = np.zeros(n_pixels)
 
     valid_pair = np.isfinite(w_total * ext)
     num = _pixel_counts(valid_pair, pixel_idx, n_pixels)
     with np.errstate(divide="ignore", invalid="ignore"):
-        map_ext = (
-            _pixel_sums(w_total * ext, pixel_idx, n_pixels) / sum_w - map_cor
-        )
+        map_ext = _pixel_sums(w_total * ext, pixel_idx, n_pixels) / sum_w - map_cor
     map_rho = _pixel_sums(w_spatial, pixel_idx, n_pixels)
 
     map_ext[num == 0] = np.nan
@@ -315,9 +318,7 @@ class ExtinctionMap:
         self.map_num = map_num
         self.map_rho = map_rho
         self.map_header = map_header
-        self.prime_header = (
-            fits.Header() if prime_header is None else prime_header
-        )
+        self.prime_header = fits.Header() if prime_header is None else prime_header
 
     @property
     def shape(self) -> tuple[int, int]:
@@ -362,8 +363,7 @@ class ExtinctionMap:
             import matplotlib.pyplot as plt
         except ImportError as err:
             raise ImportError(
-                "Plotting requires matplotlib; install with "
-                "'pip install pnicer[plot]'"
+                "Plotting requires matplotlib; install with 'pip install pnicer[plot]'"
             ) from err
         from astropy.wcs import WCS
 
@@ -385,8 +385,12 @@ class ExtinctionMap:
                 np.percentile(data[finite], [1, 99]) if finite.any() else (0, 1)
             )
             im = ax.imshow(
-                data, origin="lower", interpolation="nearest",
-                vmin=vmin, vmax=vmax, cmap="binary",
+                data,
+                origin="lower",
+                interpolation="nearest",
+                vmin=vmin,
+                vmax=vmax,
+                cmap="binary",
             )
             fig.colorbar(im, ax=ax, label=label, shrink=0.8)
         if path is None:

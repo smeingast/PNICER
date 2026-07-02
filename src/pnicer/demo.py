@@ -64,6 +64,5 @@ def orion(plot: bool = True):
 
     if plot:
         emap.plot()
-    print("PNICER routines terminated successfully! "
-          "Happy hunting for extinction :)")
+    print("PNICER routines terminated successfully! Happy hunting for extinction :)")
     return emap

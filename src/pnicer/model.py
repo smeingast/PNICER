@@ -181,9 +181,7 @@ class IntrinsicColorModel:
             band_ext = control.extinction_vector
             if completeness == "fit":
                 try:
-                    comp_model = CompletenessModel.fit(
-                        control_mags, control.band_names
-                    )
+                    comp_model = CompletenessModel.fit(control_mags, control.band_names)
                 except (ValueError, RuntimeError) as err:
                     warnings.warn(
                         f"Completeness fit failed ({err}); adaptive "
@@ -267,10 +265,9 @@ class IntrinsicColorModel:
                 f"Science color space ({science.n_colors}) does not match "
                 f"the model ({self.n_colors})"
             )
-        if (
-            tuple(science.color_names) != self.color_names
-            and set(science.color_names) != set(self.color_names)
-        ):
+        if tuple(science.color_names) != self.color_names and set(
+            science.color_names
+        ) != set(self.color_names):
             warnings.warn(
                 f"Science colors {science.color_names} differ from model "
                 f"colors {self.color_names}",
@@ -328,9 +325,7 @@ class IntrinsicColorModel:
         ExtinctionPosterior
         """
         self._check_science(science)
-        terms = component_terms(
-            science, self.means, self.covariances, min_dim=min_dim
-        )
+        terms = component_terms(science, self.means, self.covariances, min_dim=min_dim)
         base_log_w = np.log(self.weights)
         coordinates = science.coordinates
         extinction_vector = getattr(science, "extinction_vector", None)
@@ -362,9 +357,7 @@ class IntrinsicColorModel:
                     n_iter=n_iter,
                 )
             else:
-                raise ValueError(
-                    "adaptive_method must be 'exact' or 'iterative'"
-                )
+                raise ValueError("adaptive_method must be 'exact' or 'iterative'")
         else:
             log_w = base_log_w
 
@@ -393,9 +386,7 @@ class IntrinsicColorModel:
         """
         self._check_science(science)
         a_grid = np.asarray(a_grid, dtype=np.float64)
-        terms = component_terms(
-            science, self.means, self.covariances, min_dim=min_dim
-        )
+        terms = component_terms(science, self.means, self.covariances, min_dim=min_dim)
         if adaptive:
             w_at_a = self.weights_at_extinction(a_grid, floor=floor)
             log_weights = np.log(w_at_a + 1e-300)  # (G, K)
@@ -433,10 +424,7 @@ class IntrinsicColorModel:
         if self.completeness is not None:
             payload["completeness_bands"] = np.array(self.completeness.band_names)
             payload["completeness_params"] = np.array(
-                [
-                    (b.m50, b.width, b.alpha, b.log_norm)
-                    for b in self.completeness.bands
-                ]
+                [(b.m50, b.width, b.alpha, b.log_norm) for b in self.completeness.bands]
             )
         np.savez_compressed(path, **payload)
 

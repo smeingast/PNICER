@@ -132,9 +132,7 @@ class TestColors:
         assert np.allclose(groups[(1,)].projection, [[0.0, 1.0]])
         assert np.allclose(groups[(0, 1)].projection, np.eye(2))
         # Diagonal error covariance
-        assert np.allclose(
-            groups[(0, 1)].covariances[0], np.diag([0.05**2, 0.04**2])
-        )
+        assert np.allclose(groups[(0, 1)].covariances[0], np.diag([0.05**2, 0.04**2]))
 
     def test_single_color_allowed(self):
         col = Colors(

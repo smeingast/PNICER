@@ -88,10 +88,7 @@ def _estep_group(
     solved = solve_lower(chol, deviation)
     logdet = 2.0 * np.sum(np.log(np.diagonal(chol, axis1=-2, axis2=-1)), axis=-1)
     maha = np.sum(solved**2, axis=-1)
-    log_prob = (
-        np.log(weights)[None, :]
-        - 0.5 * (d * _LOG_2PI + logdet + maha)
-    )
+    log_prob = np.log(weights)[None, :] - 0.5 * (d * _LOG_2PI + logdet + maha)
 
     latent_mean = None
     latent_m2 = None
@@ -105,9 +102,7 @@ def _estep_group(
         )
         t_inv_pv = solve_upper(chol, solve_lower(chol, pv))  # (n, K, d, D)
         b_cov = covariances[None] - np.einsum("kDd,nkdE->nkDE", vpt, t_inv_pv)
-        latent_m2 = b_cov + np.einsum(
-            "nka,nkb->nkab", latent_mean, latent_mean
-        )
+        latent_m2 = b_cov + np.einsum("nka,nkb->nkab", latent_mean, latent_mean)
 
     log_norm = logsumexp(log_prob, axis=1)
     resp = np.exp(log_prob - log_norm[:, None])
@@ -175,9 +170,7 @@ def _initial_parameters(
     covariances = gmm.covariances_ - mean_err_cov[None]
     eigval, eigvec = np.linalg.eigh(covariances)
     eigval = np.maximum(eigval, 1e-4)
-    covariances = np.einsum(
-        "kab,kb,kcb->kac", eigvec, eigval, eigvec
-    )
+    covariances = np.einsum("kab,kb,kcb->kac", eigvec, eigval, eigvec)
     return gmm.weights_.copy(), gmm.means_.copy(), covariances
 
 

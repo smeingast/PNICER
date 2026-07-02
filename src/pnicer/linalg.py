@@ -104,10 +104,12 @@ def solve_lower(chol: np.ndarray, rhs: np.ndarray) -> np.ndarray:
         return np.linalg.solve(chol, rhs)
 
     matrix_rhs = rhs.ndim == chol.ndim
-    out = np.empty(np.broadcast_shapes(
-        chol.shape[:-2] + (d,) + ((rhs.shape[-1],) if matrix_rhs else ()),
-        rhs.shape,
-    ))
+    out = np.empty(
+        np.broadcast_shapes(
+            chol.shape[:-2] + (d,) + ((rhs.shape[-1],) if matrix_rhs else ()),
+            rhs.shape,
+        )
+    )
     if matrix_rhs:
         for i in range(d):
             s = rhs[..., i, :] + 0.0
@@ -133,10 +135,12 @@ def solve_upper(chol: np.ndarray, rhs: np.ndarray) -> np.ndarray:
         return np.linalg.solve(upper, rhs)
 
     matrix_rhs = rhs.ndim == chol.ndim
-    out = np.empty(np.broadcast_shapes(
-        chol.shape[:-2] + (d,) + ((rhs.shape[-1],) if matrix_rhs else ()),
-        rhs.shape,
-    ))
+    out = np.empty(
+        np.broadcast_shapes(
+            chol.shape[:-2] + (d,) + ((rhs.shape[-1],) if matrix_rhs else ()),
+            rhs.shape,
+        )
+    )
     if matrix_rhs:
         for i in reversed(range(d)):
             s = rhs[..., i, :] + 0.0

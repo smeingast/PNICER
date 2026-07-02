@@ -291,9 +291,7 @@ class Photometry(_ColorSpaceBase):
         self.coordinates = coordinates
 
         # Full color space: consecutive-band colors
-        self._color_names = tuple(
-            f"{a}-{b}" for a, b in itertools.pairwise(names)
-        )
+        self._color_names = tuple(f"{a}-{b}" for a, b in itertools.pairwise(names))
         self._reddening = np.diff(self._extinction) * -1.0  # ext_i - ext_{i+1}
         with np.errstate(invalid="ignore"):
             self._raw_colors = self._mags[:, :-1] - self._mags[:, 1:]
@@ -332,9 +330,7 @@ class Photometry(_ColorSpaceBase):
     def observed_bands(self) -> np.ndarray:
         """Boolean mask of usable measurements, shape (N, n_bands)."""
         with np.errstate(invalid="ignore"):
-            return (
-                np.isfinite(self._mags) & np.isfinite(self._errs) & (self._errs > 0)
-            )
+            return np.isfinite(self._mags) & np.isfinite(self._errs) & (self._errs > 0)
 
     def pattern_groups(self, min_dim: int = 1) -> list[PatternGroup]:
         observed = self.observed_bands
@@ -342,9 +338,7 @@ class Photometry(_ColorSpaceBase):
         # Encode each row's pattern as an integer for fast uniquing
         code = observed @ (1 << np.arange(self.n_bands, dtype=np.int64))
         for pattern_code in np.unique(code):
-            band_idx = np.flatnonzero(
-                (pattern_code >> np.arange(self.n_bands)) & 1
-            )
+            band_idx = np.flatnonzero((pattern_code >> np.arange(self.n_bands)) & 1)
             if band_idx.size - 1 < min_dim:
                 continue
             src_idx = np.flatnonzero(code == pattern_code)
@@ -532,9 +526,7 @@ class Colors(_ColorSpaceBase):
         groups: list[PatternGroup] = []
         code = observed @ (1 << np.arange(self.n_colors, dtype=np.int64))
         for pattern_code in np.unique(code):
-            color_idx = np.flatnonzero(
-                (pattern_code >> np.arange(self.n_colors)) & 1
-            )
+            color_idx = np.flatnonzero((pattern_code >> np.arange(self.n_colors)) & 1)
             if color_idx.size < min_dim:
                 continue
             src_idx = np.flatnonzero(code == pattern_code)

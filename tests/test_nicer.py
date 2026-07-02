@@ -32,9 +32,7 @@ class TestNicerRegression:
         agree closely; large deviations only occur for junk catalog errors
         (~10 mag), where the legacy estimates were meaningless anyway."""
         base = np.load(baseline_dir / "nicer_science.npz")
-        both = np.isfinite(nicer_catalog.extinction) & np.isfinite(
-            base["extinction"]
-        )
+        both = np.isfinite(nicer_catalog.extinction) & np.isfinite(base["extinction"])
         diff = np.abs(nicer_catalog.extinction[both] - base["extinction"][both])
         assert np.median(diff) < 1e-5
         assert np.percentile(diff, 99) < 0.01

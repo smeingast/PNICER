@@ -35,9 +35,7 @@ class TestOrionPipeline:
         assert abs(np.nanmedian(cat.extinction)) < 0.03
         nicer = control.nicer(control)
         both = np.isfinite(cat.extinction) & np.isfinite(nicer.extinction)
-        assert np.nanstd(cat.extinction[both]) <= np.nanstd(
-            nicer.extinction[both]
-        )
+        assert np.nanstd(cat.extinction[both]) <= np.nanstd(nicer.extinction[both])
 
     def test_science_field(self, orion_model, orion):
         post = orion_model.posterior(orion)
@@ -66,9 +64,7 @@ class TestOrionPipeline:
 
     def test_map_pipeline(self, orion_model, orion, tmp_path):
         cat = orion_model.posterior(orion).discretize()
-        emap = cat.build_map(
-            bandwidth=5 / 60, metric="gaussian", use_fwhm=True
-        )
+        emap = cat.build_map(bandwidth=5 / 60, metric="gaussian", use_fwhm=True)
         assert np.nanmax(emap.map_ext) > 1.0  # the cloud is there
         assert abs(np.nanmedian(emap.map_ext)) < 0.4
         emap.save(str(tmp_path / "orion.fits"))
@@ -89,7 +85,8 @@ class TestPerformance:
         }
         errs = {b: np.full(n, 0.05) for b in ("J", "H", "Ks")}
         phot = Photometry(
-            magnitudes=mags, errors=errs,
+            magnitudes=mags,
+            errors=errs,
             extinction={"J": 2.5, "H": 1.55, "Ks": 1.0},
         )
         start = time.perf_counter()

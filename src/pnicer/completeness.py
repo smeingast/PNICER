@@ -58,15 +58,19 @@ def _fit_band(magnitudes: np.ndarray, bin_width: float) -> BandCompleteness:
         log_norm, alpha, m50, log_width = params
         width = np.exp(log_width)
         completeness = 0.5 * erfc((centers - m50) / (np.sqrt(2.0) * width))
-        log_mu = log_norm + alpha * np.log(10.0) * centers + np.log(
-            completeness + 1e-300
+        log_mu = (
+            log_norm + alpha * np.log(10.0) * centers + np.log(completeness + 1e-300)
         )
         mu = np.exp(log_mu)
         return float(np.sum(mu - counts * log_mu))
 
     start = np.array([log_norm_init, alpha_init, m50_init, np.log(0.3)])
-    result = minimize(negloglike, start, method="Nelder-Mead",
-                      options={"maxiter": 4000, "xatol": 1e-5, "fatol": 1e-8})
+    result = minimize(
+        negloglike,
+        start,
+        method="Nelder-Mead",
+        options={"maxiter": 4000, "xatol": 1e-5, "fatol": 1e-8},
+    )
     log_norm, alpha, m50, log_width = result.x
     if not result.success or not np.isfinite(result.x).all():
         raise RuntimeError("Completeness fit did not converge")
@@ -107,8 +111,9 @@ class CompletenessModel:
     ) -> CompletenessModel:
         """Build a model from known 50% limits and widths (no fitting)."""
         bands = tuple(
-            BandCompleteness(m50=float(m), width=float(w), alpha=np.nan,
-                             log_norm=np.nan)
+            BandCompleteness(
+                m50=float(m), width=float(w), alpha=np.nan, log_norm=np.nan
+            )
             for m, w in zip(m50, width, strict=True)
         )
         return cls(band_names=band_names, bands=bands)

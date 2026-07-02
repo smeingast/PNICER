@@ -56,9 +56,7 @@ class PosteriorTerms:
             - 0.5 * self.c_quad
         )
 
-    def log_pdf_grid(
-        self, a_grid: np.ndarray, log_weights: np.ndarray
-    ) -> np.ndarray:
+    def log_pdf_grid(self, a_grid: np.ndarray, log_weights: np.ndarray) -> np.ndarray:
         """Unnormalized log posterior on an extinction grid, shape (N, G).
 
         ``log_weights`` may be (K,), (N, K) for per-source weights, or
@@ -266,9 +264,7 @@ def build_posterior(
     with np.errstate(invalid="ignore"):
         valid = np.isfinite(log_f).any(axis=1)
     log_evidence = np.full(terms.a_mean.shape[0], np.nan)
-    log_evidence[valid] = logsumexp(
-        np.nan_to_num(log_f[valid], nan=-np.inf), axis=1
-    )
+    log_evidence[valid] = logsumexp(np.nan_to_num(log_f[valid], nan=-np.inf), axis=1)
     log_w = log_f - log_evidence[:, None]
     log_w[~valid] = np.nan
     return ExtinctionPosterior(
@@ -329,17 +325,13 @@ def exact_adaptive_posterior(
         new_var = np.maximum(m2 / m0 - new_mean**2, 1e-12)
         # Amplitude: geometry term times the component's weight integral
         log_geometry = (
-            terms.log_z
-            + 0.5 * (_LOG_2PI + np.log(terms.a_var))
-            - 0.5 * terms.c_quad
+            terms.log_z + 0.5 * (_LOG_2PI + np.log(terms.a_var)) - 0.5 * terms.c_quad
         )
         log_f = log_geometry + np.log(m0)
 
     valid = np.isfinite(log_f).any(axis=1)
     log_evidence = np.full(terms.a_mean.shape[0], np.nan)
-    log_evidence[valid] = logsumexp(
-        np.nan_to_num(log_f[valid], nan=-np.inf), axis=1
-    )
+    log_evidence[valid] = logsumexp(np.nan_to_num(log_f[valid], nan=-np.inf), axis=1)
     log_w = log_f - log_evidence[:, None]
     log_w[~valid] = np.nan
     return ExtinctionPosterior(
@@ -372,9 +364,7 @@ def adaptive_log_weights(
     ndarray, shape (N, K)
         Final per-source component log-weights (normalized).
     """
-    log_w = np.broadcast_to(
-        base_log_weights, terms.a_mean.shape
-    ).copy()  # (N, K)
+    log_w = np.broadcast_to(base_log_weights, terms.a_mean.shape).copy()  # (N, K)
 
     for _ in range(n_iter):
         # Current posterior on the grid (per source), normalized discretely

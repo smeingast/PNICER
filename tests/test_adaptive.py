@@ -32,9 +32,7 @@ def _draw_population(rng, n, extinction=0.0):
     col_star = rng.multivariate_normal(
         [0.45, 0.15], np.diag([0.015, 0.008]), size=n_star
     )
-    col_gal = rng.multivariate_normal(
-        [1.1, 0.75], np.diag([0.04, 0.03]), size=n_gal
-    )
+    col_gal = rng.multivariate_normal([1.1, 0.75], np.diag([0.04, 0.03]), size=n_gal)
     ks_star = 16.5 - rng.exponential(1.0 / (0.30 * np.log(10)), size=n_star)
     ks_gal = 17.0 - rng.exponential(1.0 / (0.55 * np.log(10)), size=n_gal)
     colors = np.vstack([col_star, col_gal])
@@ -106,9 +104,7 @@ class TestBiasCorrection:
     def test_adaptive_removes_population_bias(self, population_model, a_true):
         model, rng = population_model
         science, _ = _draw_population(rng, 30000, extinction=a_true)
-        plain = _weighted_bias(
-            model.posterior(science).discretize(), a_true
-        )
+        plain = _weighted_bias(model.posterior(science).discretize(), a_true)
         exact = _weighted_bias(
             model.posterior(science, adaptive=True).discretize(), a_true
         )
