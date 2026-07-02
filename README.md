@@ -1,6 +1,13 @@
 # PNICER
 
+[![CI](https://github.com/smeingast/PNICER/actions/workflows/ci.yml/badge.svg)](https://github.com/smeingast/PNICER/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org)
+[![License](https://img.shields.io/badge/license-GPL--3.0-green)](LICENSE)
+[![Paper](https://img.shields.io/badge/A%26A-2017%2C%20601%2C%20A137-orange)](https://ui.adsabs.harvard.edu/abs/2017A%26A...601A.137M/abstract)
+
 PNICER is an astronomical software package for estimating interstellar extinction toward individual sources and for creating extinction maps from photometric catalogs.
+
+![Orion A extinction map](assets/orion.png)
 
 Version 2.0 is a from-scratch rewrite. It keeps the PNICER idea — per-source extinction *probability densities* derived from an extinction-free control field, without priors on the column density — but replaces the original numerical machinery with the closed-form Bayesian formalism of [Lombardi (2018), A&A 615, A174](https://ui.adsabs.harvard.edu/abs/2018A%26A...615A.174L/abstract) (XNICER):
 
@@ -59,7 +66,9 @@ Missing measurements are encoded as NaN throughout; sources need at least two ob
 
 ## Verification
 
-The 2.0 estimators are validated by an extensive test suite (`pytest`): closed-form posteriors against brute-force numerical integration, the extreme-deconvolution fit against Bovy's reference C implementation, NICER against the legacy v1.0 outputs (machine precision on complete sources), map pixels against independent brute-force computation, and constant-extinction injection tests with ground truth, where the adaptive correction removes the population bias at A_K = 1–2 mag.
+The 2.0 estimators are validated by an extensive test suite (75 tests): closed-form posteriors against brute-force numerical integration; the extreme-deconvolution fit against Bovy's reference C implementation; NICER against the legacy v1.0 outputs (machine precision) and against the K=1 special case of the Bayesian machinery (identical to 2e-15 across all missingness patterns); map pixels — including the NICEST correction — against independent brute-force computation and the frozen legacy maps; and constant-extinction injection tests with ground truth, where the adaptive correction keeps the bias below 0.02 mag at A_K = 1–2 mag while classic estimators drift by ~0.1 mag.
+
+To run the tests from a clone: `pip install -e ".[dev]" && pytest`.
 
 ## Citation
 
