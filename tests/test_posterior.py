@@ -164,6 +164,22 @@ class TestNicerEquivalence:
 
 
 class TestEdgeCases:
+    def test_reordered_science_colors_raise(self):
+        model = IntrinsicColorModel(
+            weights=np.array([1.0]),
+            means=np.array([[0.5, 0.3]]),
+            covariances=np.array([np.diag([0.02, 0.02])]),
+            color_names=("J-H", "H-Ks"),
+            reddening_vector=np.array([0.95, 0.55]),
+        )
+        swapped = Colors(
+            colors={"H-Ks": np.array([0.3]), "J-H": np.array([0.5])},
+            errors={"H-Ks": np.array([0.05]), "J-H": np.array([0.05])},
+            reddening={"H-Ks": 0.55, "J-H": 0.95},
+        )
+        with pytest.raises(ValueError, match="color order"):
+            model.posterior(swapped)
+
     def test_degenerate_reddening_unconstrained(self):
         """A source whose only observed color has zero reddening gets NaN."""
         col = Colors(

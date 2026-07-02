@@ -89,7 +89,8 @@ def nicer(
         else:
             intrinsic_cov = np.asarray(color0_cov, dtype=np.float64)
             if intrinsic_cov.ndim == 1:
-                intrinsic_cov = np.diag(intrinsic_cov**2)
+                # 1-d input holds diagonal *variances* (documented semantics)
+                intrinsic_cov = np.diag(intrinsic_cov)
     else:
         raise ValueError("Either a control field or intrinsic colors are required")
 

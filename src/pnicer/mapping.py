@@ -10,6 +10,7 @@ clipping and the NICEST bias-correction and variance forms.
 
 from __future__ import annotations
 
+import operator
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -58,7 +59,10 @@ def _kernel_weights(distances: np.ndarray, metric: str, bandwidth: float):
 def _pixel_sums(values: np.ndarray, pixel_idx: np.ndarray, n_pixels: int):
     """Sum `values` per pixel, treating NaN as absent."""
     good = np.isfinite(values)
-    return np.bincount(pixel_idx[good], weights=values[good], minlength=n_pixels)
+    # Cast: bincount returns int64 for empty weight arrays
+    return np.bincount(
+        pixel_idx[good], weights=values[good], minlength=n_pixels
+    ).astype(np.float64)
 
 
 def _pixel_counts(mask: np.ndarray, pixel_idx: np.ndarray, n_pixels: int):
@@ -74,6 +78,7 @@ def build_map(
     use_fwhm: bool = False,
     nicest: bool = False,
     alpha: float = 1 / 3,
+    nicest_k: float = 1.0,
     **kwargs,
 ) -> ExtinctionMap:
     """Build a smoothed extinction map from an `ExtinctionCatalog`.
@@ -86,8 +91,10 @@ def build_map(
         bandwidth = float(bandwidth.to_value(deg))
     if metric not in _METRICS:
         raise ValueError(f"Metric must be one of {_METRICS}")
-    if not isinstance(sampling, int):
-        raise ValueError("Sampling factor must be an integer")
+    try:
+        sampling = operator.index(sampling)
+    except TypeError:
+        raise ValueError("Sampling factor must be an integer") from None
     if use_fwhm and metric != "gaussian":
         raise ValueError("FWHM is only valid for the gaussian metric")
     if catalog.coordinates is None:
@@ -115,62 +122,69 @@ def build_map(
     prime_header["SAMPLING"] = (sampling, "Sampling factor of map")
     prime_header["NICEST"] = (nicest, "Whether NICEST was activated")
 
-    # All pixel-source pairs within the mask radius (exact radius query)
+    # Pixel-source pairs within the mask radius (exact radius query),
+    # processed in pixel blocks to bound the pair-array memory. Sources
+    # with non-finite coordinates are excluded from the search.
     src_lon = catalog.coordinates.spherical.lon.degree
     src_lat = catalog.coordinates.spherical.lat.degree
-    tree = cKDTree(catalog.coordinates.cartesian.xyz.value.T)
+    src_ok = np.flatnonzero(np.isfinite(src_lon) & np.isfinite(src_lat))
+    tree = cKDTree(catalog.coordinates.cartesian.xyz.value.T[src_ok])
+    flat_lon, flat_lat = grid_lon.ravel(), grid_lat.ravel()
     grid_xyz = np.column_stack(
         [
-            np.cos(np.radians(grid_lat.ravel())) * np.cos(np.radians(grid_lon.ravel())),
-            np.cos(np.radians(grid_lat.ravel())) * np.sin(np.radians(grid_lon.ravel())),
-            np.sin(np.radians(grid_lat.ravel())),
+            np.cos(np.radians(flat_lat)) * np.cos(np.radians(flat_lon)),
+            np.cos(np.radians(flat_lat)) * np.sin(np.radians(flat_lon)),
+            np.sin(np.radians(flat_lat)),
         ]
     )
     chord = 2.0 * np.sin(np.radians(r_mask) / 2.0)
-    neighbors = tree.query_ball_point(grid_xyz, r=chord, workers=-1)
 
-    lengths = np.fromiter((len(n) for n in neighbors), dtype=np.int64, count=n_pixels)
-    pixel_idx = np.repeat(np.arange(n_pixels), lengths)
-    source_idx = (
-        np.concatenate(neighbors).astype(np.int64)
-        if lengths.sum()
-        else (np.empty(0, dtype=np.int64))
-    )
+    map_ext = np.full(n_pixels, np.nan)
+    map_var = np.full(n_pixels, np.nan)
+    map_num = np.zeros(n_pixels, dtype=np.int64)
+    map_rho = np.full(n_pixels, np.nan)
 
-    distances = distance_sky(
-        grid_lon.ravel()[pixel_idx],
-        grid_lat.ravel()[pixel_idx],
-        src_lon[source_idx],
-        src_lat[source_idx],
-    )
-    w_spatial = _kernel_weights(distances, metric=metric, bandwidth=bandwidth)
-    ext = catalog.extinction[source_idx]
-    var = catalog.variance[source_idx]
+    block_size = 1 << 14
+    for start in range(0, n_pixels, block_size):
+        block = slice(start, min(start + block_size, n_pixels))
+        n_block = block.stop - block.start
+        neighbors = tree.query_ball_point(grid_xyz[block], r=chord, workers=-1)
+        lengths = np.fromiter(
+            (len(n) for n in neighbors), dtype=np.int64, count=n_block
+        )
+        pixel_idx = np.repeat(np.arange(n_block), lengths)
+        source_idx = (
+            src_ok[np.concatenate(neighbors).astype(np.int64)]
+            if lengths.sum()
+            else np.empty(0, dtype=np.int64)
+        )
 
-    if metric == "average":
-        map_ext, map_var, map_num, map_rho = _aggregate_average(
-            ext, var, pixel_idx, n_pixels
+        distances = distance_sky(
+            flat_lon[block][pixel_idx],
+            flat_lat[block][pixel_idx],
+            src_lon[source_idx],
+            src_lat[source_idx],
         )
-    elif metric == "median":
-        map_ext, map_var, map_num, map_rho = _aggregate_median(
-            ext, var, pixel_idx, n_pixels
-        )
-    else:
-        k_lambda = (
-            float(np.max(catalog.extinction_vector))
-            if catalog.extinction_vector is not None
-            else 1.0
-        )
-        map_ext, map_var, map_num, map_rho = _aggregate_kernel(
-            ext,
-            var,
-            w_spatial,
-            pixel_idx,
-            n_pixels,
-            nicest=nicest,
-            alpha=alpha,
-            k_lambda=k_lambda,
-        )
+        w_spatial = _kernel_weights(distances, metric=metric, bandwidth=bandwidth)
+        ext = catalog.extinction[source_idx]
+        var = catalog.variance[source_idx]
+
+        if metric == "average":
+            results = _aggregate_average(ext, var, pixel_idx, n_block)
+        elif metric == "median":
+            results = _aggregate_median(ext, var, pixel_idx, n_block)
+        else:
+            results = _aggregate_kernel(
+                ext,
+                var,
+                w_spatial,
+                pixel_idx,
+                n_block,
+                nicest=nicest,
+                alpha=alpha,
+                k_lambda=nicest_k,
+            )
+        map_ext[block], map_var[block], map_num[block], map_rho[block] = results
 
     return ExtinctionMap(
         map_ext=map_ext.reshape(map_shape),
@@ -260,7 +274,8 @@ def _aggregate_kernel(
 
         sum_w = _pixel_sums(w_total, pixel_idx, n_pixels)
         with np.errstate(divide="ignore", invalid="ignore"):
-            map_cor = _pixel_sums(w_total * var, pixel_idx, n_pixels) / sum_w
+            # Bias correction, Lombardi (2009) Eq. 34
+            map_cor = beta * _pixel_sums(w_total * var, pixel_idx, n_pixels) / sum_w
             upper = _pixel_sums(
                 w_total**2 * np.exp(2 * beta * ext) * (1 + beta * ext) ** 2 / var,
                 pixel_idx,

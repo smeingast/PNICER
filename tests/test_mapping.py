@@ -38,10 +38,10 @@ def _brute_force_pixel(catalog, plon, plat, bandwidth, nicest=False, alpha=1 / 3
     clip = np.abs(e - ext0) > 3 * np.nanstd(e)
     e, v, ws, wt = (np.where(clip, np.nan, x) for x in (e, v, ws, wt))
     if nicest:
-        beta = np.log(10) * alpha * 2.5
-        boost = 10 ** (alpha * 2.5 * e)
+        beta = np.log(10) * alpha * 1.0  # default nicest_k = 1.0
+        boost = 10 ** (alpha * 1.0 * e)
         ws, wt = ws * boost, wt * boost
-        cor = np.nansum(wt * v) / np.nansum(wt)
+        cor = beta * np.nansum(wt * v) / np.nansum(wt)
         var = np.nansum(wt**2 * np.exp(2 * beta * e) * (1 + beta * e) ** 2 / v)
         var /= np.nansum(wt * np.exp(beta * e) / v) ** 2
         ext = np.nansum(wt * e) / np.nansum(wt) - cor
@@ -103,6 +103,36 @@ class TestMapMath:
         with pytest.raises(ValueError, match="coordinates"):
             catalog.build_map(bandwidth=0.1)
 
+    def test_numpy_integer_sampling(self, rng):
+        catalog = _small_catalog(rng, n=50)
+        emap = catalog.build_map(bandwidth=6 / 60, sampling=np.int64(2))
+        assert emap.shape[0] > 0
+
+    def test_single_source_catalog(self, rng):
+        """Degenerate extent must not crash (empty-bincount dtype, NAXIS>=1)."""
+        catalog = ExtinctionCatalog(
+            extinction=np.array([0.5]),
+            variance=np.array([0.01]),
+            coordinates=SkyCoord(l=[210.0], b=[-19.0], frame="galactic", unit="deg"),
+        )
+        emap = catalog.build_map(bandwidth=6 / 60, metric="gaussian")
+        assert np.isfinite(emap.map_ext).sum() >= 1
+
+    def test_nan_coordinates_tolerated(self, rng):
+        catalog = _small_catalog(rng, n=100)
+        lon = catalog.coordinates.spherical.lon.degree.copy()
+        lat = catalog.coordinates.spherical.lat.degree.copy()
+        lon[0] = np.nan
+        lat[0] = np.nan
+        bad_coord = ExtinctionCatalog(
+            extinction=catalog.extinction,
+            variance=catalog.variance,
+            coordinates=SkyCoord(l=lon, b=lat, frame="galactic", unit="deg"),
+            extinction_vector=catalog.extinction_vector,
+        )
+        emap = bad_coord.build_map(bandwidth=6 / 60, metric="gaussian")
+        assert np.isfinite(emap.map_ext).any()
+
 
 class TestFitsRoundTrip:
     def test_save_and_load(self, rng, tmp_path):
@@ -140,3 +170,32 @@ class TestLegacyRegression:
         assert np.median(diff) < 1e-4
         assert np.percentile(diff, 95) < 0.02
         assert np.mean(diff < 0.05) > 0.99
+
+    def test_nicest_map_from_legacy_catalog(self, orion, baseline_dir):
+        """NICEST correction against the legacy map, using the frozen legacy
+        per-source estimates as input so the correction math is isolated
+        (this is the test that catches a missing beta factor)."""
+        from astropy.io import fits
+
+        base = np.load(baseline_dir / "pnicer_color_science_run1.npz")
+        catalog = ExtinctionCatalog(
+            extinction=base["extinction"].astype(np.float64),
+            variance=base["variance"].astype(np.float64),
+            coordinates=orion.coordinates,
+            extinction_vector=orion.extinction_vector,
+        )
+        # Legacy derived k implicitly from the color reddening vector
+        # (max([0.95, 0.55]) for the 2017 setup); pass it explicitly
+        emap = catalog.build_map(
+            bandwidth=5 / 60,
+            metric="gaussian",
+            use_fwhm=True,
+            nicest=True,
+            nicest_k=0.95,
+        )
+        with fits.open(baseline_dir / "map_pnicer_gauss_nicest.fits") as hdul:
+            legacy_ext = hdul[1].data
+        both = np.isfinite(emap.map_ext) & np.isfinite(legacy_ext)
+        diff = np.abs(emap.map_ext[both] - legacy_ext[both])
+        assert np.median(diff) < 1e-3
+        assert np.percentile(diff, 95) < 0.02

@@ -242,18 +242,49 @@ class IntrinsicColorModel:
                 "completeness enabled)"
             )
         a_grid = np.asarray(a_grid, dtype=np.float64)
-        survival = self.completeness.survival(
-            self.control_magnitudes,
-            self.control_observed,
-            self.band_extinction,
-            a_grid,
-            floor=floor,
-        )  # (N, G)
         resp = self.responsibilities
         used = np.isfinite(resp).all(axis=1)
-        weighted = survival[used].T @ resp[used]  # (G, K)
-        total = weighted.sum(axis=1, keepdims=True)
-        return weighted / np.maximum(total, 1e-300)
+
+        # Accumulate over source chunks: the (N, G) survival array would
+        # otherwise dominate memory for large control fields / fine grids
+        weighted = np.zeros((a_grid.size, self.n_components))
+        chunk = max((1 << 23) // max(a_grid.size, 1), 1024)
+        used_idx = np.flatnonzero(used)
+        for start in range(0, used_idx.size, chunk):
+            idx = used_idx[start : start + chunk]
+            survival = self.completeness.survival(
+                self.control_magnitudes[idx],
+                self.control_observed[idx],
+                self.band_extinction,
+                a_grid,
+                floor=floor,
+            )  # (chunk, G)
+            weighted += survival.T @ resp[idx]
+        total = weighted.sum(axis=1)
+        weights = weighted / np.maximum(total, 1e-300)[:, None]
+
+        # Beyond the completeness cliff no source survives and the mixture
+        # is unconstrained; freeze the population at the nearest grid point
+        # that still has support instead of returning all-zero rows
+        good = total > 1e-30
+        if not good.all():
+            if not good.any():
+                raise ValueError(
+                    "No control-field source survives anywhere on the "
+                    "extinction grid; check the completeness model"
+                )
+            good_idx = np.flatnonzero(good)
+            insertion = np.searchsorted(good_idx, np.arange(a_grid.size))
+            left = good_idx[np.clip(insertion - 1, 0, good_idx.size - 1)]
+            right = good_idx[np.clip(insertion, 0, good_idx.size - 1)]
+            nearest = np.where(
+                np.abs(np.arange(a_grid.size) - left)
+                <= np.abs(right - np.arange(a_grid.size)),
+                left,
+                right,
+            )
+            weights[~good] = weights[nearest[~good]]
+        return weights
 
     # ------------------------------------------------------------------ #
     # Inference
@@ -265,9 +296,14 @@ class IntrinsicColorModel:
                 f"Science color space ({science.n_colors}) does not match "
                 f"the model ({self.n_colors})"
             )
-        if tuple(science.color_names) != self.color_names and set(
-            science.color_names
-        ) != set(self.color_names):
+        if tuple(science.color_names) != self.color_names:
+            if set(science.color_names) == set(self.color_names):
+                # Same colors, different order: axes are misaligned and the
+                # result would be silently wrong
+                raise ValueError(
+                    f"Science color order {science.color_names} does not "
+                    f"match the model's {self.color_names}"
+                )
             warnings.warn(
                 f"Science colors {science.color_names} differ from model "
                 f"colors {self.color_names}",
@@ -395,7 +431,7 @@ class IntrinsicColorModel:
 
         from scipy.special import logsumexp
 
-        log_pdf = terms.log_pdf_grid(a_grid, log_weights)
+        log_pdf = terms.log_pdf_grid(a_grid, log_weights, grid_weights=adaptive)
         with np.errstate(invalid="ignore"):
             log_pdf = log_pdf - logsumexp(
                 np.nan_to_num(log_pdf, nan=-np.inf), axis=1, keepdims=True

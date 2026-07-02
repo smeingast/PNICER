@@ -71,6 +71,7 @@ class ExtinctionCatalog:
         use_fwhm: bool = False,
         nicest: bool = False,
         alpha: float = 1 / 3,
+        nicest_k: float = 1.0,
         **kwargs,
     ) -> ExtinctionMap:
         """Build a smoothed extinction map from the catalog.
@@ -91,7 +92,14 @@ class ExtinctionCatalog:
             Apply the NICEST correction (Lombardi 2009) for unresolved
             substructure and foreground bias.
         alpha : float
-            NICEST slope of the luminosity function (1/3 for the NIR).
+            NICEST number-count slope (1/3 for the NIR K band).
+        nicest_k : float
+            Extinction coefficient of the band the slope refers to, in the
+            same units as the extinction estimates (1.0 when estimates are
+            in units of the reference band, following Lombardi 2009). The
+            legacy implementation used the maximum of the feature reddening
+            vector instead, which made the correction depend on the input
+            type (0.95 for the 2017 color-based setup).
         **kwargs
             Additional WCS options (e.g. ``proj_code="TAN"``).
 
@@ -109,6 +117,7 @@ class ExtinctionCatalog:
             use_fwhm=use_fwhm,
             nicest=nicest,
             alpha=alpha,
+            nicest_k=nicest_k,
             **kwargs,
         )
 

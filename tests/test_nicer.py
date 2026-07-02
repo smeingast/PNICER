@@ -78,9 +78,22 @@ class TestNicerBehavior:
             errors={"J-H": np.array([0.1, 0.2])},
             reddening={"J-H": 0.95},
         )
-        cat = col.nicer(color0=np.array([0.5]), color0_cov=np.array([0.2]))
+        cat = col.nicer(color0=np.array([0.5]), color0_cov=np.array([0.2**2]))
         np.testing.assert_allclose(cat.extinction, [1.0 / 0.95, 0.2 / 0.95])
         np.testing.assert_allclose(
             cat.variance,
             [(0.2**2 + 0.1**2) / 0.95**2, (0.2**2 + 0.2**2) / 0.95**2],
         )
+
+    def test_color0_cov_diagonal_equals_matrix(self):
+        """1-d (diagonal variances) and 2-d covariance input must agree."""
+        col = Colors(
+            colors={"a": np.array([1.0]), "b": np.array([0.5])},
+            errors={"a": np.array([0.1]), "b": np.array([0.1])},
+            reddening={"a": 0.95, "b": 0.55},
+        )
+        c0 = np.array([0.4, 0.2])
+        diag = col.nicer(color0=c0, color0_cov=np.array([0.04, 0.02]))
+        full = col.nicer(color0=c0, color0_cov=np.diag([0.04, 0.02]))
+        np.testing.assert_allclose(diag.extinction, full.extinction)
+        np.testing.assert_allclose(diag.variance, full.variance)

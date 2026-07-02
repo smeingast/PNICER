@@ -65,7 +65,7 @@ def skycoord2header(
     """
     centroid = centroid_sphere(skycoord)
     separation = skycoord.separation(centroid)
-    allsky = np.max(separation.degree) > 100
+    allsky = bool(np.nanmax(separation.degree) > 100)
 
     if allsky and proj_code not in ("AIT", "MOL", "CAR"):
         proj_code = "AIT"
@@ -96,12 +96,17 @@ def skycoord2header(
     for key, value in kwargs.items():
         header[key.upper()] = value
 
-    # Determine the extent of the data in this projection
+    # Determine the extent of the data in this projection (finite
+    # coordinates only — NaN positions are common in real catalogs)
     x, y = wcs.WCS(header).wcs_world2pix(
         skycoord.spherical.lon, skycoord.spherical.lat, 1
     )
-    naxis1 = int(np.ceil(x.max() - np.floor(x.min())) * enlarge)
-    naxis2 = int(np.ceil(y.max() - np.floor(y.min())) * enlarge)
+    finite = np.isfinite(x) & np.isfinite(y)
+    if not np.any(finite):
+        raise ValueError("No finite coordinates to build a WCS grid from")
+    x, y = x[finite], y[finite]
+    naxis1 = max(int(np.ceil(x.max() - np.floor(x.min())) * enlarge), 1)
+    naxis2 = max(int(np.ceil(y.max() - np.floor(y.min())) * enlarge), 1)
     xdelta = (x.min() + x.max()) / 2
     ydelta = (y.min() + y.max()) / 2
 

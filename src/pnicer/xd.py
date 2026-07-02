@@ -23,6 +23,23 @@ from pnicer.photometry import PatternGroup
 __all__ = ["XDResult", "fit_xd", "xd_log_likelihood"]
 
 _LOG_2PI = float(np.log(2.0 * np.pi))
+_CHUNK = 1 << 17
+
+
+def _iter_chunks(group: PatternGroup):
+    """Split a pattern group into bounded-size views to limit E-step memory."""
+    if group.n_sources <= _CHUNK:
+        yield group
+        return
+    for start in range(0, group.n_sources, _CHUNK):
+        sl = slice(start, start + _CHUNK)
+        yield PatternGroup(
+            key=group.key,
+            indices=group.indices[sl],
+            projection=group.projection,
+            colors=group.colors[sl],
+            covariances=group.covariances[sl],
+        )
 
 
 @dataclass
@@ -118,8 +135,9 @@ def xd_log_likelihood(
     """Observed-data log-likelihood of an XD model on pattern groups."""
     total = 0.0
     for group in groups:
-        log_norm, *_ = _estep_group(group, weights, means, covariances, False)
-        total += float(np.sum(log_norm))
+        for chunk in _iter_chunks(group):
+            log_norm, *_ = _estep_group(chunk, weights, means, covariances, False)
+            total += float(np.sum(log_norm))
     return total
 
 
@@ -234,13 +252,14 @@ def fit_xd(
         ll_total = 0.0
 
         for group in groups:
-            log_norm, resp, latent_mean, latent_m2 = _estep_group(
-                group, weights, means, covariances, True
-            )
-            ll_total += float(np.sum(log_norm))
-            resp_sum += resp.sum(axis=0)
-            mean_sum += np.einsum("nj,njd->jd", resp, latent_mean)
-            m2_sum += np.einsum("nj,njde->jde", resp, latent_m2)
+            for chunk in _iter_chunks(group):
+                log_norm, resp, latent_mean, latent_m2 = _estep_group(
+                    chunk, weights, means, covariances, True
+                )
+                ll_total += float(np.sum(log_norm))
+                resp_sum += resp.sum(axis=0)
+                mean_sum += np.einsum("nj,njd->jd", resp, latent_mean)
+                m2_sum += np.einsum("nj,njde->jde", resp, latent_m2)
 
         # M-step
         weights = resp_sum / n_used
@@ -265,9 +284,10 @@ def fit_xd(
     responsibilities = np.full((n_sources, n_components), np.nan)
     log_likelihood = 0.0
     for group in groups:
-        log_norm, resp, *_ = _estep_group(group, weights, means, covariances, False)
-        responsibilities[group.indices] = resp
-        log_likelihood += float(np.sum(log_norm))
+        for chunk in _iter_chunks(group):
+            log_norm, resp, *_ = _estep_group(chunk, weights, means, covariances, False)
+            responsibilities[chunk.indices] = resp
+            log_likelihood += float(np.sum(log_norm))
 
     n_params = (n_components - 1) + n_components * n_dim * (n_dim + 3) // 2
     bic = -2.0 * log_likelihood + n_params * np.log(n_used)

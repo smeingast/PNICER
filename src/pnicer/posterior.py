@@ -56,11 +56,17 @@ class PosteriorTerms:
             - 0.5 * self.c_quad
         )
 
-    def log_pdf_grid(self, a_grid: np.ndarray, log_weights: np.ndarray) -> np.ndarray:
+    def log_pdf_grid(
+        self,
+        a_grid: np.ndarray,
+        log_weights: np.ndarray,
+        grid_weights: bool = False,
+    ) -> np.ndarray:
         """Unnormalized log posterior on an extinction grid, shape (N, G).
 
-        ``log_weights`` may be (K,), (N, K) for per-source weights, or
-        (G, K) for extinction-dependent weights inside the likelihood.
+        ``log_weights`` is (K,) or (N, K) for per-source weights; with
+        ``grid_weights=True`` it must be (G, K): extinction-dependent
+        weights inside the likelihood.
         """
         # (N, K, G) quadratic term
         dev = a_grid[None, None, :] - self.a_mean[..., None]
@@ -69,7 +75,9 @@ class PosteriorTerms:
             - 0.5 * self.c_quad[..., None]
             - 0.5 * dev**2 / self.a_var[..., None]
         )
-        if log_weights.ndim == 2 and log_weights.shape[0] == a_grid.size:
+        if grid_weights:
+            if log_weights.shape != (a_grid.size, self.a_mean.shape[1]):
+                raise ValueError("grid_weights expects shape (G, K)")
             log_kernel = log_kernel + log_weights.T[None, :, :]
         else:
             weights = np.atleast_2d(log_weights)
@@ -328,6 +336,14 @@ def exact_adaptive_posterior(
             terms.log_z + 0.5 * (_LOG_2PI + np.log(terms.a_var)) - 0.5 * terms.c_quad
         )
         log_f = log_geometry + np.log(m0)
+
+    # Components with zero population weight over their whole posterior
+    # support get -inf amplitude; keep their moments finite so downstream
+    # mixture moments (0 * moment) stay well defined instead of NaN
+    dead = (m0 <= 0.0) & np.isfinite(terms.a_mean)
+    if np.any(dead):
+        new_mean[dead] = terms.a_mean[dead]
+        new_var[dead] = terms.a_var[dead]
 
     valid = np.isfinite(log_f).any(axis=1)
     log_evidence = np.full(terms.a_mean.shape[0], np.nan)

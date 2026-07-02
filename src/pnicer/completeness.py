@@ -37,6 +37,11 @@ def _fit_band(magnitudes: np.ndarray, bin_width: float) -> BandCompleteness:
         raise ValueError(f"Too few measurements ({mags.size}) to fit completeness")
 
     edges = np.arange(mags.min(), mags.max() + bin_width, bin_width)
+    if edges.size < 4:
+        raise ValueError(
+            f"Magnitude range ({mags.min():.2f}..{mags.max():.2f}) too small "
+            "to fit a completeness function"
+        )
     counts, edges = np.histogram(mags, bins=edges)
     centers = 0.5 * (edges[:-1] + edges[1:])
 

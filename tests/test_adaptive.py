@@ -158,6 +158,46 @@ class TestExactVsGrid:
 
 
 class TestGuards:
+    def test_deep_extinction_stays_finite(self, population_model):
+        """Sources far beyond the completeness cliff must keep a finite
+        adaptive posterior (population frozen at the last constrained grid
+        point) instead of turning NaN."""
+        model, _ = population_model
+        science = Photometry(
+            magnitudes={
+                "J": np.array([12.0 + 9.0 * 2.5]),
+                "H": np.array([11.5 + 9.0 * 1.55]),
+                "Ks": np.array([11.3 + 9.0 * 1.0]),
+            },
+            errors={b: np.array([0.05]) for b in BAND_NAMES},
+            extinction=EXTINCTION,
+        )
+        post = model.posterior(
+            science, adaptive=True, a_grid=np.arange(-2.0, 12.0, 0.02)
+        )
+        assert np.isfinite(post.mean()[0])
+        assert 8.0 < post.mean()[0] < 10.0
+
+    def test_iterative_25_source_field(self, population_model):
+        """Regression: N equal to the default grid size must not transpose
+        the weights (shape-sniffing bug)."""
+        model, _ = population_model
+        rng = np.random.default_rng(11)
+        science, _ = _draw_population(rng, 60)
+        # trim to exactly 25 usable sources = default iterative grid length
+        keep = np.zeros(science.n_sources, dtype=bool)
+        keep[:25] = True
+        science25 = Photometry(
+            magnitudes=dict(zip(BAND_NAMES, science.magnitudes[keep].T, strict=True)),
+            errors=dict(zip(BAND_NAMES, science.magnitude_errors[keep].T, strict=True)),
+            extinction=EXTINCTION,
+        )
+        post = model.posterior(science25, adaptive=True, adaptive_method="iterative")
+        plain = model.posterior(science25)
+        good = np.isfinite(post.mean()) & np.isfinite(plain.mean())
+        # Iterative re-weighting shifts estimates only mildly at A ~ 0
+        assert np.nanmedian(np.abs(post.mean()[good] - plain.mean()[good])) < 0.3
+
     def test_adaptive_requires_completeness(self, rng):
         control, _ = _draw_population(np.random.default_rng(3), 5000)
         model = control.fit_intrinsic_colors(
