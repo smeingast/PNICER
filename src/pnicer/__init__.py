@@ -15,7 +15,7 @@ from pnicer.model import IntrinsicColorModel
 from pnicer.photometry import Colors, Photometry
 from pnicer.posterior import ExtinctionPosterior
 
-__version__ = "2.0.0.dev0"
+__version__ = "2.1.0"
 
 __all__ = [
     "Colors",
