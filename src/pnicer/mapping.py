@@ -5,7 +5,9 @@ inverse-variance weighting (Lombardi & Alves 2001; Lombardi 2018 Eq. 39). The
 optional NICEST correction (Lombardi 2009) counteracts the bias from
 unresolved substructure and foreground contamination. The pixel aggregation
 math replicates the legacy PNICER implementation, including its 3-sigma
-clipping and the NICEST bias-correction and variance forms.
+clipping and the NICEST bias correction. The NICEST variance is the
+first-order propagation of the estimator; the legacy form did not reduce to
+the NICER variance for alpha -> 0 and overestimated the map errors.
 """
 
 from __future__ import annotations
@@ -244,6 +246,14 @@ def _aggregate_kernel(
     ext, var, w_spatial, pixel_idx, n_pixels, *, nicest, alpha, k_lambda
 ):
     """Inverse-variance kernel smoothing with optional NICEST correction."""
+    # Only sources with a usable estimate enter any plane, including the
+    # density: a NaN extinction with finite variance must neither dilute the
+    # weight sum nor count toward rho (with or without NICEST)
+    with np.errstate(invalid="ignore"):
+        usable = np.isfinite(ext) & np.isfinite(var) & (var > 0)
+    ext = np.where(usable, ext, np.nan)
+    var = np.where(usable, var, np.nan)
+    w_spatial = np.where(usable, w_spatial, np.nan)
     with np.errstate(divide="ignore", invalid="ignore"):
         w_total = w_spatial / var
 
@@ -275,14 +285,18 @@ def _aggregate_kernel(
         sum_w = _pixel_sums(w_total, pixel_idx, n_pixels)
         with np.errstate(divide="ignore", invalid="ignore"):
             # Bias correction, Lombardi (2009) Eq. 34
-            map_cor = beta * _pixel_sums(w_total * var, pixel_idx, n_pixels) / sum_w
-            upper = _pixel_sums(
-                w_total**2 * np.exp(2 * beta * ext) * (1 + beta * ext) ** 2 / var,
-                pixel_idx,
-                n_pixels,
+            vbar = _pixel_sums(w_total * var, pixel_idx, n_pixels) / sum_w
+            map_cor = beta * vbar
+            # First-order error propagation of the full estimator
+            # A = sum(p A_n) - beta sum(p var_n), p_n = W_n / sum(W), for fixed
+            # variances and clipped set: dA/dA_n = p_n [1 + beta (A_n - A0)
+            # - beta^2 (var_n - vbar)] with A0 = sum(p A_n). Reduces to the
+            # NICER variance for alpha -> 0 (the legacy form did not).
+            a0 = _pixel_sums(w_total * ext, pixel_idx, n_pixels) / sum_w
+            deriv = w_total * (
+                1.0 + beta * (ext - a0[pixel_idx]) - beta**2 * (var - vbar[pixel_idx])
             )
-            lower = _pixel_sums(w_total * np.exp(beta * ext) / var, pixel_idx, n_pixels)
-            map_var = upper / lower**2
+            map_var = _pixel_sums(deriv**2 * var, pixel_idx, n_pixels) / sum_w**2
     else:
         sum_w = _pixel_sums(w_total, pixel_idx, n_pixels)
         with np.errstate(divide="ignore", invalid="ignore"):

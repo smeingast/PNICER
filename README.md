@@ -131,23 +131,23 @@ In the first step, the intrinsic color distribution of the control field is mode
 
 In the second step, each science source receives its extinction posterior in closed form, following [Lombardi (2018)](https://ui.adsabs.harvard.edu/abs/2018A%26A...615A.174L/abstract): given the observed colors, their error covariance, and the reddening vector, every mixture component contributes one Gaussian in extinction, with analytically computed mean, width, and amplitude. No fitting, sampling, or gridding takes place per source, which is why the inference runs at about one million sources per second. The accompanying model evidence measures how well a source is described by the control field and can be used to identify objects with peculiar colors. The classic NICER estimator corresponds exactly to the single-component limit of this formalism, a property the test suite verifies to machine precision.
 
-The optional adaptive correction addresses a selection effect that the two steps above ignore: extinction pushes intrinsically faint sources beyond the detection limit, so the population observed behind a cloud differs from the control field, with galaxies disappearing first. PNICER fits completeness functions to the control-field number counts (or accepts them as survey parameters), derives extinction-dependent mixture weights from the survival probability of each control-field source, and evaluates the resulting posterior exactly by Gauss-Hermite quadrature. This last point deviates deliberately from the iterative scheme proposed in Lombardi (2018, Sect. 2.6), which in our injection tests develops a bias of up to 0.08 mag for weakly constrained sources; the published scheme remains available as an option.
+The optional adaptive correction addresses a selection effect that the two steps above ignore: extinction pushes intrinsically faint sources beyond the detection limit, so the population observed behind a cloud differs from the control field, with galaxies disappearing first. PNICER fits completeness functions to the control-field number counts (or accepts them as survey parameters), derives extinction-dependent mixture weights from the survival probability of each control-field source, and evaluates the resulting posterior directly by Gauss-Hermite quadrature. This last point deviates deliberately from the iterative scheme proposed in Lombardi (2018, Sect. 2.6), which in our injection tests develops a bias of up to 0.08 mag for weakly constrained sources; the published scheme remains available as an option. The mixture weights are conditioned on the detection pattern of each source: a source detected only in H and Ks stems from the population that survives in these two bands, so its weights derive from control-field sources observed in H and Ks, with survival evaluated in these bands alone. The non-detection in the remaining bands is not used as information, so sources with incomplete photometry remain biased at low extinction.
 
-Extinction maps follow the well-established NICER approach: the discretized estimates are smoothed onto a WCS grid with a spatial kernel and inverse-variance weighting, with Gaussian, Epanechnikov, triangular, uniform, average, and median metrics available. The NICEST correction ([Lombardi 2009](https://ui.adsabs.harvard.edu/abs/2009A%26A...493..735L/abstract)) counteracts the bias from unresolved substructure and foreground contamination. Map products carry extinction, variance, source count, and source density planes.
+Extinction maps follow the well-established NICER approach: the discretized estimates are smoothed onto a WCS grid with a spatial kernel and inverse-variance weighting, with Gaussian, Epanechnikov, triangular, uniform, average, and median metrics available. The NICEST correction ([Lombardi 2009](https://ui.adsabs.harvard.edu/abs/2009A%26A...493..735L/abstract)) counteracts the bias from unresolved substructure and foreground contamination; its map variance follows from first-order error propagation of the full estimator and reduces to the NICER variance in the limit of a vanishing correction. The slope alpha refers to the number counts of the band whose extinction coefficient is given as `nicest_k`, by default the reference band. Map products carry extinction, variance, source count, and source density planes.
 
 Missing measurements are encoded as NaN throughout, and a source requires at least one observed color for an estimate. Direct color-space input without magnitudes is supported through `pnicer.Colors`, whereas the adaptive correction requires band magnitudes, as the completeness functions are defined in magnitude space.
 
 ## Verification
 
-The test suite (75 tests) scrutinizes the mathematics rather than only the plumbing:
+The test suite (91 tests) scrutinizes the mathematics rather than only the plumbing:
 
 | Claim | Checked against |
 | --- | --- |
 | Posterior math is exact | Brute-force numerical integration, random configs & missing-band patterns |
 | Deconvolution is correct | Bovy's reference C implementation (`extreme_deconvolution`) |
 | NICER is NICER | Legacy v1.0 outputs (machine precision) *and* the K=1 limit of the Bayesian machinery (~2e-15) |
-| Maps add up | Independent per-pixel brute force, incl. the NICEST correction, plus frozen legacy maps |
-| Adaptive correction works | Ground-truth injection tests: bias ≤ 0.02 mag at A_K = 1-2 |
+| Maps add up | Independent per-pixel brute force, incl. the NICEST correction; NICEST variance against finite differences and Monte Carlo; frozen legacy maps |
+| Adaptive correction works | Ground-truth injection tests: measured bias ≤ 0.02 mag at A_K = 1-2 (asserted < 0.05 mag) |
 
 To run the suite from a clone: `pip install -e ".[dev]" && pytest`.
 

@@ -47,6 +47,16 @@ class PosteriorTerms:
     c_quad: np.ndarray  # (N, K)
     pattern_dim: np.ndarray  # (N,)
 
+    def subset(self, indices: np.ndarray) -> PosteriorTerms:
+        """Terms of a subset of sources."""
+        return PosteriorTerms(
+            a_mean=self.a_mean[indices],
+            a_var=self.a_var[indices],
+            log_z=self.log_z[indices],
+            c_quad=self.c_quad[indices],
+            pattern_dim=self.pattern_dim[indices],
+        )
+
     def log_amplitudes(self, log_weights: np.ndarray) -> np.ndarray:
         """ln f_ik for given (per-source or global) component log-weights."""
         return (

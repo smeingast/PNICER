@@ -42,9 +42,12 @@ def _brute_force_pixel(catalog, plon, plat, bandwidth, nicest=False, alpha=1 / 3
         boost = 10 ** (alpha * 1.0 * e)
         ws, wt = ws * boost, wt * boost
         cor = beta * np.nansum(wt * v) / np.nansum(wt)
-        var = np.nansum(wt**2 * np.exp(2 * beta * e) * (1 + beta * e) ** 2 / v)
-        var /= np.nansum(wt * np.exp(beta * e) / v) ** 2
         ext = np.nansum(wt * e) / np.nansum(wt) - cor
+        # Propagated error: dA/de_n = p_n [1 + beta (e_n - A0) - beta^2 (v_n - vbar)]
+        p = wt / np.nansum(wt)
+        a0, vbar = np.nansum(p * e), np.nansum(p * v)
+        grad = p * (1 + beta * (e - a0) - beta**2 * (v - vbar))
+        var = np.nansum(grad**2 * v)
     else:
         ext = np.nansum(wt * e) / np.nansum(wt)
         var = np.nansum(wt**2 * v) / np.nansum(wt) ** 2
@@ -132,6 +135,91 @@ class TestMapMath:
         )
         emap = bad_coord.build_map(bandwidth=6 / 60, metric="gaussian")
         assert np.isfinite(emap.map_ext).any()
+
+
+class TestNicestVariance:
+    """The NICEST map variance is the propagated error of the estimator."""
+
+    def test_alpha_zero_equals_nicer(self, rng):
+        catalog = _small_catalog(rng)
+        plain = catalog.build_map(bandwidth=6 / 60, nicest=False)
+        nicest = catalog.build_map(bandwidth=6 / 60, nicest=True, alpha=0.0)
+        np.testing.assert_allclose(nicest.map_ext, plain.map_ext, rtol=1e-12)
+        np.testing.assert_allclose(nicest.map_var, plain.map_var, rtol=1e-12)
+
+    def test_matches_finite_differences(self, rng):
+        """Numerical gradient of the map value w.r.t. each input extinction."""
+        n = 40
+        coords = SkyCoord(
+            l=210 + rng.normal(0, 0.003, n),
+            b=-19 + rng.normal(0, 0.003, n),
+            frame="galactic",
+            unit="deg",
+        )
+        ext = rng.normal(1.5, 0.2, n)
+        var = rng.uniform(0.01, 0.2, n)
+
+        def build(e):
+            return ExtinctionCatalog(e, var, coords).build_map(
+                bandwidth=0.02, nicest=True, alpha=0.33
+            )
+
+        emap = build(ext)
+        pix = np.unravel_index(np.argmax(emap.map_num), emap.shape)
+        assert emap.map_num[pix] == n
+        h = 1e-6
+        grad = np.array(
+            [
+                (
+                    build(ext + h * np.eye(n)[i]).map_ext[pix]
+                    - build(ext - h * np.eye(n)[i]).map_ext[pix]
+                )
+                / (2 * h)
+                for i in range(n)
+            ]
+        )
+        assert np.isclose(emap.map_var[pix], np.sum(grad**2 * var), rtol=1e-6)
+
+    def test_monte_carlo(self):
+        """Scatter of maps from resampled inputs matches the variance the maps
+        report (evaluated at the noisy inputs, as users obtain it)."""
+        rng = np.random.default_rng(42)
+        n = 3000
+        coords = SkyCoord(
+            l=210 + rng.uniform(-0.3, 0.3, n),
+            b=-19 + rng.uniform(-0.3, 0.3, n),
+            frame="galactic",
+            unit="deg",
+        )
+        var = rng.uniform(0.01, 0.09, n)
+        maps = [
+            ExtinctionCatalog(1 + rng.normal(0, np.sqrt(var)), var, coords).build_map(
+                bandwidth=0.1, nicest=True, alpha=0.33
+            )
+            for _ in range(150)
+        ]
+        scatter = np.nanvar([m.map_ext for m in maps], axis=0)
+        reported = np.nanmean([m.map_var for m in maps], axis=0)
+        assert 0.8 < np.nanmedian(scatter / reported) < 1.2
+
+
+class TestDensityPlane:
+    @pytest.mark.parametrize("nicest", [False, True])
+    def test_sources_without_estimate_excluded(self, rng, nicest):
+        """A NaN extinction with finite variance must behave like a missing
+        source: no contribution to rho, the weight sum, or the counts."""
+        catalog = _small_catalog(rng)
+        ext = catalog.extinction.copy()
+        ext[::3] = np.nan  # variance stays finite on purpose
+        with_nan = ExtinctionCatalog(ext, catalog.variance, catalog.coordinates)
+        var = np.where(np.isfinite(ext), catalog.variance, np.nan)
+        both_nan = ExtinctionCatalog(ext, var, catalog.coordinates)
+        kw = {"bandwidth": 6 / 60, "nicest": nicest}
+        a, b = with_nan.build_map(**kw), both_nan.build_map(**kw)
+        np.testing.assert_allclose(a.map_ext, b.map_ext, rtol=1e-12)
+        np.testing.assert_allclose(a.map_var, b.map_var, rtol=1e-12)
+        np.testing.assert_allclose(a.map_rho, b.map_rho, rtol=1e-12)
+        np.testing.assert_array_equal(a.map_num, b.map_num)
 
 
 class TestFitsRoundTrip:

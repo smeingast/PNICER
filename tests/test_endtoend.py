@@ -19,6 +19,18 @@ class TestOrionPipeline:
         np.testing.assert_allclose(loaded.weights, orion_model.weights)
         np.testing.assert_allclose(loaded.means, orion_model.means)
         assert loaded.supports_adaptive == orion_model.supports_adaptive
+        assert loaded.fit_info == pytest.approx(orion_model.fit_info)
+
+    def test_fit_info_with_arrays(self, orion_model, tmp_path):
+        import copy
+
+        from pnicer import IntrinsicColorModel
+
+        model = copy.copy(orion_model)
+        model.fit_info = {**orion_model.fit_info, "bic_scan": np.array([1.0, 2.0])}
+        path = str(tmp_path / "model.npz")
+        model.save(path)
+        assert IntrinsicColorModel.load(path).fit_info["bic_scan"] == [1.0, 2.0]
 
     def test_completeness_matches_2mass(self, orion_model):
         """Fitted 50% limits agree with the known 2MASS depths."""

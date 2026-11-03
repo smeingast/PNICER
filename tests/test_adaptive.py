@@ -64,14 +64,19 @@ def _draw_population(rng, n, extinction=0.0):
 
 
 @pytest.fixture(scope="module")
-def population_model():
+def fitted_population_model():
     rng = np.random.default_rng(7)
     control, _ = _draw_population(rng, 30000)
     completeness = CompletenessModel.from_parameters(BAND_NAMES, M50, WIDTH)
-    model = control.fit_intrinsic_colors(
+    return control.fit_intrinsic_colors(
         n_components=3, random_state=0, completeness=completeness
     )
-    return model, rng
+
+
+@pytest.fixture
+def population_model(fitted_population_model):
+    """Shared fitted model plus a fresh generator per test (order-independent)."""
+    return fitted_population_model, np.random.default_rng(8)
 
 
 class TestWeightsAtExtinction:
@@ -89,6 +94,99 @@ class TestWeightsAtExtinction:
         rel = w[:, gal] / w[0, gal]
         assert rel[1] < 0.8
         assert rel[2] < rel[1]
+
+
+class TestPatternConditioning:
+    """Population weights conditioned on the science detection pattern."""
+
+    def test_band_subset_matches_manual(self, population_model):
+        model, _ = population_model
+        a = np.array([0.0, 1.0, 2.0])
+        bands = np.array([False, True, True])
+        obs = model.control_observed
+        used = np.isfinite(model.responsibilities).all(axis=1) & obs[:, 1:].all(axis=1)
+        survival = model.completeness.survival(
+            model.control_magnitudes[used],
+            obs[used] & bands[None, :],
+            model.band_extinction,
+            a,
+        )
+        manual = survival.T @ model.responsibilities[used]
+        manual /= manual.sum(axis=1, keepdims=True)
+        np.testing.assert_allclose(
+            model.weights_at_extinction(a, bands=bands), manual, rtol=1e-12
+        )
+        np.testing.assert_allclose(
+            model.weights_at_extinction(a, bands=[1, 2]), manual, rtol=1e-12
+        )
+
+    @pytest.mark.parametrize(
+        "bands, match",
+        [
+            ([], "At least one band"),
+            (np.zeros(3, dtype=bool), "At least one band"),
+            ([5], "must lie in"),
+            ([0.5], "must be integers"),
+            (np.ones(2, dtype=bool), "must have 3 entries"),
+        ],
+    )
+    def test_invalid_bands_rejected(self, population_model, bands, match):
+        model, _ = population_model
+        with pytest.raises(ValueError, match=match):
+            model.weights_at_extinction(np.array([0.0]), bands=bands)
+
+    def test_uncovered_pattern_falls_back(self, population_model):
+        """A pattern no control source covers uses the shared table."""
+        import copy
+
+        from pnicer.model import PatternCoverageError
+
+        model, _ = population_model
+        sparse = copy.copy(model)
+        sparse.control_observed = model.control_observed.copy()
+        sparse.control_observed[:, 0] = False  # no control source has J
+        a = np.array([0.0, 1.0])
+        with pytest.raises(PatternCoverageError):
+            sparse.weights_at_extinction(a, bands=[0, 1])
+        with pytest.warns(RuntimeWarning, match="unconditioned"):
+            fallback = sparse._pattern_weights(a, 0.01, np.array([True, True, False]))
+        np.testing.assert_allclose(fallback, sparse.weights_at_extinction(a))
+
+    def test_unconditioned_matches_global_table(self, population_model):
+        """pattern_conditioned=False reproduces the single shared table."""
+        from pnicer.posterior import component_terms, exact_adaptive_posterior
+
+        model, rng = population_model
+        science, _ = _draw_population(rng, 3000, extinction=1.0)
+        a_table = np.arange(-2.0, 8.0 + 1e-9, 0.02)
+        reference = exact_adaptive_posterior(
+            component_terms(science, model.means, model.covariances),
+            weight_table=model.weights_at_extinction(a_table),
+            a_table=a_table,
+            coordinates=None,
+            extinction_vector=None,
+        )
+        post = model.posterior(science, adaptive=True, pattern_conditioned=False)
+        np.testing.assert_allclose(post.mean(), reference.mean(), rtol=1e-12)
+
+    @pytest.mark.parametrize("a_true", [1.5, 2.0])
+    def test_reduces_bias_of_incomplete_patterns(self, population_model, a_true):
+        """Sources detected in H and Ks only: the conditioned population
+        (survival in H and Ks) removes most of the shared table's bias."""
+        model, rng = population_model
+        science, _ = _draw_population(rng, 40000, extinction=a_true)
+        hk = (science.observed_bands == [False, True, True]).all(axis=1)
+        assert hk.sum() > 1000
+
+        def bias(**kwargs):
+            cat = model.posterior(science, adaptive=True, **kwargs).discretize()
+            return _weighted_bias(
+                type(cat)(cat.extinction[hk], cat.variance[hk]), a_true
+            )
+
+        conditioned, shared = bias(), bias(pattern_conditioned=False)
+        assert abs(conditioned) < abs(shared)
+        assert abs(conditioned) < 0.05
 
 
 def _weighted_bias(cat, a_true):

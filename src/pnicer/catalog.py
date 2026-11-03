@@ -103,6 +103,11 @@ class ExtinctionCatalog:
         **kwargs
             Additional WCS options (e.g. ``proj_code="TAN"``).
 
+        For the kernel metrics, sources with non-finite extinction or
+        variance, or with variance <= 0, are ignored in all map planes; the
+        "average" and "median" metrics use every source with a finite
+        extinction.
+
         Returns
         -------
         ExtinctionMap

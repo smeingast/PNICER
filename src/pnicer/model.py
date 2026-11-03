@@ -9,6 +9,7 @@ adaptive population correction (Lombardi 2018, Sect. 2.6).
 
 from __future__ import annotations
 
+import json
 import warnings
 
 import numpy as np
@@ -25,6 +26,17 @@ from pnicer.posterior import (
 from pnicer.xd import XDResult, fit_xd
 
 __all__ = ["IntrinsicColorModel"]
+
+
+class PatternCoverageError(ValueError):
+    """No control-field source is observed in all bands of a detection pattern."""
+
+
+def _json_scalar(value):
+    """JSON fallback for numpy scalars and arrays in `fit_info`."""
+    if isinstance(value, np.generic | np.ndarray):
+        return value.tolist()
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
 
 
 class IntrinsicColorModel:
@@ -221,7 +233,10 @@ class IntrinsicColorModel:
     # ------------------------------------------------------------------ #
 
     def weights_at_extinction(
-        self, a_grid: np.ndarray, floor: float = 0.01
+        self,
+        a_grid: np.ndarray,
+        floor: float = 0.01,
+        bands: np.ndarray | None = None,
     ) -> np.ndarray:
         """Component weights of the observable population under extinction.
 
@@ -229,6 +244,23 @@ class IntrinsicColorModel:
         re-weighted by their relative detection probability (survival) and
         the mixture weights are re-estimated from the fit responsibilities;
         means and covariances stay fixed (Lombardi 2018, Sect. 2.6).
+
+        Parameters
+        ----------
+        a_grid : ndarray, shape (G,)
+            Extinction values (in units of A_ref).
+        floor : float
+            Completeness floor of the survival weights.
+        bands : array of bool or int, optional
+            Detection pattern to condition on. Only control sources observed
+            in all of these bands contribute, and their survival is evaluated
+            in these bands only: a science source detected in H and Ks alone
+            stems from the population that survives in H and Ks, whether or
+            not it is lost in J. The non-detection in the remaining bands is
+            not used as information, so sources with incomplete photometry
+            remain biased at low extinction. None (the pnicer 2.0.0 behavior)
+            uses every control source with survival over all of its own
+            observed bands.
 
         Returns
         -------
@@ -244,6 +276,30 @@ class IntrinsicColorModel:
         a_grid = np.asarray(a_grid, dtype=np.float64)
         resp = self.responsibilities
         used = np.isfinite(resp).all(axis=1)
+        observed = np.asarray(self.control_observed, dtype=bool)
+        if bands is not None:
+            n_bands = observed.shape[1]
+            bands = np.asarray(bands)
+            if bands.dtype == bool:
+                if bands.shape != (n_bands,):
+                    raise ValueError(f"Boolean band mask must have {n_bands} entries")
+                mask = bands
+            else:
+                if bands.size and not np.issubdtype(bands.dtype, np.integer):
+                    raise ValueError("Band indices must be integers")
+                if np.any((bands < 0) | (bands >= n_bands)):
+                    raise ValueError(f"Band indices must lie in 0..{n_bands - 1}")
+                mask = np.zeros(n_bands, dtype=bool)
+                mask[bands.astype(np.int64)] = True
+            if not mask.any():
+                raise ValueError("At least one band is required")
+            used &= observed[:, mask].all(axis=1)
+            if not used.any():
+                raise PatternCoverageError(
+                    "No control-field source is observed in all bands of the "
+                    "requested detection pattern"
+                )
+            observed = observed & mask[None, :]
 
         # Accumulate over source chunks: the (N, G) survival array would
         # otherwise dominate memory for large control fields / fine grids
@@ -254,7 +310,7 @@ class IntrinsicColorModel:
             idx = used_idx[start : start + chunk]
             survival = self.completeness.survival(
                 self.control_magnitudes[idx],
-                self.control_observed[idx],
+                observed[idx],
                 self.band_extinction,
                 a_grid,
                 floor=floor,
@@ -317,6 +373,47 @@ class IntrinsicColorModel:
                 stacklevel=3,
             )
 
+    def _detection_patterns(self, science: _ColorSpaceBase, pattern_conditioned: bool):
+        """Science sources grouped by detection pattern for the adaptive step.
+
+        Returns (bands, indices) pairs; bands is a boolean band mask, or None
+        for a single group using the unconditioned population weights (inputs
+        without band information, or ``pattern_conditioned=False``).
+        """
+        observed = getattr(science, "observed_bands", None)
+        everyone = [(None, np.arange(science.n_sources))]
+        if not pattern_conditioned or observed is None:
+            return everyone
+        if observed.shape[1] != self.control_observed.shape[1]:
+            raise ValueError(
+                "Science and control photometry have different numbers of bands"
+            )
+        n_bands = observed.shape[1]
+        code = observed @ (1 << np.arange(n_bands, dtype=np.int64))
+        groups = []
+        for pattern in np.unique(code):
+            bands = ((pattern >> np.arange(n_bands)) & 1).astype(bool)
+            if bands.sum() < 2:
+                continue  # no color, no estimate
+            groups.append((bands, np.flatnonzero(code == pattern)))
+        return groups
+
+    def _pattern_weights(self, a_grid, floor, bands):
+        """`weights_at_extinction` for one pattern, falling back to the
+        unconditioned weights when no control source covers the pattern."""
+        if bands is None:
+            return self.weights_at_extinction(a_grid, floor=floor)
+        try:
+            return self.weights_at_extinction(a_grid, floor=floor, bands=bands)
+        except PatternCoverageError:
+            warnings.warn(
+                f"No control source observed in bands {np.flatnonzero(bands)}; "
+                "using unconditioned population weights for this pattern",
+                RuntimeWarning,
+                stacklevel=3,
+            )
+            return self.weights_at_extinction(a_grid, floor=floor)
+
     def posterior(
         self,
         science: _ColorSpaceBase,
@@ -327,6 +424,7 @@ class IntrinsicColorModel:
         a_grid: np.ndarray | None = None,
         floor: float = 0.01,
         min_dim: int = 1,
+        pattern_conditioned: bool = True,
     ) -> ExtinctionPosterior:
         """Compute extinction posteriors for a science field.
 
@@ -355,6 +453,10 @@ class IntrinsicColorModel:
             Completeness floor of the survival weights.
         min_dim : int
             Minimum observed color-space dimensionality per source.
+        pattern_conditioned : bool
+            Condition the adaptive population weights on each source's
+            detection pattern (see `weights_at_extinction`). False reproduces
+            pnicer 2.0.0, where all sources share one weight table.
 
         Returns
         -------
@@ -367,33 +469,56 @@ class IntrinsicColorModel:
         extinction_vector = getattr(science, "extinction_vector", None)
 
         if adaptive:
+            if adaptive_method not in ("exact", "iterative"):
+                raise ValueError("adaptive_method must be 'exact' or 'iterative'")
+            if not self.supports_adaptive:
+                # Raise the informative error before any grouping
+                self.weights_at_extinction(np.zeros(1), floor=floor)
+            patterns = self._detection_patterns(science, pattern_conditioned)
             if adaptive_method == "exact":
                 a_table = (
                     np.arange(-2.0, 8.0 + 1e-9, 0.02)
                     if a_grid is None
                     else np.asarray(a_grid, dtype=np.float64)
                 )
-                w_table = self.weights_at_extinction(a_table, floor=floor)
-                return exact_adaptive_posterior(
-                    terms,
-                    weight_table=w_table,
-                    a_table=a_table,
+                shape = terms.a_mean.shape
+                means = np.full(shape, np.nan)
+                variances = np.full(shape, np.nan)
+                log_weights = np.full(shape, np.nan)
+                log_evidence = np.full(shape[0], np.nan)
+                for bands, idx in patterns:
+                    part = exact_adaptive_posterior(
+                        terms.subset(idx),
+                        weight_table=self._pattern_weights(a_table, floor, bands),
+                        a_table=a_table,
+                        coordinates=None,
+                        extinction_vector=None,
+                    )
+                    means[idx] = part.means
+                    variances[idx] = part.variances
+                    log_weights[idx] = part.log_weights
+                    log_evidence[idx] = part.log_evidence
+                return ExtinctionPosterior(
+                    means=means,
+                    variances=variances,
+                    log_weights=log_weights,
+                    log_evidence=log_evidence,
+                    pattern_dim=terms.pattern_dim,
                     coordinates=coordinates,
                     extinction_vector=extinction_vector,
                 )
-            if adaptive_method == "iterative":
-                if a_grid is None:
-                    a_grid = np.arange(-1.0, 5.25, 0.25)
-                w_at_a = self.weights_at_extinction(a_grid, floor=floor)
-                log_w = adaptive_log_weights(
-                    terms,
+            if a_grid is None:
+                a_grid = np.arange(-1.0, 5.25, 0.25)
+            a_grid = np.asarray(a_grid, dtype=np.float64)
+            log_w = np.full(terms.a_mean.shape, np.nan)
+            for bands, idx in patterns:
+                log_w[idx] = adaptive_log_weights(
+                    terms.subset(idx),
                     base_log_w,
-                    w_at_a,
-                    np.asarray(a_grid),
+                    self._pattern_weights(a_grid, floor, bands),
+                    a_grid,
                     n_iter=n_iter,
                 )
-            else:
-                raise ValueError("adaptive_method must be 'exact' or 'iterative'")
         else:
             log_w = base_log_w
 
@@ -412,6 +537,7 @@ class IntrinsicColorModel:
         adaptive: bool = False,
         floor: float = 0.01,
         min_dim: int = 1,
+        pattern_conditioned: bool = True,
     ) -> np.ndarray:
         """Reference grid evaluation of the posteriors, shape (N, G).
 
@@ -424,14 +550,19 @@ class IntrinsicColorModel:
         a_grid = np.asarray(a_grid, dtype=np.float64)
         terms = component_terms(science, self.means, self.covariances, min_dim=min_dim)
         if adaptive:
-            w_at_a = self.weights_at_extinction(a_grid, floor=floor)
-            log_weights = np.log(w_at_a + 1e-300)  # (G, K)
+            if not self.supports_adaptive:
+                self.weights_at_extinction(np.zeros(1), floor=floor)
+            log_pdf = np.full((science.n_sources, a_grid.size), np.nan)
+            for bands, idx in self._detection_patterns(science, pattern_conditioned):
+                w_at_a = self._pattern_weights(a_grid, floor, bands)
+                log_pdf[idx] = terms.subset(idx).log_pdf_grid(
+                    a_grid, np.log(w_at_a + 1e-300), grid_weights=True
+                )
         else:
-            log_weights = np.log(self.weights)
+            log_pdf = terms.log_pdf_grid(a_grid, np.log(self.weights))
 
         from scipy.special import logsumexp
 
-        log_pdf = terms.log_pdf_grid(a_grid, log_weights, grid_weights=adaptive)
         with np.errstate(invalid="ignore"):
             log_pdf = log_pdf - logsumexp(
                 np.nan_to_num(log_pdf, nan=-np.inf), axis=1, keepdims=True
@@ -457,6 +588,10 @@ class IntrinsicColorModel:
             payload["control_magnitudes"] = self.control_magnitudes
             payload["control_observed"] = self.control_observed
             payload["band_extinction"] = self.band_extinction
+        if self.fit_info:
+            payload["fit_info"] = np.array(
+                json.dumps(self.fit_info, default=_json_scalar)
+            )
         if self.completeness is not None:
             payload["completeness_bands"] = np.array(self.completeness.band_names)
             payload["completeness_params"] = np.array(
@@ -496,6 +631,9 @@ class IntrinsicColorModel:
                 control_magnitudes=data.get("control_magnitudes"),
                 control_observed=data.get("control_observed"),
                 band_extinction=data.get("band_extinction"),
+                fit_info=(
+                    json.loads(str(data["fit_info"])) if "fit_info" in data else None
+                ),
             )
 
     def __repr__(self) -> str:

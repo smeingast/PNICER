@@ -27,6 +27,7 @@ def baseline_dir():
     return BASELINE_DIR
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def rng():
+    """Fresh generator per test: results do not depend on test order."""
     return np.random.default_rng(20260702)
